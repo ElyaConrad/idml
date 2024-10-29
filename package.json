@@ -1,0 +1,61 @@
+{
+  "name": "idml",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/cjs/main.js",
+  "module": "./dist/esm/main.js",
+  "types": "./dist/esm/main.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/cjs/main.js",
+      "import": "./dist/esm/main.js"
+    }
+  },
+  "files": [
+    "dist/cjs",
+    "dist/esm"
+  ],
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "build": "npm run build:esm && npm run build:cjs",
+    "build:esm": "tsc --module ESNext --outDir dist/esm",
+    "build:cjs": "tsc --module CommonJS --outDir dist/cjs",
+    "watch": "npm-watch"
+  },
+  "watch": {
+    "build": {
+      "patterns": [
+        "src/**/*.ts"
+      ],
+      "extensions": [
+        "ts"
+      ],
+      "ignore": [
+        "node_modules"
+      ]
+    }
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^22.7.9",
+    "npm-watch": "^0.13.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@js-bits/dom-parser": "^1.0.3",
+    "@rgrove/parse-xml": "^4.1.0",
+    "client-zip": "^2.4.5",
+    "dom-parser": "^1.1.5",
+    "fast-xml-parser": "^4.5.0",
+    "fs-extra": "^11.2.0",
+    "unzipit": "^1.4.3",
+    "xml-formatter": "^3.6.3"
+  }
+}
