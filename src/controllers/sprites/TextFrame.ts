@@ -2,43 +2,41 @@ import { serializeElement } from '../../helpers.js';
 import { ElementNode } from '../../util/xml.js';
 import { Spread } from '../Spread.js';
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
-import { GeometryPathType, PathPoint, RectangleSprite } from './Rectangle.js';
+import { GeometricSprite, GeometricSpriteOpts } from './GeometricSprite.js';
+import { RectangleSprite } from './Rectangle.js';
 import { Sprite, SpriteOpts } from './Sprite.js';
 
 export type TextFramePreference = {
   sourceElement: Element;
 };
 
-export class TextFrame extends Sprite {
-  private open: boolean;
-  private geometryPathType: GeometryPathType;
-  private pathPoints: PathPoint[];
-
+export class TextFrame extends GeometricSprite {
   textFramePreference?: TextFramePreference;
   constructor(
     id: string,
-    opts: SpriteOpts & {
-      open: boolean;
-      geometryPathType: GeometryPathType;
-      pathPoints: PathPoint[];
+    opts: GeometricSpriteOpts & {
       textFramePreference?: TextFramePreference;
     },
     context: IDMLSpreadPackageContext
   ) {
     super(id, 'TextFrame', opts, context);
 
-    this.open = opts.open;
-    this.geometryPathType = opts.geometryPathType;
-    this.pathPoints = opts.pathPoints;
-
     this.textFramePreference = opts.textFramePreference;
   }
+  getBBox() {
+    return this.getGeometricBounds();
+  }
+  setBBox(x: number, y: number, width: number, height: number) {
+    const path = [
+      [x, y],
+      [x + width, y],
+      [x + width, y + height],
+      [x, y + height],
+    ] as [number, number][];
+    this.setPathPoints(path.map((point) => ({ anchor: point, leftDirection: point, rightDirection: point })));
+  }
   serialize() {
-    const baseElement = RectangleSprite.injectPathGeometry(this.serializeSprite(), {
-      open: this.open,
-      geometryPathType: this.geometryPathType,
-      pathPoints: this.pathPoints,
-    });
+    const baseElement = this.serializeGeometricSprite();
 
     if (this.textFramePreference) {
       baseElement.children?.push(
@@ -52,7 +50,7 @@ export class TextFrame extends Sprite {
   static parseElement(element: Element, context: IDMLSpreadPackageContext) {
     const { id, ...opts } = Sprite.parseElementOptions(element, context);
 
-    const { pathPoints, geometryPathType, open } = RectangleSprite.parsePathGeometry(element);
+    const { pathPoints, geometryPathType, open } = GeometricSprite.parsePathGeometry(element);
 
     const textFramePreferenceElement = Spread.getDirectChildren(element, 'TextFramePreference')[0];
     const textFramePreference = textFramePreferenceElement ? { sourceElement: textFramePreferenceElement } : undefined;

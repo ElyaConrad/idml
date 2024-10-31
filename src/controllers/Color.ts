@@ -1,4 +1,5 @@
 import { ensureArray, ensureBoolean, flattenIDMLProperties, getIDMLElementProperties, serializeElement } from '../helpers.js';
+import { ColorInput } from '../types/index.js';
 import { KeyMap } from '../util/keyMap.js';
 import { IDMLGraphicContext } from './Graphic.js';
 
@@ -27,7 +28,7 @@ export class Color {
   private swatchCreatorId?: string;
   private swatchGroupReference?: string;
   constructor(
-    private id: string,
+    public id: string,
     private model: ColorModel,
     private space: ColorSpace,
     private value: number[],
@@ -76,6 +77,28 @@ export class Color {
     const swatchCreatorId = props.SwatchCreatorID;
     const swatchGroupReference = props.SwatchColorGroupReference;
     return new Color(id, model, space, value, { editable, removable, visible, swatchCreatorId, swatchGroupReference }, context);
+  }
+  equals(color: ColorInput) {
+    if (color.type === 'rgb') {
+      return (
+        this.model === 'process' &&
+        this.space === 'rgb' &&
+        this.value[0] === color.red &&
+        this.value[1] === color.green &&
+        this.value[2] === color.blue
+      );
+    } else if (color.type === 'cmyk') {
+      return (
+        this.model === 'process' &&
+        this.space === 'cmyk' &&
+        this.value[0] === color.cyan &&
+        this.value[1] === color.magenta &&
+        this.value[2] === color.yellow &&
+        this.value[3] === color.black
+      );
+    } else {
+      return false;
+    }
   }
   serialize() {
     return serializeElement(

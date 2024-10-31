@@ -18,13 +18,13 @@ export class MasterSpread {
   //   private pageCount: number;
   private overridenPageItemProps: string[];
   private primaryTextFrame: string;
-  private itemTransform: Transform;
+  public itemTransform: Transform;
   private pageColor: string;
   private name: string;
   private namePrefix: string;
   constructor(
     private id: string,
-    private pages: Page[],
+    public pages: Page[],
     opts: {
       baseName: string;
       name: string;

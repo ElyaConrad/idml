@@ -48,20 +48,20 @@ const gridAlignmentMap = new KeyMap({
 } as const);
 
 export class GridDataInformation {
-  private fontStyle?: string;
-  private fontSize?: number;
+  public fontStyle?: string;
+  public fontSize?: number;
 
-  private characterAki?: number;
-  private lineAki?: number;
+  public characterAki?: number;
+  public lineAki?: number;
 
-  private horizontalScale?: number;
-  private verticalScale?: number;
+  public horizontalScale?: number;
+  public verticalScale?: number;
 
-  private lineAlignment?: LineAlignment;
-  private characterAlignment?: CharacterAlignment;
-  private gridAlignment?: GridAlignment;
+  public lineAlignment?: LineAlignment;
+  public characterAlignment?: CharacterAlignment;
+  public gridAlignment?: GridAlignment;
 
-  private appliedFont?: string;
+  public appliedFont?: string;
 
   private sourceElement?: Element;
   constructor(

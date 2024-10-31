@@ -1,4 +1,5 @@
 import { IDMLDocumentContext } from '../main.js';
+import { ColorInput } from '../types/index.js';
 import { ElementNode, nodeToNode, parseXML } from '../util/xml.js';
 import { Color } from './Color.js';
 import { Gradient } from './Gradient.js';
@@ -42,6 +43,30 @@ export class IDMLGraphicController extends SuperController {
 
     const pastedSmoothShadeElements = Array.from(doc.getElementsByTagName('PastedSmoothShade'));
     this.pastedSmoothShades = pastedSmoothShadeElements.map((element) => PastedSmoothShade.parseElement(element, this.context));
+  }
+  createColor(color: ColorInput) {
+    const id = `Color/${this.context.idml.getUniqueID()}`;
+    const opts = {
+      name: `Color ${this.context.idml.getColors().length + 1}`,
+      editable: true,
+      removable: true,
+      swatchCreatorId: this.context.idml.swatchCreatorId,
+      swatchGroupReference: this.context.idml.swatchGroupReference,
+      visible: true,
+    };
+    const newColor = (() => {
+      if (color.type === 'rgb') {
+        return new Color(id, 'process', 'rgb', [color.red, color.green, color.blue], opts, this.context);
+      } else if (color.type === 'cmyk') {
+        return new Color(id, 'process', 'cmyk', [color.cyan, color.magenta, color.yellow, color.black], opts, this.context);
+      } else {
+        throw new Error('Invalid color type');
+      }
+    })();
+
+    this.colors.push(newColor);
+
+    return newColor;
   }
   serialize() {
     // console.log('SERIALIZING GRAPHIC', IDMLGraphicController.elementsImplemented);

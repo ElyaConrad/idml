@@ -61,12 +61,7 @@ export type CDataNode = {
 };
 export type XMLNode = ElementNode | TextNode | CDataNode;
 function escapeAttribute(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 function escapeText(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -76,7 +71,7 @@ function isValidTagName(tagName: string): boolean {
   return /^[a-zA-Z_][\w.-]*(:[\w.-]+)?$/.test(tagName);
 }
 
-function stringifyNode(node: XMLNode): string {
+export function stringifyNode(node: XMLNode): string {
   if (node.type === 'element') {
     if (!isValidTagName(node.tagName)) {
       throw new Error(`Invalid tag name: ${node.tagName}`);
@@ -107,11 +102,7 @@ export function stringifyXML(node: XMLNode, pretty = false) {
   return stringifyNode(node);
 }
 
-export function makeElementNode(
-  tagName: string,
-  attributes?: { [k: string]: string | number | boolean | undefined },
-  children?: XMLNode[]
-): ElementNode {
+export function makeElementNode(tagName: string, attributes?: { [k: string]: string | number | boolean | undefined }, children?: XMLNode[]): ElementNode {
   return {
     type: 'element',
     tagName,
@@ -127,9 +118,7 @@ export function makeCDataNode(value: string | number | boolean): CDataNode {
 }
 
 export function getAttributes(element: Element) {
-  return Object.fromEntries(
-    Array.from(element.attributes).map((attr) => [attr.name, element.getAttribute(attr.name) ?? undefined])
-  );
+  return Object.fromEntries(Array.from(element.attributes).map((attr) => [attr.name, element.getAttribute(attr.name) ?? undefined]));
 }
 
 export function nodeToNode(node: Node): XMLNode {
@@ -151,7 +140,6 @@ export function domNodeToXMLNode(node: Node, skipElements: string[]) {
   if (xmlNode.type !== 'element') {
     throw new Error('Root node must be an element');
   }
-  xmlNode.children =
-    xmlNode.children?.filter((child) => child.type !== 'element' || !skipElements.includes(child.tagName)) ?? [];
+  xmlNode.children = xmlNode.children?.filter((child) => child.type !== 'element' || !skipElements.includes(child.tagName)) ?? [];
   return xmlNode as ElementNode & { children: XMLNode[] };
 }

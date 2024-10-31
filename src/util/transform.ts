@@ -5,6 +5,7 @@ export type SVGTransform = {
   translateY: number;
   rotate: number;
 };
+export type SVGTransformOrigin = [number, number];
 
 function svgTransformToMatrix(transform: SVGTransform) {
   const { scaleX, scaleY, translateX, translateY, rotate } = transform;

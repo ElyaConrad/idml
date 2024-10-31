@@ -5,20 +5,23 @@ import { IDMLFontsController } from './controllers/Fonts.js';
 import { IDMLPreferencesController } from './controllers/Preferences.js';
 import { downloadZip } from 'client-zip';
 import { ensureFile } from 'fs-extra';
-import {
-  ElementNode,
-  makeElementNode,
-  nodeToNode,
-  parseXML,
-  stringifyXMLDocument,
-  XMLProcessingInstructionAID,
-  XMLProcessingInstructionXML,
-} from './util/xml.js';
+import { ElementNode, makeElementNode, nodeToNode, parseXML, stringifyXMLDocument, XMLProcessingInstructionAID, XMLProcessingInstructionXML } from './util/xml.js';
 import { writeFile } from 'node:fs/promises';
 import { MasterSpreadPackage } from './controllers/MasterSpreadPackage.js';
 import { SpreadPackage } from './controllers/SpreadPackage.js';
 import { BackingStory } from './controllers/BackingStory.js';
 import { StoryPackage } from './controllers/StoryPackage.js';
+import { MasterSpread } from './controllers/MasterSpread.js';
+import { Spread } from './controllers/Spread.js';
+import { Color } from './controllers/Color.js';
+import { ColorInput } from './types/index.js';
+import { getUniqueID } from './helpers.js';
+export { RectangleSprite } from './controllers/sprites/Rectangle.js';
+export { GroupSprite } from './controllers/sprites/Group.js';
+export { TextFrame } from './controllers/sprites/TextFrame.js';
+
+export { parseXML };
+export * from './svg.js';
 
 export type IDMLFile = {
   path: string;
@@ -34,16 +37,7 @@ export type IDMLDocumentContext = {
 };
 
 export class IDML extends EventTarget {
-  static implementedElements = [
-    'idPkg:Graphic',
-    'idPkg:Styles',
-    'idPkg:Fonts',
-    'idPkg:Preferences',
-    'idPkg:MasterSpread',
-    'idPkg:Spread',
-    'idPkg:BackingStory',
-    'idPkg:Story',
-  ];
+  static implementedElements = ['idPkg:Graphic', 'idPkg:Styles', 'idPkg:Fonts', 'idPkg:Preferences', 'idPkg:MasterSpread', 'idPkg:Spread', 'idPkg:BackingStory', 'idPkg:Story'];
   designmap?: HTMLElement;
   graphics: IDMLGraphicController[] = [];
   styles: IDMLStylesController[] = [];
@@ -53,6 +47,10 @@ export class IDML extends EventTarget {
   spreadPackages: SpreadPackage[] = [];
   backingStories: BackingStory[] = [];
   storyPackages: StoryPackage[] = [];
+
+  swatchCreatorId = 'maurice-idml';
+  swatchGroupReference = 'maurice-idml';
+
   get context(): IDMLDocumentContext {
     return {
       idml: this,
@@ -64,6 +62,51 @@ export class IDML extends EventTarget {
       const readyEvent = new Event('ready');
       this.dispatchEvent(readyEvent);
     });
+  }
+  getSpreads() {
+    return this.spreadPackages.map((spreadPackage) => spreadPackage.getSpread());
+  }
+  createSpread(masterSpread: MasterSpread = this.masterSpreadPackages[0].masterSpread) {
+    // First, we need the id of the new spread (which could be totally random)
+    const id = this.getUniqueID();
+    // Assume the spread package file name is Spread_{id}.xml
+    const spreadPackageFileName = `Spread_${id}.xml`;
+    // Assume the spread package path is Spreads/Spread_{id}.xml
+    const spreadPackagePath = `Spreads/${spreadPackageFileName}`;
+
+    // Create a spread package first (because we need it's context)
+    // The package is just the XML wrapper around the spread
+    const spreadPackage = new SpreadPackage(spreadPackagePath, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0"></idPkg:Spread>`, this.context);
+    // Create a spread within the context of the spread package
+    const newSpread = Spread.create(id, masterSpread, spreadPackage.context);
+    // Set the new sspread to be THE spread of the spread package
+    spreadPackage.setSpread(newSpread);
+
+    // Finally, add the spread package to the IDML document
+    this.spreadPackages.push(spreadPackage);
+
+    // Return the new spread
+    return newSpread;
+  }
+  getColors() {
+    return this.graphics.reduce((allColors, graphicInstance) => {
+      return [...allColors, ...graphicInstance.colors];
+    }, [] as Color[]);
+  }
+  assumeColor(color: ColorInput | string) {
+    if (typeof color === 'string') {
+      const existingColor = this.getColors().find((existingColor) => existingColor.id === color);
+      if (!existingColor) {
+        throw new Error(`Color ${color} not found`);
+      }
+      return existingColor;
+    }
+    const existingColor = this.getColors().find((existingColor) => existingColor.equals(color));
+    if (existingColor) {
+      return existingColor;
+    } else {
+      return this.graphics[0].createColor(color);
+    }
   }
 
   async extract() {
@@ -149,9 +192,7 @@ export class IDML extends EventTarget {
       const document = nodeToNode(this.designmap) as ElementNode;
 
       document.children = document.children ?? [];
-      document.children = document.children.filter(
-        (child) => child.type !== 'element' || !IDML.implementedElements.includes(child.tagName)
-      );
+      document.children = document.children.filter((child) => child.type !== 'element' || !IDML.implementedElements.includes(child.tagName));
       for (const graphic of this.graphics) {
         document.children.push(makeElementNode('idPkg:Graphic', { src: graphic.src }));
         files.push({
@@ -213,11 +254,7 @@ export class IDML extends EventTarget {
         });
       }
 
-      const designmapXMLDocument = stringifyXMLDocument(
-        document,
-        [XMLProcessingInstructionXML, XMLProcessingInstructionAID],
-        true
-      );
+      const designmapXMLDocument = stringifyXMLDocument(document, [XMLProcessingInstructionXML, XMLProcessingInstructionAID], true);
       files.push({
         path: 'designmap.xml',
         contents: Buffer.from(designmapXMLDocument),
@@ -246,8 +283,10 @@ export class IDML extends EventTarget {
       for (const file of files) {
         await ensureFile(`compare/${file.path}`);
         await writeFile(`compare/${file.path}`, (file.contents as Buffer).toString());
-        await ensureFile(`compare/old_${file.path}`);
-        await writeFile(`compare/old_${file.path}`, await entries[file.path].text());
+        if (file.path in entries) {
+          await ensureFile(`compare_old/${file.path}`);
+          await writeFile(`compare_old/${file.path}`, await entries[file.path].text());
+        }
       }
 
       const bundle = {
@@ -282,7 +321,7 @@ export class IDML extends EventTarget {
     if (!archive.body) throw new Error('Failed to create zip');
     return await archive.arrayBuffer();
   }
-  getUniqueID(prefix = 'idml_') {
-    return Math.random().toString(36).substring(2, 15);
+  getUniqueID(prefix?: string) {
+    return getUniqueID(prefix);
   }
 }

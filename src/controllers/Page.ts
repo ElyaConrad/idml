@@ -57,17 +57,17 @@ const gridStartingPointMap = new KeyMap({
 } as const);
 
 export class Page {
-  private name?: string;
-  private pageColor?: string;
-  private masterPageTransform?: Transform;
-  private geometricBounds?: GeometricBounds;
-  private itemTransform?: Transform;
-  private gridStartingPoint?: GridStartingPoint;
-  private optionalPage?: boolean;
+  public name?: string;
+  public pageColor?: string;
+  public masterPageTransform?: Transform;
+  public geometricBounds: GeometricBounds;
+  public itemTransform: Transform;
+  public gridStartingPoint?: GridStartingPoint;
+  public optionalPage?: boolean;
 
-  private marginPreference: MarginPreference;
+  public marginPreference: MarginPreference;
 
-  private gridDataInformation: GridDataInformation;
+  public gridDataInformation: GridDataInformation;
 
   constructor(
     private id: string,
@@ -75,8 +75,8 @@ export class Page {
       name?: string;
       pageColor?: string;
       masterPageTransform?: Transform;
-      geometricBounds?: GeometricBounds;
-      itemTransform?: Transform;
+      geometricBounds: GeometricBounds;
+      itemTransform: Transform;
       gridStartingPoint?: GridStartingPoint;
       optionalPage?: boolean;
       marginPreference: MarginPreference;

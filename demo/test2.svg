@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080">
+    <rect x="0" y="0" width="NaN" height="NaN" rx="0" ry="0" style="transform: matrix(1, 0, 0, 1, 0, 0)"/>
+    <rect x="10" y="10" width="200" height="200" rx="0" ry="0" style="transform: matrix(1, 0, 0, 1, 0, 0)"/>
+    <g style="transform: matrix(1, 0, 0, 1, 0, 0)">
+        <g style="transform: matrix(1, 0, 0, 1, 0, 0)">
+            <g style="transform: matrix(1, 0, 0, 1, 0, 0)">
+                <defs>
+                    <clipPath id="q2l0wi8qkho">
+                        <path d="M490,221c-67,0 -120,54 -120,120c0,135 136,170 228,303c88,-132 229,-173 229,-303c0,-66 -54,-120 -120,-120c-48,0 -90,28 -109,69c-19,-41 -60,-69 -108,-69z"/>
+                    </clipPath>
+                </defs>
+                <g style="clip-path: url(#q2l0wi8qkho)">
+                    <image x="200" y="200" width="600" height="450" href="test.jpg" style="transform: matrix(0.9396926207859084, 0.3420201433256687, -0.3420201433256687, 0.9396926207859084, 100, 1)"/>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

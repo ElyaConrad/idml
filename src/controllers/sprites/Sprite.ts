@@ -5,10 +5,12 @@ import {
   ensureEnumArray,
   ensureNumber,
   flattenIDMLProperties,
+  GeometricBounds,
   getIDMLElementProperties,
   parseIDMLTransform,
   serializeElement,
   Transform,
+  normalizeTransformForGivenOrigin,
 } from '../../helpers.js';
 import { KeyMap } from '../../util/keyMap.js';
 import { ElementNode } from '../../util/xml.js';
@@ -18,7 +20,7 @@ import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
 export type SpriteOpts = {
   name?: string;
   appliedObjectStyleId?: string;
-  itemTransform?: Transform;
+  itemTransform: Transform;
   storyTitle?: string;
   contentType?: string;
   visible?: boolean;
@@ -66,7 +68,7 @@ export type InCopyExportOption = {
 export abstract class Sprite {
   private name?: string;
   private appliedObjectStyleId?: string;
-  private itemTransform?: Transform;
+  private itemTransform: Transform;
   private storyTitle?: string;
   private contentType?: string;
   private visible?: boolean;
@@ -113,7 +115,26 @@ export abstract class Sprite {
     this.strokeColorId = opts.strokeColorId;
     this.strokeWeight = opts.strokeWeight;
   }
-  abstract serialize(): ElementNode;
+  // abstract serialize(): ElementNode;
+  abstract getGeometricBounds(): GeometricBounds;
+  // Return the parent spread
+  get parentSpread() {
+    const parentSpread = this.context.idml.getSpreads().find((spread) => spread.getAllSprites().includes(this));
+    if (!parentSpread) {
+      throw new Error('Parent spread not found');
+    }
+    return parentSpread;
+  }
+
+  // Get a transform object for a given origin
+  getTransform(origin: [number, number]) {
+    return normalizeTransformForGivenOrigin(this.itemTransform, this.parentSpread.pageRelatedTransformOrigin, origin);
+  }
+  // Set a transform object for a given origin
+  setTranform(transform: Transform, origin: [number, number]) {
+    this.itemTransform = normalizeTransformForGivenOrigin(transform, origin, this.parentSpread.pageRelatedTransformOrigin);
+  }
+  // Basic serialization of sprite
   serializeSprite() {
     return serializeElement(
       this.type,

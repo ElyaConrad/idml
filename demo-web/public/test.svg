@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080">
+    <!-- canvas border -->
+    <rect x="0" y="0" width="100%" height="100%" style="fill: none; stroke: #000;" />
+    <!-- contents -->
+    <rect x="10" y="10" width="200" height="200" style="fill: #f00;" />
+
+    <g>
+        <defs>
+            <clipPath id="clip2" class="clip2">
+                <circle cx="300" cy="250" r="75" />
+                <path d="M 300,250 L 400,400 450,500 200,550" />
+            
+                    <path d="M 350,350 L 450,350 L 450,450 L 350,450" style="transform-origin: 400px 400px; transform: rotate(45deg) translate(100px, 100px);" />
+            
+                
+            </clipPath>
+            <clipPath id="clip3">
+                <path d="M225 250A75 75 0 1 0 375 250A75 75 0 1 0 225 250 M300 250L400 400L450 500L200 550 M400 470.7107L470.7107 541.4214L400 612.132L329.2893 541.4214" />
+            </clipPath>
+        </defs>
+        <g style="clip-path: url(#clip3);">
+            <defs>
+                <clipPath id="clip1">
+                    <rect x="250" y="200" width="433.333" height="400" style="fill: #000;" />
+                </clipPath>
+            </defs>
+            <image href="test.jpg" x="200" y="200" width="533.333" height="400" style="clip-path: url(#clip1);" />
+        </g>
+    </g>
+</svg>

@@ -52,12 +52,7 @@ export function serializeArray(value?: number[]) {
   return value.join(' ');
 }
 
-export function getChildTagValue<T>(
-  element: Element | undefined,
-  tagName: string,
-  converter: (str: string) => T,
-  defaultValue: T
-) {
+export function getChildTagValue<T>(element: Element | undefined, tagName: string, converter: (str: string) => T, defaultValue: T) {
   if (!element) {
     return defaultValue;
   }
@@ -67,12 +62,7 @@ export function getChildTagValue<T>(
   }
   return converter(child.textContent ?? '') ?? defaultValue;
 }
-export function getChildTagValueOptional<T>(
-  element: Element | undefined,
-  tagName: string,
-  converter: (str: string) => T,
-  defaultValue: T
-) {
+export function getChildTagValueOptional<T>(element: Element | undefined, tagName: string, converter: (str: string) => T, defaultValue: T) {
   if (!element) {
     return defaultValue;
   }
@@ -168,9 +158,7 @@ export function getIDMLElementProperties(element: Element, allowedPropGroups: st
       ];
     })
   ) as { [k: string]: IDMLElementAttributeDescriptor };
-  const propertiesElements = Array.from(element.children).filter(
-    (element) => allowedPropGroups.includes(element.tagName) && element.children.length > 0
-  );
+  const propertiesElements = Array.from(element.children).filter((element) => allowedPropGroups.includes(element.tagName) && element.children.length > 0);
   const properties = Object.fromEntries(
     propertiesElements
       .map((propertiesElement) => {
@@ -260,14 +248,7 @@ export function flattenIDMLProperties(props: ReturnType<typeof getIDMLElementPro
   );
 }
 
-export function serializeElement(
-  tagName: string,
-  modifiedProps: { [k: string]: string | number | boolean | undefined },
-  idOrElement: string | Element | undefined,
-  root: HTMLElement,
-  allowedPropGroups: string[],
-  customChildrenNodes: XMLNode[] = []
-) {
+export function serializeElement(tagName: string, modifiedProps: { [k: string]: string | number | boolean | undefined }, idOrElement: string | Element | undefined, root: HTMLElement, allowedPropGroups: string[], customChildrenNodes: XMLNode[] = []) {
   const originalElement =
     typeof idOrElement === 'string'
       ? Array.from(root.getElementsByTagName(tagName)).find((element) => {
@@ -278,26 +259,9 @@ export function serializeElement(
   const allOriginalProps = originalElement ? getIDMLElementProperties(originalElement, allowedPropGroups, ['Self']) : {};
   const allKeys = Array.from(new Set([...Object.keys(allOriginalProps), ...Object.keys(modifiedProps)]));
 
-  const propGroups = Array.from(
-    new Set(
-      (Object.values(allOriginalProps).filter(({ source }) => source === 'property') as IDMLElementPropertyDescriptor[]).map(
-        ({ propGroup }) => propGroup
-      )
-    )
-  );
+  const propGroups = Array.from(new Set((Object.values(allOriginalProps).filter(({ source }) => source === 'property') as IDMLElementPropertyDescriptor[]).map(({ propGroup }) => propGroup)));
 
-  const newPropertyGroups = Object.fromEntries(
-    propGroups.map((propGroupName) => [
-      propGroupName,
-      Object.fromEntries(
-        (
-          Object.entries(allOriginalProps).filter(
-            ([key, propD]) => propD.source === 'property' && propD.propGroup === propGroupName
-          ) as [string, IDMLElementPropertyDescriptor][]
-        ).map(([key, { value, attributes }]) => [key, { value, attributes }])
-      ),
-    ])
-  );
+  const newPropertyGroups = Object.fromEntries(propGroups.map((propGroupName) => [propGroupName, Object.fromEntries((Object.entries(allOriginalProps).filter(([key, propD]) => propD.source === 'property' && propD.propGroup === propGroupName) as [string, IDMLElementPropertyDescriptor][]).map(([key, { value, attributes }]) => [key, { value, attributes }]))]));
 
   const allKeysWithinAPropertyGroup = Object.values(newPropertyGroups)
     .map((group) => Object.keys(group))
@@ -326,19 +290,68 @@ export function serializeElement(
           propGroupName,
           {},
           Object.entries(properties).map(([key, { value, attributes }]) => {
-            return makeElementNode(
-              key,
-              attributes,
-              typeof value === 'string' || value === null
-                ? value
-                  ? [makeTextNode(value)]
-                  : undefined
-                : value.map(({ attributes, value }) => makeElementNode('ListItem', attributes, [makeTextNode(value ?? '')]))
-            );
+            return makeElementNode(key, attributes, typeof value === 'string' || value === null ? (value ? [makeTextNode(value)] : undefined) : value.map(({ attributes, value }) => makeElementNode('ListItem', attributes, [makeTextNode(value ?? '')])));
           })
         );
       }),
       ...customChildrenNodes,
     ]
   );
+}
+export function calculateTransformForOrigin({ rotate, scaleX, scaleY, translateX, translateY }: Transform, [originX, originY]: [number, number], internalOrigin: [number, number]): Transform {
+  // Konvertiere die Rotation von Grad zu Bogenmaß
+  const angleRad = rotate;
+
+  // Berechne den Offset zwischen internalOrigin und dem gewünschten origin
+  const offsetX = internalOrigin[0] - originX;
+  const offsetY = internalOrigin[1] - originY;
+
+  // Berechne die neuen Offset-Koordinaten nach Rotation
+  const rotatedOffsetX = offsetX * Math.cos(angleRad) - offsetY * Math.sin(angleRad);
+  const rotatedOffsetY = offsetX * Math.sin(angleRad) + offsetY * Math.cos(angleRad);
+
+  // Angepasste Translation basierend auf der Rotation, Skalierung und dem Offset
+  const adjustedTranslateX = translateX - offsetX + rotatedOffsetX * scaleX;
+  const adjustedTranslateY = translateY - offsetY + rotatedOffsetY * scaleY;
+
+  return {
+    translateX: adjustedTranslateX,
+    translateY: adjustedTranslateY,
+    scaleX: scaleX,
+    scaleY: scaleY,
+    rotate: rotate,
+  };
+}
+export function normalizeTransformForGivenOrigin(transform: Transform, [originX, originY]: [number, number], internalOrigin: [number, number]): Transform {
+  // Berechne den Versatz zwischen der aktuellen Mitte und dem neuen Transformationsursprung
+  const offsetX = internalOrigin[0] - originX;
+  const offsetY = internalOrigin[1] - originY;
+
+  // Konvertiere die Rotation von Grad zu Bogenmaß
+  const angleRad = transform.rotate;
+
+  // Berechne die neuen Offset-Koordinaten nach Rotation
+  const rotatedOffsetX = offsetX * Math.cos(angleRad) - offsetY * Math.sin(angleRad);
+  const rotatedOffsetY = offsetX * Math.sin(angleRad) + offsetY * Math.cos(angleRad);
+
+  // Angepasste Translation basierend auf der Rotation und Skalierung
+  const adjustedTranslateX = transform.translateX - offsetX + rotatedOffsetX * transform.scaleX;
+  const adjustedTranslateY = transform.translateY - offsetY + rotatedOffsetY * transform.scaleY;
+
+  // Rückgabe des neuen Transformationsobjekts mit angepassten Translationen
+  return {
+    translateX: adjustedTranslateX,
+    translateY: adjustedTranslateY,
+    scaleX: transform.scaleX,
+    scaleY: transform.scaleY,
+    rotate: transform.rotate,
+  };
+}
+
+export function getUniqueID(prefix?: string) {
+  const id = Math.random().toString(36).substring(2, 15);
+  if (prefix) {
+    return `${prefix}_${id}`;
+  }
+  return id;
 }
