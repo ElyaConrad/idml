@@ -4,9 +4,7 @@ import { IDMLStylesController } from './controllers/Styles.js';
 import { IDMLFontsController } from './controllers/Fonts.js';
 import { IDMLPreferencesController } from './controllers/Preferences.js';
 import { downloadZip } from 'client-zip';
-import { ensureFile } from 'fs-extra';
 import { ElementNode, makeElementNode, nodeToNode, parseXML, stringifyXMLDocument, XMLProcessingInstructionAID, XMLProcessingInstructionXML } from './util/xml.js';
-import { writeFile } from 'node:fs/promises';
 import { MasterSpreadPackage } from './controllers/MasterSpreadPackage.js';
 import { SpreadPackage } from './controllers/SpreadPackage.js';
 import { BackingStory } from './controllers/BackingStory.js';
@@ -19,6 +17,8 @@ import { getUniqueID } from './helpers.js';
 export { RectangleSprite } from './controllers/sprites/Rectangle.js';
 export { GroupSprite } from './controllers/sprites/Group.js';
 export { TextFrame } from './controllers/sprites/TextFrame.js';
+
+export { comboundPaths } from './util/booleanPath.js';
 
 export { parseXML };
 export * from './svg.js';
@@ -280,14 +280,14 @@ export class IDML extends EventTarget {
 
       // files = files.filter((file) => !keepFiles.includes(file.path));
 
-      for (const file of files) {
-        await ensureFile(`compare/${file.path}`);
-        await writeFile(`compare/${file.path}`, (file.contents as Buffer).toString());
-        if (file.path in entries) {
-          await ensureFile(`compare_old/${file.path}`);
-          await writeFile(`compare_old/${file.path}`, await entries[file.path].text());
-        }
-      }
+      // for (const file of files) {
+      //   await ensureFile(`compare/${file.path}`);
+      //   await writeFile(`compare/${file.path}`, (file.contents as Buffer).toString());
+      //   if (file.path in entries) {
+      //     await ensureFile(`compare_old/${file.path}`);
+      //     await writeFile(`compare_old/${file.path}`, await entries[file.path].text());
+      //   }
+      // }
 
       const bundle = {
         name: 'export.idml',

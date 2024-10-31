@@ -1,4 +1,4 @@
-import { parseXML, comboundPaths, simplifySVG } from 'idml';
+import { simplifySVG } from 'idml';
 import fs from 'fs/promises';
 import { JSDOM } from 'jsdom';
 
@@ -16,6 +16,9 @@ const { document } = new JSDOM(testFile, {
 
 const svg = document.querySelector('svg')!;
 
-const simplifiedStructure = simplifySVG(svg);
+const simplifiedStructure = simplifySVG(svg, {
+  clipAfterElementTransform: true,
+  keepGroupTransforms: true,
+});
 
 await fs.writeFile('test2.svg', simplifiedStructure);
