@@ -48,14 +48,16 @@
                 <rect x="350" y="200" width="200" height="400" style="fill: #000;" />
             </clipPath>
         </defs>
-        <g style="transform: translate(100px, 0px);">
-            <defs>
-                <clipPath id="clip1">
-                    <path style="transform: translate(250px, 200px);" d="M140 20C73 20 20 74 20 140c0 135 136 170 228 303 88-132 229-173 229-303 0-66-54-120-120-120-48 0-90 28-109 69-19-41-60-69-108-69z" />
-                </clipPath>
-            </defs>
-            <g style="clip-path: url(#clip1)">
-                <image href="test.jpg" x="200" y="200" width="600" height="450" style="transform: rotate(20deg);" />
+        <g style="clip-path: url(#clip2);">
+            <g style="transform: translate(100px, 0px);">
+                <defs>
+                    <clipPath id="clip1">
+                        <path style="transform: translate(250px, 200px);" d="M140 20C73 20 20 74 20 140c0 135 136 170 228 303 88-132 229-173 229-303 0-66-54-120-120-120-48 0-90 28-109 69-19-41-60-69-108-69z" />
+                    </clipPath>
+                </defs>
+                <g style="clip-path: url(#clip1)">
+                    <image href="test.jpg" x="200" y="200" width="600" height="450" style="transform: rotate(15deg);" />
+                </g>
             </g>
         </g>
     </g>

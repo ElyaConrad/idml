@@ -211,196 +211,274 @@ function getClipPath(selector: string, svg: SVGSVGElement) {
   return comboundPaths(Array.from(clipPathElement.children));
 }
 
-function simplifyElements(elements: Element[], rootSVG: SVGSVGElement, tracingTransformMatrix: paper.Matrix, tracingClipPath?: paper.PathItem): SimpleElement[] {
+function simplifyElements(elements: Element[], rootSVG: SVGSVGElement, tracingTransformMatrix: paper.Matrix, tracingClipPath: paper.PathItem | undefined, opts: { keepGroupTransforms: boolean }): SimpleElement[] {
   return elements
     .map((element) => {
+      const topMatrix = tracingTransformMatrix.clone();
+
       // Get local matrix
       const localMatrix = getElementTransformationMatrix(element);
-      // Get recursive matrix
+      // Get recursive matrix here
       const currMatrix = tracingTransformMatrix.clone().append(localMatrix);
 
-      const localClipPathSelector = getElementClipPath(element);
-      const localClipPath = localClipPathSelector ? getClipPath(localClipPathSelector, rootSVG) : undefined;
+      // Get local clip path
+      const localClipPath = (() => {
+        const localClipPathSelector = getElementClipPath(element);
+        if (localClipPathSelector) {
+          return getClipPath(localClipPathSelector, rootSVG);
+        }
+      })();
+
+      if (tracingClipPath) {
+        //tracingClipPath.transform(currMatrix.clone());
+      }
+
+      // Intersect clip paths
       if (localClipPath) {
         localClipPath.transform(currMatrix);
+
+        //localClipPath.transform(currMatrix);
         if (tracingClipPath) {
-          tracingClipPath.intersect(localClipPath);
+          tracingClipPath = tracingClipPath.intersect(localClipPath);
         } else {
           tracingClipPath = localClipPath;
         }
       }
 
+      const localizedClipPath = tracingClipPath ? tracingClipPath.clone().transform(topMatrix.clone().invert()) : undefined;
+
       if (element.nodeName === 'g') {
         const group = element as SVGGElement;
-        const matrix = getElementTransformationMatrix(group);
         return {
           type: 'group',
-          transform: new paper.Matrix(),
-          children: simplifyElements(Array.from(group.children), rootSVG, currMatrix, tracingClipPath),
-        };
-      } else if (element.nodeName === 'rect') {
-        const rect = element as SVGRectElement;
-        const { x, y, width, height, rx, ry } = getAttrs(rect, { x: Number, y: Number, width: Number, height: Number, rx: Number, ry: Number });
-        return {
-          type: 'rect',
-          x,
-          y,
-          width,
-          height,
-          rx,
-          ry,
-          transform: currMatrix,
-          clipPath: tracingClipPath,
-        };
-      } else if (element.nodeName === 'ellipse') {
-        const ellipse = element as SVGEllipseElement;
-        const { cx, cy, rx, ry } = getAttrs(ellipse, { cx: Number, cy: Number, rx: Number, ry: Number });
-        return {
-          type: 'ellipse',
-          cx,
-          cy,
-          rx,
-          ry,
-          transform: currMatrix,
-          clipPath: tracingClipPath,
-        };
-      } else if (element.nodeName === 'circle') {
-        const circle = element as SVGCircleElement;
-        const { cx, cy, r } = getAttrs(circle, { cx: Number, cy: Number, r: Number });
-        return {
-          type: 'ellipse',
-          cx,
-          cy,
-          rx: r,
-          ry: r,
-          transform: currMatrix,
-          clipPath: tracingClipPath,
-        };
-      } else if (element.nodeName === 'path') {
-        const path = element as SVGPathElement;
-        return {
-          type: 'path',
-          d: path.getAttribute('d') ?? '',
-          transform: currMatrix,
-          clipPath: tracingClipPath,
-        };
-      } else if (element.nodeName === 'line') {
-        const line = element as SVGLineElement;
-        const { x1, y1, x2, y2 } = getAttrs(line, { x1: Number, y1: Number, x2: Number, y2: Number });
-        return {
-          type: 'path',
-          d: `M ${x1} ${y1} L ${x2} ${y2}`,
-          transform: currMatrix,
-          clipPath: tracingClipPath,
-        };
-      } else if (element.nodeName === 'polygon') {
-        const polygon = element as SVGPolygonElement;
-        const points = polygon.getAttribute('points') ?? '';
-        return {
-          type: 'path',
-          d: `M ${points} Z`,
-          transform: currMatrix,
-          clipPath: tracingClipPath,
-        };
-      } else if (element.nodeName === 'polyline') {
-        const polyline = element as SVGPolylineElement;
-        const points = polyline.getAttribute('points') ?? '';
-        return {
-          type: 'path',
-          d: `M ${points}`,
-          transform: currMatrix,
-          clipPath: tracingClipPath,
-        };
-      } else if (element.nodeName === 'image') {
-        const image = element as SVGImageElement;
-        const { x, y, width, height, href } = getAttrs(image, { x: Number, y: Number, width: Number, height: Number, href: String });
-        return {
-          type: 'image',
-          x,
-          y,
-          width,
-          height,
-          href,
-          transform: currMatrix,
-          clipPath: tracingClipPath,
+          // If we are keeping the group transforms, we should apply the local matrix to the group
+          // Otherwise, the group's matrix will be traced down to the final element which knows what to do with it
+          transform: opts.keepGroupTransforms ? localMatrix : new paper.Matrix(),
+          children: simplifyElements(Array.from(group.children), rootSVG, currMatrix, tracingClipPath, opts),
         };
       } else {
-        return undefined;
+        // If the groups are keeping their transforms, we should apply the local matrix to the element instead of the traced down one (multiplied with the original identity matrix)
+        const transform = opts.keepGroupTransforms ? localMatrix : currMatrix;
+        // If the groups are keeping their transforms, we should apply the localized clip path to the element instead of the traced down one
+        const clipPath = opts.keepGroupTransforms ? localizedClipPath : tracingClipPath;
+        if (element.nodeName === 'rect') {
+          const rect = element as SVGRectElement;
+          const { x, y, width, height, rx, ry } = getAttrs(rect, { x: Number, y: Number, width: Number, height: Number, rx: Number, ry: Number });
+          return {
+            type: 'rect',
+            x,
+            y,
+            width,
+            height,
+            rx,
+            ry,
+            transform,
+            clipPath,
+          };
+        } else if (element.nodeName === 'ellipse') {
+          const ellipse = element as SVGEllipseElement;
+          const { cx, cy, rx, ry } = getAttrs(ellipse, { cx: Number, cy: Number, rx: Number, ry: Number });
+          return {
+            type: 'ellipse',
+            cx,
+            cy,
+            rx,
+            ry,
+            transform,
+            clipPath,
+          };
+        } else if (element.nodeName === 'circle') {
+          const circle = element as SVGCircleElement;
+          const { cx, cy, r } = getAttrs(circle, { cx: Number, cy: Number, r: Number });
+          return {
+            type: 'ellipse',
+            cx,
+            cy,
+            rx: r,
+            ry: r,
+            transform,
+            clipPath,
+          };
+        } else if (element.nodeName === 'path') {
+          const path = element as SVGPathElement;
+          return {
+            type: 'path',
+            d: path.getAttribute('d') ?? '',
+            transform: localMatrix,
+            clipPath: localizedClipPath,
+          };
+        } else if (element.nodeName === 'line') {
+          const line = element as SVGLineElement;
+          const { x1, y1, x2, y2 } = getAttrs(line, { x1: Number, y1: Number, x2: Number, y2: Number });
+          return {
+            type: 'path',
+            d: `M ${x1} ${y1} L ${x2} ${y2}`,
+            transform,
+            clipPath,
+          };
+        } else if (element.nodeName === 'polygon') {
+          const polygon = element as SVGPolygonElement;
+          const points = polygon.getAttribute('points') ?? '';
+          return {
+            type: 'path',
+            d: `M ${points} Z`,
+            transform,
+            clipPath,
+          };
+        } else if (element.nodeName === 'polyline') {
+          const polyline = element as SVGPolylineElement;
+          const points = polyline.getAttribute('points') ?? '';
+          return {
+            type: 'path',
+            d: `M ${points}`,
+            transform,
+            clipPath,
+          };
+        } else if (element.nodeName === 'image') {
+          console.log('top matrix', topMatrix);
+          const image = element as SVGImageElement;
+          const { x, y, width, height, href } = getAttrs(image, { x: Number, y: Number, width: Number, height: Number, href: String });
+          return {
+            type: 'image',
+            x,
+            y,
+            width,
+            height,
+            href,
+            transform,
+            clipPath,
+          };
+        } else {
+          return undefined;
+        }
       }
     })
     .filter((element) => element !== undefined) as SimpleElement[];
 }
 
-function serializeSimpleElement(element: SimpleElement): ElementNode[] {
-  const transformMatrix = `matrix(${element.transform.a}, ${element.transform.b}, ${element.transform.c}, ${element.transform.d}, ${element.transform.tx}, ${element.transform.ty})`;
+function serializeSimpleElement(
+  element: SimpleElement,
+  opts: {
+    clipPathAfterElementTranform?: boolean;
+  }
+): ElementNode[] {
+  const is0Matrix = element.transform.equals(new paper.Matrix());
+  const transformMatrix = !is0Matrix ? `matrix(${element.transform.a}, ${element.transform.b}, ${element.transform.c}, ${element.transform.d}, ${element.transform.tx}, ${element.transform.ty})` : undefined;
   const clipPathId = getUniqueID();
-  const clipPathDefs = element.type !== 'group' && element.clipPath ? makeElementNode('defs', {}, [makeElementNode('clipPath', { id: clipPathId }, [makeElementNode('path', { d: element.clipPath.pathData })])]) : undefined;
-
-  const baseElement = (() => {
+  const clipPathDefs = (() => {
+    if (element.type !== 'group' && element.clipPath) {
+      return makeElementNode('defs', {}, [
+        makeElementNode('clipPath', { id: clipPathId }, [
+          makeElementNode('path', {
+            d: (() => {
+              if (opts.clipPathAfterElementTranform) {
+                return element.clipPath.pathData;
+              } else {
+                const matrix = element.transform.clone().invert();
+                element.clipPath.transform(matrix);
+                return element.clipPath.pathData;
+              }
+            })(),
+          }),
+        ]),
+      ]);
+    }
+  })();
+  const baseElements = (() => {
     if (element.type === 'group') {
-      return makeElementNode(
-        'g',
-        {
-          style: createInlineStyle({ transform: transformMatrix }),
-        },
-        Array.from(element.children).map(serializeSimpleElement).flat(1)
-      );
+      const childElements = element.children.map((element) => serializeSimpleElement(element, opts)).flat(1);
+      if (is0Matrix) {
+        return childElements;
+      }
+      return [
+        makeElementNode(
+          'g',
+          {
+            style: createInlineStyle({ transform: transformMatrix }),
+          },
+          childElements
+        ),
+      ];
     } else if (element.type === 'rect') {
-      return makeElementNode('rect', {
-        x: element.x,
-        y: element.y,
-        width: element.width,
-        height: element.height,
-        rx: element.rx,
-        ry: element.ry,
-        style: createInlineStyle({ transform: transformMatrix }),
-      });
+      return [
+        makeElementNode('rect', {
+          x: element.x,
+          y: element.y,
+          width: element.width,
+          height: element.height,
+          rx: element.rx,
+          ry: element.ry,
+          style: createInlineStyle({ transform: transformMatrix, 'clip-path': !opts.clipPathAfterElementTranform ? `url('#${clipPathId}')` : undefined }),
+        }),
+      ];
     } else if (element.type === 'ellipse') {
-      return makeElementNode('ellipse', {
-        cx: element.cx,
-        cy: element.cy,
-        rx: element.rx,
-        ry: element.ry,
-        style: createInlineStyle({ transform: transformMatrix }),
-      });
+      return [
+        makeElementNode('ellipse', {
+          cx: element.cx,
+          cy: element.cy,
+          rx: element.rx,
+          ry: element.ry,
+          style: createInlineStyle({ transform: transformMatrix, 'clip-path': !opts.clipPathAfterElementTranform ? `url('#${clipPathId}')` : undefined }),
+        }),
+      ];
     } else if (element.type === 'path') {
-      return makeElementNode('path', {
-        d: element.d,
-        style: createInlineStyle({ transform: transformMatrix }),
-      });
+      return [
+        makeElementNode('path', {
+          d: element.d,
+          style: createInlineStyle({ transform: transformMatrix, 'clip-path': !opts.clipPathAfterElementTranform ? `url('#${clipPathId}')` : undefined }),
+        }),
+      ];
     } else if (element.type === 'image') {
-      return makeElementNode('image', {
-        x: element.x,
-        y: element.y,
-        width: element.width,
-        height: element.height,
-        href: element.href,
-        style: createInlineStyle({ transform: transformMatrix }),
-      });
+      return [
+        makeElementNode('image', {
+          x: element.x,
+          y: element.y,
+          width: element.width,
+          height: element.height,
+          href: element.href,
+          style: createInlineStyle({ transform: transformMatrix, 'clip-path': !opts.clipPathAfterElementTranform ? `url('#${clipPathId}')` : undefined }),
+        }),
+      ];
     } else {
       throw new Error('Invalid element');
     }
   })();
 
   if (clipPathDefs) {
-    return [
-      clipPathDefs,
-      makeElementNode(
-        'g',
-        {
-          style: createInlineStyle({ 'clip-path': `url(#${clipPathId})` }),
-        },
-        [baseElement]
-      ),
-    ];
+    if (opts.clipPathAfterElementTranform) {
+      return [
+        clipPathDefs,
+        makeElementNode(
+          'g',
+          {
+            style: createInlineStyle({ 'clip-path': `url(#${clipPathId})` }),
+          },
+          [...baseElements]
+        ),
+      ];
+    } else {
+      return [clipPathDefs, ...baseElements];
+    }
   }
-  return [baseElement];
+  return baseElements;
 }
 
 export function simplifySVG(svg: SVGSVGElement) {
-  const elements = simplifyElements(Array.from(svg.children), svg, new paper.Matrix());
+  const elements = simplifyElements(Array.from(svg.children), svg, new paper.Matrix(), undefined, {
+    keepGroupTransforms: false,
+  });
 
-  const newSVG = makeElementNode('svg', { xmlns: 'http://www.w3.org/2000/svg', viewBox: svg.getAttribute('viewBox') ?? undefined }, elements.map(serializeSimpleElement).flat(1));
+  const newSVG = makeElementNode(
+    'svg',
+    { xmlns: 'http://www.w3.org/2000/svg', viewBox: svg.getAttribute('viewBox') ?? undefined },
+    elements
+      .map((element) =>
+        serializeSimpleElement(element, {
+          clipPathAfterElementTranform: false,
+        })
+      )
+      .flat(1)
+  );
 
   return xmlFormat(stringifyNode(newSVG), {
     collapseContent: true,

@@ -4,6 +4,14 @@ import parseInlineStyle, { Declaration } from 'inline-style-parser';
 export type PartialTransform = Partial<{ translate: [number, number]; scale: [number, number]; rotate: number; skew: [number, number] }>;
 export type TransformWithOrigin = PartialTransform & { origin: [number, number] };
 
+export function getElementStyle(element: Element) {
+  const styleAttr = element.getAttribute('style');
+  const entries = styleAttr ? parseInlineStyle(styleAttr) : [];
+  const declarations = entries.filter((entry) => entry.type === 'declaration') as Declaration[];
+
+  return Object.fromEntries(declarations.map((declaration) => [declaration.property, declaration.value]));
+}
+
 export function ensureCSSValue(value: string | undefined) {
   if (!value) {
     return undefined;
