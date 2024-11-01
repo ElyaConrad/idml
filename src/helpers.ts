@@ -1,19 +1,5 @@
-import { makeElementNode, makeTextNode, XMLNode } from './util/xml.js';
-
-export type Transform = {
-  translateX: number;
-  translateY: number;
-  scaleX: number;
-  scaleY: number;
-  rotate: number;
-};
-export type GeometricBounds = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-
+import { getElementAttributes, makeElementNode, makeTextNode, XMLNode } from 'flat-svg';
+import { GeometricBounds, Transform } from './types';
 export function ensureNumber(value: unknown) {
   const n = Number(value);
   if (isNaN(n)) {
@@ -31,46 +17,6 @@ export function ensureArray(value: string | null | undefined) {
     .split(' ')
     .map(ensureNumber)
     .filter((n) => n !== undefined);
-}
-export function ensurePropertyArray(value: string | null | undefined) {
-  if (!value) return [];
-  return value.split(/,\s?/);
-}
-export function ensureEnumArray(value: string | null | undefined) {
-  if (!value) return [];
-  return value.split(' ');
-}
-export function ensureBoolean(value: string | null | undefined, defaultValue = false) {
-  if (defaultValue === true) {
-    return value !== 'false';
-  } else {
-    return value === 'true';
-  }
-}
-export function serializeArray(value?: number[]) {
-  if (!value) return '';
-  return value.join(' ');
-}
-
-export function getChildTagValue<T>(element: Element | undefined, tagName: string, converter: (str: string) => T, defaultValue: T) {
-  if (!element) {
-    return defaultValue;
-  }
-  const child = element.getElementsByTagName(tagName)[0];
-  if (!child) {
-    return defaultValue;
-  }
-  return converter(child.textContent ?? '') ?? defaultValue;
-}
-export function getChildTagValueOptional<T>(element: Element | undefined, tagName: string, converter: (str: string) => T, defaultValue: T) {
-  if (!element) {
-    return defaultValue;
-  }
-  const child = element.getElementsByTagName(tagName)[0];
-  if (!child) {
-    return undefined;
-  }
-  return converter(child.textContent ?? '') ?? undefined;
 }
 
 export function parseIDMLTransform(transformString: string | undefined): Transform {
@@ -138,15 +84,6 @@ export type IDMLElementPropertyDescriptor = {
 };
 export type IDMLElementProperty = IDMLElementAttributeDescriptor | IDMLElementPropertyDescriptor;
 
-export function getElementAttributes(element: Element, exclude: string[] = []) {
-  return Object.fromEntries(
-    Array.from(element.attributes)
-      .map((attr) => [attr.name, attr.value])
-      .filter(([, value]) => value !== null)
-      .filter(([key]) => !exclude.includes(key))
-  ) as { [k: string]: string };
-}
-
 export function getIDMLElementProperties(element: Element, allowedPropGroups: string[], excludeKeys: string[] = []) {
   const attributes = Object.fromEntries(
     Array.from(element.attributes).map((attr) => {
@@ -207,40 +144,6 @@ export function getIDMLElementProperties(element: Element, allowedPropGroups: st
   );
 }
 
-// export function getIDMLElementProperties(element: Element, exclude: string[] = []) {
-//   const attributes = Object.fromEntries(
-//     Array.from(element.attributes).map((attr) => {
-//       return [attr.name, element.getAttribute(attr.name)];
-//     })
-//   );
-
-//   const propertiesElement = element.getElementsByTagName('Properties')[0];
-//   const properties = propertiesElement
-//     ? Object.fromEntries(
-//         Array.from(propertiesElement.getElementsByTagName('*')).map((propertyElement) => [
-//           propertyElement.tagName,
-//           {
-//             value: propertyElement.textContent,
-//             type: propertyElement.getAttribute('type'),
-//           },
-//         ])
-//       )
-//     : {};
-
-//   const props = {
-//     attributes: Object.fromEntries(
-//       Object.entries(attributes)
-//         .filter(([key]) => !exclude.includes(key))
-//         .filter(([, value]) => value !== null)
-//     ) as { [k: string]: string | number | boolean },
-//     properties: Object.fromEntries(
-//       Object.entries(properties)
-//         .filter(([key]) => !exclude.includes(key))
-//         .filter(([, { value }]) => value !== null)
-//     ) as { [k: string]: { value: string; type: string | null } },
-//   };
-//   return props;
-// }
 export function flattenIDMLProperties(props: ReturnType<typeof getIDMLElementProperties>) {
   return Object.fromEntries(
     Object.entries(props).map(([key, { value }]) => {
@@ -299,6 +202,7 @@ export function serializeElement(tagName: string, modifiedProps: { [k: string]: 
     ]
   );
 }
+
 export function calculateTransformForOrigin({ rotate, scaleX, scaleY, translateX, translateY }: Transform, [originX, originY]: [number, number], internalOrigin: [number, number]): Transform {
   // Konvertiere die Rotation von Grad zu Bogenmaß
   const angleRad = rotate;
@@ -349,22 +253,43 @@ export function normalizeTransformForGivenOrigin(transform: Transform, [originX,
   };
 }
 
-export function getUniqueID(prefix?: string) {
-  const id = Math.random().toString(36).substring(2, 15);
-  if (prefix) {
-    return `${prefix}_${id}`;
+export function ensurePropertyArray(value: string | null | undefined) {
+  if (!value) return [];
+  return value.split(/,\s?/);
+}
+export function ensureEnumArray(value: string | null | undefined) {
+  if (!value) return [];
+  return value.split(' ');
+}
+export function ensureBoolean(value: string | null | undefined, defaultValue = false) {
+  if (defaultValue === true) {
+    return value !== 'false';
+  } else {
+    return value === 'true';
   }
-  return id;
+}
+export function serializeArray(value?: number[]) {
+  if (!value) return '';
+  return value.join(' ');
 }
 
-type AttrFunctions<T> = {
-  [K in keyof T]: (element: SVGElement) => T[K];
-};
-
-export function getAttrs<T>(element: SVGElement, attrMap: AttrFunctions<T>): T {
-  return Object.fromEntries(
-    (Object.entries(attrMap) as any as [string, (value: string | null) => T[keyof T]][]).map(([keyBy, fn]) => {
-      return [keyBy, fn(element.getAttribute(keyBy))];
-    })
-  ) as any as T;
+export function getChildTagValue<T>(element: Element | undefined, tagName: string, converter: (str: string) => T, defaultValue: T) {
+  if (!element) {
+    return defaultValue;
+  }
+  const child = element.getElementsByTagName(tagName)[0];
+  if (!child) {
+    return defaultValue;
+  }
+  return converter(child.textContent ?? '') ?? defaultValue;
+}
+export function getChildTagValueOptional<T>(element: Element | undefined, tagName: string, converter: (str: string) => T, defaultValue: T) {
+  if (!element) {
+    return defaultValue;
+  }
+  const child = element.getElementsByTagName(tagName)[0];
+  if (!child) {
+    return undefined;
+  }
+  return converter(child.textContent ?? '') ?? undefined;
 }

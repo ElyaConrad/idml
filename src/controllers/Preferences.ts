@@ -1,5 +1,5 @@
-import { IDMLDocumentContext } from '../main.js';
-import { ElementNode, nodeToNode, parseXML } from '../util/xml.js';
+import { IDMLDocumentContext } from '../idml.js';
+import { ElementNode, nodeToNode, parseXML } from 'flat-svg';
 import { SuperController } from './SuperController.js';
 
 export type IDMLPreferencesContext = IDMLDocumentContext & {
@@ -21,12 +21,7 @@ export class IDMLPreferencesController extends SuperController {
   serialize() {
     const document = nodeToNode(this.context.preferencesRoot) as ElementNode;
     document.children = document.children ?? [];
-    document.children = document.children.filter(
-      (child) =>
-        child.type === 'text' ||
-        child.type === 'cdata' ||
-        !IDMLPreferencesController.elementsImplemented.includes(child.tagName)
-    );
+    document.children = document.children.filter((child) => child.type === 'text' || child.type === 'cdata' || !IDMLPreferencesController.elementsImplemented.includes(child.tagName));
 
     return document;
   }

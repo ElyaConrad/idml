@@ -1,15 +1,8 @@
-import {
-  createIDMLTransform,
-  ensureNumber,
-  flattenIDMLProperties,
-  getIDMLElementProperties,
-  parseIDMLTransform,
-  serializeElement,
-  Transform,
-} from '../helpers.js';
-import { makeElementNode } from '../util/xml.js';
+import { createIDMLTransform, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement } from '../helpers.js';
+import { makeElementNode } from 'flat-svg';
 import { KeyMap } from '../util/keyMap.js';
 import { IDMLGraphicContext } from './Graphic.js';
+import { Transform } from '../types/index.js';
 
 export type GradientType = 'linear' | 'radial';
 export type GradientColorStop = {

@@ -1,6 +1,9 @@
-import { simplifySVG } from 'idml';
+import { simplifySVG } from 'flat-svg';
 import fs from 'fs/promises';
 import { JSDOM } from 'jsdom';
+import formatXml from 'xml-formatter';
+import beautify from 'beautify';
+import { Resvg } from '@resvg/resvg-js';
 
 const testFile = await fs.readFile('test.svg', 'utf-8');
 
@@ -16,9 +19,26 @@ const { document } = new JSDOM(testFile, {
 
 const svg = document.querySelector('svg')!;
 
-const simplifiedStructure = simplifySVG(svg, {
-  clipAfterElementTransform: true,
-  keepGroupTransforms: true,
+const simplifiedSVG = simplifySVG(svg, {
+  clipAfterElementTransform: false,
+  keepGroupTransforms: false,
+  rasterize(svgElement) {
+    fs.writeFile('mask_final.svg', beautify(svgElement.outerHTML, { format: 'html' }));
+
+    const resvg = new Resvg(svgElement.outerHTML, {
+      background: '#00000000', // transparent
+    });
+    const pngData = resvg.render();
+    const pngBuffer = pngData.asPng();
+
+    fs.writeFile('mask_final.png', pngBuffer);
+
+    return pngBuffer;
+  },
 });
 
-await fs.writeFile('test2.svg', simplifiedStructure);
+const prettyNewSVG = formatXml(simplifiedSVG.outerHTML, {
+  collapseContent: true,
+});
+
+await fs.writeFile('test2.svg', prettyNewSVG);

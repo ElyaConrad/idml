@@ -1,8 +1,6 @@
-import { ElementNode } from '../../util/xml.js';
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
 import { GeometricSprite, GeometricSpriteOpts, PathPoint } from './GeometricSprite.js';
-import { RectangleSprite } from './Rectangle.js';
-import { Sprite, SpriteOpts } from './Sprite.js';
+import { Sprite } from './Sprite.js';
 
 export class OvalSprite extends GeometricSprite {
   constructor(id: string, opts: GeometricSpriteOpts, context: IDMLSpreadPackageContext) {

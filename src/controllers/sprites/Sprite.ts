@@ -1,19 +1,6 @@
-import {
-  createIDMLTransform,
-  ensureArray,
-  ensureBoolean,
-  ensureEnumArray,
-  ensureNumber,
-  flattenIDMLProperties,
-  GeometricBounds,
-  getIDMLElementProperties,
-  parseIDMLTransform,
-  serializeElement,
-  Transform,
-  normalizeTransformForGivenOrigin,
-} from '../../helpers.js';
+import { createIDMLTransform, ensureArray, ensureBoolean, ensureEnumArray, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement, normalizeTransformForGivenOrigin } from '../../helpers.js';
+import { GeometricBounds, Transform } from '../../types/index.js';
 import { KeyMap } from '../../util/keyMap.js';
-import { ElementNode } from '../../util/xml.js';
 import { Spread } from '../Spread.js';
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
 
@@ -145,12 +132,8 @@ export abstract class Sprite {
         StoryTitle: this.storyTitle,
         ContentType: this.contentType,
         Visible: this.visible,
-        HorizontalLayoutConstraints: this.horizontalLayoutConstraints
-          ? this.horizontalLayoutConstraints.map((v) => layoutDimensionMap.getExternal(v)).join(' ')
-          : undefined,
-        VerticalLayoutConstraints: this.verticalLayoutConstraints
-          ? this.verticalLayoutConstraints.map((v) => layoutDimensionMap.getExternal(v)).join(' ')
-          : undefined,
+        HorizontalLayoutConstraints: this.horizontalLayoutConstraints ? this.horizontalLayoutConstraints.map((v) => layoutDimensionMap.getExternal(v)).join(' ') : undefined,
+        VerticalLayoutConstraints: this.verticalLayoutConstraints ? this.verticalLayoutConstraints.map((v) => layoutDimensionMap.getExternal(v)).join(' ') : undefined,
         FillColor: this.fillColorId,
         GradientStart: this.gradientStart?.join(' '),
         GradientFillLength: this.gradientFillLength,
@@ -164,28 +147,7 @@ export abstract class Sprite {
       this.id,
       this.context.spreadPackageRoot,
       ['Properties'],
-      [
-        this.frameFittingOption
-          ? serializeElement('FrameFittingOption', {}, this.frameFittingOption?.sourceElement, this.context.spreadPackageRoot, [
-              'Properties',
-            ])
-          : undefined,
-        this.objectExportOption
-          ? serializeElement('ObjectExportOption', {}, this.objectExportOption?.sourceElement, this.context.spreadPackageRoot, [
-              'Properties',
-            ])
-          : undefined,
-        this.textWrapPreference
-          ? serializeElement('TextWrapPreference', {}, this.textWrapPreference?.sourceElement, this.context.spreadPackageRoot, [
-              'Properties',
-            ])
-          : undefined,
-        this.inCopyExportOption
-          ? serializeElement('InCopyExportOption', {}, this.inCopyExportOption?.sourceElement, this.context.spreadPackageRoot, [
-              'Properties',
-            ])
-          : undefined,
-      ].filter((v) => v !== undefined)
+      [this.frameFittingOption ? serializeElement('FrameFittingOption', {}, this.frameFittingOption?.sourceElement, this.context.spreadPackageRoot, ['Properties']) : undefined, this.objectExportOption ? serializeElement('ObjectExportOption', {}, this.objectExportOption?.sourceElement, this.context.spreadPackageRoot, ['Properties']) : undefined, this.textWrapPreference ? serializeElement('TextWrapPreference', {}, this.textWrapPreference?.sourceElement, this.context.spreadPackageRoot, ['Properties']) : undefined, this.inCopyExportOption ? serializeElement('InCopyExportOption', {}, this.inCopyExportOption?.sourceElement, this.context.spreadPackageRoot, ['Properties']) : undefined].filter((v) => v !== undefined)
     );
   }
 
@@ -204,16 +166,8 @@ export abstract class Sprite {
     const storyTitle = props.StoryTitle;
     const contentType = props.ContentType;
     const visible = ensureBoolean(props.Visible, true);
-    const horizontalLayoutConstraints = props.HorizontalLayoutConstraints
-      ? (ensureEnumArray(props.HorizontalLayoutConstraints).map((v) =>
-          layoutDimensionMap.getInternal(v)
-        ) as HorizontalLayoutConstraints)
-      : undefined;
-    const verticalLayoutConstraints = props.VerticalLayoutConstraints
-      ? (ensureEnumArray(props.VerticalLayoutConstraints).map((v) =>
-          layoutDimensionMap.getInternal(v)
-        ) as VerticalLayoutConstraints)
-      : undefined;
+    const horizontalLayoutConstraints = props.HorizontalLayoutConstraints ? (ensureEnumArray(props.HorizontalLayoutConstraints).map((v) => layoutDimensionMap.getInternal(v)) as HorizontalLayoutConstraints) : undefined;
+    const verticalLayoutConstraints = props.VerticalLayoutConstraints ? (ensureEnumArray(props.VerticalLayoutConstraints).map((v) => layoutDimensionMap.getInternal(v)) as VerticalLayoutConstraints) : undefined;
     const fillColorId = props.FillColor;
     const gradientStart = ensureArray(props.GradientStart) as [number, number];
     const gradientFillLength = ensureNumber(props.GradientFillLength);

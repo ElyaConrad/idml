@@ -1,11 +1,4 @@
-import {
-  ensureArray,
-  ensureBoolean,
-  ensureNumber,
-  flattenIDMLProperties,
-  getIDMLElementProperties,
-  serializeElement,
-} from '../helpers.js';
+import { ensureArray, ensureBoolean, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, serializeElement } from '../helpers.js';
 import { IDMLStylesContext } from './Styles.js';
 
 export class CharacterStyle {

@@ -1,6 +1,6 @@
 import { ensureBoolean, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, serializeElement } from '../helpers.js';
 import { KeyMap } from '../util/keyMap.js';
-import { makeElementNode, makeTextNode } from '../util/xml.js';
+import { makeElementNode, makeTextNode } from 'flat-svg';
 import { IDMLBackingStoryContext } from './BackingStory.js';
 import { Spread } from './Spread.js';
 
@@ -128,14 +128,7 @@ export class Story {
                 feature.sourceElement,
                 this.context.storyPackageRoot,
                 ['Properties'],
-                [
-                  ...(feature.sourceElement
-                    ? Spread.keepChildren(feature.sourceElement).filter(
-                        (xmlNode) => xmlNode.type !== 'element' || xmlNode.tagName !== 'Content'
-                      )
-                    : []),
-                  makeElementNode('Content', {}, [makeTextNode(feature.content)]),
-                ]
+                [...(feature.sourceElement ? Spread.keepChildren(feature.sourceElement).filter((xmlNode) => xmlNode.type !== 'element' || xmlNode.tagName !== 'Content') : []), makeElementNode('Content', {}, [makeTextNode(feature.content)])]
               )
             )
           )
@@ -203,9 +196,7 @@ export class Story {
     if (!appliedParagraphStyle) {
       throw new Error('ParagraphStyleRange element must have an AppliedParagraphStyle attribute');
     }
-    const characterStyleRanges = Array.from(element.getElementsByTagName('CharacterStyleRange')).map(
-      (characterStyleRangeElement) => Story.parseCharacterStyleRange(characterStyleRangeElement)
-    );
+    const characterStyleRanges = Array.from(element.getElementsByTagName('CharacterStyleRange')).map((characterStyleRangeElement) => Story.parseCharacterStyleRange(characterStyleRangeElement));
 
     return {
       appliedParagraphStyle,
@@ -232,9 +223,7 @@ export class Story {
 
     const paragraphStyleRangeElements = Array.from(element.getElementsByTagName('ParagraphStyleRange'));
 
-    const paragraphs = paragraphStyleRangeElements.map((paragraphStyleRangeElement) =>
-      Story.parseParagraphStyleRange(paragraphStyleRangeElement)
-    );
+    const paragraphs = paragraphStyleRangeElements.map((paragraphStyleRangeElement) => Story.parseParagraphStyleRange(paragraphStyleRangeElement));
 
     return new Story(id, paragraphs, { userText, title, storyPreference, inCopyExportOption }, context);
   }

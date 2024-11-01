@@ -1,11 +1,4 @@
-import {
-  ensureArray,
-  ensureBoolean,
-  ensureNumber,
-  flattenIDMLProperties,
-  getIDMLElementProperties,
-  serializeElement,
-} from '../helpers.js';
+import { ensureArray, ensureBoolean, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, serializeElement } from '../helpers.js';
 import { KeyMap } from '../util/keyMap.js';
 import { IDMLStylesContext } from './Styles.js';
 

@@ -1,6 +1,6 @@
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
 import { GeometricSprite, GeometricSpriteOpts } from './GeometricSprite.js';
-import { Sprite, SpriteOpts } from './Sprite.js';
+import { Sprite } from './Sprite.js';
 
 export class RectangleSprite extends GeometricSprite {
   constructor(id: string, opts: GeometricSpriteOpts, context: IDMLSpreadPackageContext) {

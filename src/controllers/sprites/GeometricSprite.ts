@@ -1,8 +1,9 @@
-import { ensureArray, ensureBoolean, GeometricBounds } from '../../helpers.js';
 import { KeyMap } from '../../util/keyMap.js';
-import { ElementNode, makeElementNode } from '../../util/xml.js';
+import { ElementNode, makeElementNode } from 'flat-svg';
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
 import { Sprite, SpriteOpts } from './Sprite.js';
+import { GeometricBounds } from '../../types/index.js';
+import { ensureArray, ensureBoolean } from '../../helpers.js';
 
 export type GeometryPathType = 'normalPath' | 'clippingPath' | 'textPath' | 'motionPath' | 'guidePath';
 
@@ -100,10 +101,7 @@ export class GeometricSprite extends Sprite {
       geometryPathType,
     };
   }
-  static injectPathGeometry(
-    baseElement: ElementNode,
-    opts: { open: boolean; geometryPathType: GeometryPathType; pathPoints: PathPoint[] }
-  ) {
+  static injectPathGeometry(baseElement: ElementNode, opts: { open: boolean; geometryPathType: GeometryPathType; pathPoints: PathPoint[] }) {
     const pathGeometryProperty = makeElementNode('PathGeometry', {}, [
       makeElementNode(
         'GeometryPathType',
@@ -127,9 +125,7 @@ export class GeometricSprite extends Sprite {
       ),
     ]);
 
-    const existingPropertiesElement = baseElement.children?.find(
-      (child) => child.type === 'element' && child.tagName === 'Properties'
-    ) as ElementNode | undefined;
+    const existingPropertiesElement = baseElement.children?.find((child) => child.type === 'element' && child.tagName === 'Properties') as ElementNode | undefined;
     if (existingPropertiesElement) {
       existingPropertiesElement.children = [...(existingPropertiesElement.children ?? []), pathGeometryProperty];
     } else {

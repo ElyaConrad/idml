@@ -1,24 +1,9 @@
-import {
-  createIDMLTransform,
-  ensureBoolean,
-  ensureNumber,
-  flattenIDMLProperties,
-  getIDMLElementProperties,
-  parseIDMLTransform,
-  serializeElement,
-  Transform,
-} from '../helpers.js';
+import { createIDMLTransform, ensureBoolean, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement } from '../helpers.js';
+import { Transform } from '../types/index.js';
 import { KeyMap } from '../util/keyMap.js';
 import { IDMLGraphicContext } from './Graphic.js';
 
-export type PastedSmoothShadeContentsType =
-  | 'constantShade'
-  | 'gradientShade'
-  | 'patternShade'
-  | 'imageShade'
-  | 'noiseShade'
-  | 'meshShade'
-  | 'functionShade';
+export type PastedSmoothShadeContentsType = 'constantShade' | 'gradientShade' | 'patternShade' | 'imageShade' | 'noiseShade' | 'meshShade' | 'functionShade';
 export type PastedSmoothShadeContentsEndcoding = 'ascii64' | 'binary' | 'asciiHex';
 
 const contentsTypeMap = new KeyMap({

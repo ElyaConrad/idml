@@ -1,13 +1,4 @@
-import {
-  createIDMLTransform,
-  ensureBoolean,
-  flattenIDMLProperties,
-  getElementAttributes,
-  getIDMLElementProperties,
-  parseIDMLTransform,
-  serializeElement,
-  Transform,
-} from '../helpers.js';
+import { createIDMLTransform, ensureBoolean, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement } from '../helpers.js';
 import _ from 'lodash';
 import { Page } from './Page.js';
 import { IDMLSpreadPackageContext } from './SpreadPackage.js';
@@ -15,11 +6,11 @@ import { Sprite } from './sprites/Sprite.js';
 import { RectangleSprite } from './sprites/Rectangle.js';
 import { GroupSprite } from './sprites/Group.js';
 import { TextFrame } from './sprites/TextFrame.js';
-import { makeElementNode, parseXML, XMLNode } from '../util/xml.js';
+import { getElementAttributes, makeElementNode, parseXML, XMLNode } from 'flat-svg';
 import { MasterSpread } from './MasterSpread.js';
 import { GridDataInformation } from './GridDataInformation.js';
-import { ColorInput } from '../types/index.js';
-import { GeometricSprite, PathPoint } from './sprites/GeometricSprite.js';
+import { ColorInput, Transform } from '../types/index.js';
+import { PathPoint } from './sprites/GeometricSprite.js';
 import { OvalSprite } from './sprites/Oval.js';
 
 export type FlattenerPreference = {
@@ -55,19 +46,7 @@ export class Spread {
       this.id,
       this.context.spreadPackageRoot,
       ['Properties'],
-      [
-        this.flattenerPreference
-          ? serializeElement(
-              'FlattenerPreference',
-              {},
-              this.flattenerPreference.sourceElement,
-              this.context.spreadPackageRoot,
-              ['Properties']
-            )
-          : undefined,
-        ...this.pages.map((page) => page.serialize()),
-        ...this.sprites.map((sprite) => Spread.serializeSprite(sprite)),
-      ].filter((x) => x !== undefined)
+      [this.flattenerPreference ? serializeElement('FlattenerPreference', {}, this.flattenerPreference.sourceElement, this.context.spreadPackageRoot, ['Properties']) : undefined, ...this.pages.map((page) => page.serialize()), ...this.sprites.map((sprite) => Spread.serializeSprite(sprite))].filter((x) => x !== undefined)
     );
   }
   static serializeSprite(sprite: Sprite) {
@@ -89,16 +68,7 @@ export class Spread {
     return Array.from(element.children).filter((child) => child.tagName === tagName);
   }
   static getChildSprites(element: Element, context: IDMLSpreadPackageContext) {
-    return [
-      ...Spread.getDirectChildren(element, 'Group').map((groupElement) => GroupSprite.parseElement(groupElement, context)),
-      ...Spread.getDirectChildren(element, 'Rectangle').map((rectangleElement) =>
-        RectangleSprite.parseElement(rectangleElement, context)
-      ),
-      ...Spread.getDirectChildren(element, 'TextFrame').map((textFrameElement) =>
-        TextFrame.parseElement(textFrameElement, context)
-      ),
-      ...Spread.getDirectChildren(element, 'Oval').map((ovalElement) => OvalSprite.parseElement(ovalElement, context)),
-    ];
+    return [...Spread.getDirectChildren(element, 'Group').map((groupElement) => GroupSprite.parseElement(groupElement, context)), ...Spread.getDirectChildren(element, 'Rectangle').map((rectangleElement) => RectangleSprite.parseElement(rectangleElement, context)), ...Spread.getDirectChildren(element, 'TextFrame').map((textFrameElement) => TextFrame.parseElement(textFrameElement, context)), ...Spread.getDirectChildren(element, 'Oval').map((ovalElement) => OvalSprite.parseElement(ovalElement, context))];
   }
   static keepChildren(element: Element): XMLNode[] {
     const children = Array.from(element.childNodes);
@@ -127,9 +97,7 @@ export class Spread {
       [k: string]: string | undefined;
     };
 
-    const pages = Array.from(element.getElementsByTagName('Page')).map((pageElement) =>
-      Page.parseElement(pageElement, context)
-    );
+    const pages = Array.from(element.getElementsByTagName('Page')).map((pageElement) => Page.parseElement(pageElement, context));
 
     const id = props.Self;
     if (!id) {
@@ -206,9 +174,7 @@ export class Spread {
         hidden: false,
         // Currently we're not really supporting flattener preferences , so we just using a xml-element based flattener preference
         flattenerPreference: {
-          sourceElement: parseXML(
-            `<FlattenerPreference LineArtAndTextResolution="300" GradientAndMeshResolution="150" ClipComplexRegions="false" ConvertAllStrokesToOutlines="false" ConvertAllTextToOutlines="false"><Properties><RasterVectorBalance type="double">50</RasterVectorBalance></Properties></FlattenerPreference>`
-          ),
+          sourceElement: parseXML(`<FlattenerPreference LineArtAndTextResolution="300" GradientAndMeshResolution="150" ClipComplexRegions="false" ConvertAllStrokesToOutlines="false" ConvertAllTextToOutlines="false"><Properties><RasterVectorBalance type="double">50</RasterVectorBalance></Properties></FlattenerPreference>`),
         },
         itemTransform: _.cloneDeep(masterSpread.itemTransform),
       },
@@ -254,22 +220,8 @@ export class Spread {
     return [x - translateX, y - translateY] as [number, number];
   }
 
-  createRectangle(opts: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    fill?: ColorInput | string;
-    stroke?: ColorInput | string;
-    strokeWeight?: number;
-    transform?: Transform;
-  }) {
-    const pathPoints: PathPoint[] = [
-      this.relativeCoords(opts.x, opts.y),
-      this.relativeCoords(opts.x + opts.width, opts.y),
-      this.relativeCoords(opts.x + opts.width, opts.y + opts.height),
-      this.relativeCoords(opts.x, opts.y + opts.height),
-    ].map(([x, y]) => {
+  createRectangle(opts: { x: number; y: number; width: number; height: number; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: Transform }) {
+    const pathPoints: PathPoint[] = [this.relativeCoords(opts.x, opts.y), this.relativeCoords(opts.x + opts.width, opts.y), this.relativeCoords(opts.x + opts.width, opts.y + opts.height), this.relativeCoords(opts.x, opts.y + opts.height)].map(([x, y]) => {
       return {
         anchor: [x, y],
         leftDirection: [x, y],
@@ -303,19 +255,13 @@ export class Spread {
         pathPoints,
         geometryPathType: 'normalPath',
         frameFittingOption: {
-          sourceElement: parseXML(
-            `<FrameFittingOption AutoFit="false" LeftCrop="0" TopCrop="0" RightCrop="0" BottomCrop="0" FittingOnEmptyFrame="None" FittingAlignment="CenterAnchor" />`
-          ),
+          sourceElement: parseXML(`<FrameFittingOption AutoFit="false" LeftCrop="0" TopCrop="0" RightCrop="0" BottomCrop="0" FittingOnEmptyFrame="None" FittingAlignment="CenterAnchor" />`),
         },
         objectExportOption: {
-          sourceElement: parseXML(
-            `<ObjectExportOption AltTextSourceType="SourceXMLStructure" ActualTextSourceType="SourceXMLStructure" CustomAltText="$ID/" CustomActualText="$ID/" ApplyTagType="TagFromStructure" ImageConversionType="JPEG" ImageExportResolution="Ppi300" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="true" JPEGOptionsQuality="High" JPEGOptionsFormat="BaselineEncoding" ImageAlignment="AlignLeft" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" CustomImageAlignment="false" SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing" EpubType="$ID/" SizeType="DefaultSize" CustomSize="$ID/" PreserveAppearanceFromLayout="PreserveAppearanceDefault"><Properties><AltMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" /><ActualMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" /></Properties></ObjectExportOption>`
-          ),
+          sourceElement: parseXML(`<ObjectExportOption AltTextSourceType="SourceXMLStructure" ActualTextSourceType="SourceXMLStructure" CustomAltText="$ID/" CustomActualText="$ID/" ApplyTagType="TagFromStructure" ImageConversionType="JPEG" ImageExportResolution="Ppi300" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="true" JPEGOptionsQuality="High" JPEGOptionsFormat="BaselineEncoding" ImageAlignment="AlignLeft" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" CustomImageAlignment="false" SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing" EpubType="$ID/" SizeType="DefaultSize" CustomSize="$ID/" PreserveAppearanceFromLayout="PreserveAppearanceDefault"><Properties><AltMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" /><ActualMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" /></Properties></ObjectExportOption>`),
         },
         textWrapPreference: {
-          sourceElement: parseXML(
-            `<TextWrapPreference Inverse="false" ApplyToMasterPageOnly="false" TextWrapSide="BothSides" TextWrapMode="None"><Properties><TextWrapOffset Top="0" Left="0" Bottom="0" Right="0" /></Properties></TextWrapPreference>`
-          ),
+          sourceElement: parseXML(`<TextWrapPreference Inverse="false" ApplyToMasterPageOnly="false" TextWrapSide="BothSides" TextWrapMode="None"><Properties><TextWrapOffset Top="0" Left="0" Bottom="0" Right="0" /></Properties></TextWrapPreference>`),
         },
         inCopyExportOption: {
           sourceElement: parseXML(`<InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />`),
@@ -326,16 +272,7 @@ export class Spread {
     this.sprites.push(rectangle);
     return rectangle;
   }
-  createOval(opts: {
-    x: number;
-    y: number;
-    radiusX: number;
-    radiusY: number;
-    fill?: ColorInput | string;
-    stroke?: ColorInput | string;
-    strokeWeight?: number;
-    transform?: Transform;
-  }) {
+  createOval(opts: { x: number; y: number; radiusX: number; radiusY: number; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: Transform }) {
     const [x, y] = this.relativeCoords(opts.x, opts.y);
     const pathPoints = OvalSprite.calculateEllipsePathPoints(x - opts.radiusX, y - opts.radiusY, opts.radiusX, opts.radiusY);
 
@@ -365,19 +302,13 @@ export class Spread {
         pathPoints,
         geometryPathType: 'normalPath',
         frameFittingOption: {
-          sourceElement: parseXML(
-            `<FrameFittingOption AutoFit="false" LeftCrop="0" TopCrop="0" RightCrop="0" BottomCrop="0" FittingOnEmptyFrame="None" FittingAlignment="CenterAnchor" />`
-          ),
+          sourceElement: parseXML(`<FrameFittingOption AutoFit="false" LeftCrop="0" TopCrop="0" RightCrop="0" BottomCrop="0" FittingOnEmptyFrame="None" FittingAlignment="CenterAnchor" />`),
         },
         objectExportOption: {
-          sourceElement: parseXML(
-            `<ObjectExportOption AltTextSourceType="SourceXMLStructure" ActualTextSourceType="SourceXMLStructure" CustomAltText="$ID/" CustomActualText="$ID/" ApplyTagType="TagFromStructure" ImageConversionType="JPEG" ImageExportResolution="Ppi300" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="true" JPEGOptionsQuality="High" JPEGOptionsFormat="BaselineEncoding" ImageAlignment="AlignLeft" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" CustomImageAlignment="false" SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing" EpubType="$ID/" SizeType="DefaultSize" CustomSize="$ID/" PreserveAppearanceFromLayout="PreserveAppearanceDefault"><Properties><AltMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" /><ActualMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" /></Properties></ObjectExportOption>`
-          ),
+          sourceElement: parseXML(`<ObjectExportOption AltTextSourceType="SourceXMLStructure" ActualTextSourceType="SourceXMLStructure" CustomAltText="$ID/" CustomActualText="$ID/" ApplyTagType="TagFromStructure" ImageConversionType="JPEG" ImageExportResolution="Ppi300" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="true" JPEGOptionsQuality="High" JPEGOptionsFormat="BaselineEncoding" ImageAlignment="AlignLeft" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" CustomImageAlignment="false" SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing" EpubType="$ID/" SizeType="DefaultSize" CustomSize="$ID/" PreserveAppearanceFromLayout="PreserveAppearanceDefault"><Properties><AltMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" /><ActualMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" /></Properties></ObjectExportOption>`),
         },
         textWrapPreference: {
-          sourceElement: parseXML(
-            `<TextWrapPreference Inverse="false" ApplyToMasterPageOnly="false" TextWrapSide="BothSides" TextWrapMode="None"><Properties><TextWrapOffset Top="0" Left="0" Bottom="0" Right="0" /></Properties></TextWrapPreference>`
-          ),
+          sourceElement: parseXML(`<TextWrapPreference Inverse="false" ApplyToMasterPageOnly="false" TextWrapSide="BothSides" TextWrapMode="None"><Properties><TextWrapOffset Top="0" Left="0" Bottom="0" Right="0" /></Properties></TextWrapPreference>`),
         },
         inCopyExportOption: {
           sourceElement: parseXML(`<InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />`),

@@ -1,5 +1,5 @@
-import { IDMLDocumentContext } from '../main.js';
-import { ElementNode, makeElementNode, nodeToNode, parseXML, XMLDocumentExport } from '../util/xml.js';
+import { IDMLDocumentContext } from '../idml.js';
+import { ElementNode, makeElementNode, nodeToNode, parseXML, XMLDocumentExport } from 'flat-svg';
 import { CharacterStyle } from './CharacterStyle.js';
 import { ParagraphStyle } from './ParagraphStyle.js';
 import { SuperController } from './SuperController.js';
@@ -31,16 +31,9 @@ export class IDMLStylesController extends SuperController {
   serialize() {
     const document = nodeToNode(this.context.stylesRoot) as ElementNode;
     document.children = document.children ?? [];
-    document.children = document.children.filter(
-      (child) =>
-        child.type === 'text' || child.type === 'cdata' || !IDMLStylesController.elementsImplemented.includes(child.tagName)
-    );
+    document.children = document.children.filter((child) => child.type === 'text' || child.type === 'cdata' || !IDMLStylesController.elementsImplemented.includes(child.tagName));
 
-    const characterStyleRootGroupIds = Array.from(
-      new Set(
-        this.characterStyles.map((characterStyle) => characterStyle.rootCharacterStyleGroupId).filter((id) => id !== undefined)
-      )
-    );
+    const characterStyleRootGroupIds = Array.from(new Set(this.characterStyles.map((characterStyle) => characterStyle.rootCharacterStyleGroupId).filter((id) => id !== undefined)));
     if (characterStyleRootGroupIds.length === 0) {
       characterStyleRootGroupIds.push(this.context.idml.getUniqueID());
     }
@@ -58,11 +51,7 @@ export class IDMLStylesController extends SuperController {
       )
     );
 
-    const paragraphStyleRootGroupIds = Array.from(
-      new Set(
-        this.paragraphStyles.map((paragraphStyle) => paragraphStyle.rootParagraphStyleGroupId).filter((id) => id !== undefined)
-      )
-    );
+    const paragraphStyleRootGroupIds = Array.from(new Set(this.paragraphStyles.map((paragraphStyle) => paragraphStyle.rootParagraphStyleGroupId).filter((id) => id !== undefined)));
     if (paragraphStyleRootGroupIds.length === 0) {
       paragraphStyleRootGroupIds.push(this.context.idml.getUniqueID());
     }

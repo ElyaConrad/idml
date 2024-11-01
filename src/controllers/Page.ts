@@ -1,21 +1,10 @@
-import {
-  createIDMLGeometricBounds,
-  createIDMLTransform,
-  ensureArray,
-  ensureNumber,
-  flattenIDMLProperties,
-  GeometricBounds,
-  getIDMLElementProperties,
-  parseIDMLGeometricBounds,
-  parseIDMLTransform,
-  serializeElement,
-  Transform,
-} from '../helpers.js';
+import { createIDMLGeometricBounds, createIDMLTransform, ensureArray, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLGeometricBounds, parseIDMLTransform, serializeElement } from '../helpers.js';
 import { KeyMap } from '../util/keyMap.js';
-import { makeElementNode } from '../util/xml.js';
+import { makeElementNode } from 'flat-svg';
 import { GridDataInformation } from './GridDataInformation.js';
 import { IDMLMasterSpreadPackageContext } from './MasterSpreadPackage.js';
 import { IDMLSpreadPackageContext } from './SpreadPackage.js';
+import { GeometricBounds, Transform } from '../types/index.js';
 
 export type ColumnDirection = 'horizontal' | 'vertical';
 
@@ -30,15 +19,7 @@ export type MarginPreference = {
   columnsPositions?: number[];
 };
 
-type GridStartingPoint =
-  | 'topOutside'
-  | 'bottomOutside'
-  | 'topInside'
-  | 'bottomInside'
-  | 'topLeft'
-  | 'topRight'
-  | 'bottomLeft'
-  | 'bottomRight';
+type GridStartingPoint = 'topOutside' | 'bottomOutside' | 'topInside' | 'bottomInside' | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
 
 const columnDirectionMap = new KeyMap({
   Horizontal: 'horizontal',
@@ -143,9 +124,7 @@ export class Page {
     if (!marginPreferenceElement) {
       throw new Error('Page element missing MarginPreference element');
     }
-    const marginPreferenceProps = flattenIDMLProperties(
-      getIDMLElementProperties(marginPreferenceElement, ['Properties'], [])
-    ) as { [k: string]: string | undefined };
+    const marginPreferenceProps = flattenIDMLProperties(getIDMLElementProperties(marginPreferenceElement, ['Properties'], [])) as { [k: string]: string | undefined };
     const marginPreference: MarginPreference = {
       columnCount: ensureNumber(marginPreferenceProps['ColumnCount']),
       columnGutter: ensureNumber(marginPreferenceProps['ColumnGutter']),

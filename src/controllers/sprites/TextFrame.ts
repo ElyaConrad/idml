@@ -1,5 +1,4 @@
 import { serializeElement } from '../../helpers.js';
-import { ElementNode } from '../../util/xml.js';
 import { Spread } from '../Spread.js';
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
 import { GeometricSprite, GeometricSpriteOpts } from './GeometricSprite.js';
@@ -39,11 +38,7 @@ export class TextFrame extends GeometricSprite {
     const baseElement = this.serializeGeometricSprite();
 
     if (this.textFramePreference) {
-      baseElement.children?.push(
-        serializeElement('TextFramePreference', {}, this.textFramePreference.sourceElement, this.context.spreadPackageRoot, [
-          'Properties',
-        ])
-      );
+      baseElement.children?.push(serializeElement('TextFramePreference', {}, this.textFramePreference.sourceElement, this.context.spreadPackageRoot, ['Properties']));
     }
     return baseElement;
   }

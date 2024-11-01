@@ -1,14 +1,5 @@
-import {
-  createIDMLTransform,
-  ensureBoolean,
-  ensureNumber,
-  ensurePropertyArray,
-  flattenIDMLProperties,
-  getIDMLElementProperties,
-  parseIDMLTransform,
-  serializeElement,
-  Transform,
-} from '../helpers.js';
+import { createIDMLTransform, ensureBoolean, ensureNumber, ensurePropertyArray, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement } from '../helpers.js';
+import { Transform } from '../types/index.js';
 import { IDMLMasterSpreadPackageContext } from './MasterSpreadPackage.js';
 import { Page } from './Page.js';
 
@@ -71,9 +62,7 @@ export class MasterSpread {
   static parseElement(element: Element, context: IDMLMasterSpreadPackageContext) {
     const props = flattenIDMLProperties(getIDMLElementProperties(element, ['Properties'], []));
 
-    const pages = Array.from(element.getElementsByTagName('Page')).map((pageElement) =>
-      Page.parseElement(pageElement, context)
-    );
+    const pages = Array.from(element.getElementsByTagName('Page')).map((pageElement) => Page.parseElement(pageElement, context));
 
     const id = element.getAttribute('Self');
     if (!id) {

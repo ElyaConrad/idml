@@ -1,4 +1,4 @@
-import { IDML, TextFrame } from 'idml';
+import { IDML } from 'idml';
 import fs from 'fs/promises';
 
 const testFile = await fs.readFile('demo.idml');
@@ -47,11 +47,11 @@ idml.addEventListener('ready', async () => {
 
   console.log('ELLIPSE', oval.getTransform([700, 700]));
 
-  const textFrame1 = idml.getSpreads()[1].getSprites()[0] as TextFrame;
+  const textFrame1 = idml.getSpreads()[1].getSprites()[0] as any;
   console.log('TextFrame', textFrame1.getTransform([960, 540]), textFrame1.getBBox());
 
   textFrame1.setBBox(100, 100, 100, 100);
-  textFrame1.setTranform({ translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: Math.PI / 2 }, [150, 150]);
+  textFrame1.setTranform({ translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: Math.PI / 4 }, [150, 150]);
 
   const archive = Buffer.from(await idml.export());
   await fs.writeFile('demo-export-2.idml', archive);

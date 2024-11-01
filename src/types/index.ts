@@ -13,3 +13,17 @@ export type ColorInputCMYK = {
   black: number;
 };
 export type ColorInput = ColorInputRGB | ColorInputCMYK;
+
+export type Transform = {
+  translateX: number;
+  translateY: number;
+  scaleX: number;
+  scaleY: number;
+  rotate: number;
+};
+export type GeometricBounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};

@@ -80,22 +80,9 @@ export class Color {
   }
   equals(color: ColorInput) {
     if (color.type === 'rgb') {
-      return (
-        this.model === 'process' &&
-        this.space === 'rgb' &&
-        this.value[0] === color.red &&
-        this.value[1] === color.green &&
-        this.value[2] === color.blue
-      );
+      return this.model === 'process' && this.space === 'rgb' && this.value[0] === color.red && this.value[1] === color.green && this.value[2] === color.blue;
     } else if (color.type === 'cmyk') {
-      return (
-        this.model === 'process' &&
-        this.space === 'cmyk' &&
-        this.value[0] === color.cyan &&
-        this.value[1] === color.magenta &&
-        this.value[2] === color.yellow &&
-        this.value[3] === color.black
-      );
+      return this.model === 'process' && this.space === 'cmyk' && this.value[0] === color.cyan && this.value[1] === color.magenta && this.value[2] === color.yellow && this.value[3] === color.black;
     } else {
       return false;
     }

@@ -1,10 +1,7 @@
-import { GeometricBounds } from '../../helpers.js';
+import { GeometricBounds } from '../../types/index.js';
 import { Spread } from '../Spread.js';
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
-import { OvalSprite } from './Oval.js';
-import { RectangleSprite } from './Rectangle.js';
 import { Sprite, SpriteOpts } from './Sprite.js';
-import { TextFrame } from './TextFrame.js';
 
 export class GroupSprite extends Sprite {
   constructor(id: string, private sprites: Sprite[], opts: SpriteOpts, context: IDMLSpreadPackageContext) {

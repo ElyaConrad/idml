@@ -2,24 +2,11 @@ import { ensureNumber, flattenIDMLProperties, getIDMLElementProperties, serializ
 import { KeyMap } from '../util/keyMap.js';
 import { IDMLSpreadPackageContext } from './SpreadPackage.js';
 
-export type LineAlignment =
-  | 'leftOrTopLineJustify'
-  | 'centerJustify'
-  | 'rightOrBottomLineJustify'
-  | 'fullJustify'
-  | 'leftOrTopAlign'
-  | 'centerAlign'
-  | 'rightOrBottomAlign';
+export type LineAlignment = 'leftOrTopLineJustify' | 'centerJustify' | 'rightOrBottomLineJustify' | 'fullJustify' | 'leftOrTopAlign' | 'centerAlign' | 'rightOrBottomAlign';
 
 export type CharacterAlignment = 'alignEmCenter' | 'alignIcfTop' | 'alignIcfBottom' | 'alignBaseline';
 
-export type GridAlignment =
-  | 'alignEmCenter'
-  | 'alignIcfTop'
-  | 'alignIcfBottom'
-  | 'alignCapHeight'
-  | 'alignBaseline'
-  | 'alignLeading';
+export type GridAlignment = 'alignEmCenter' | 'alignIcfTop' | 'alignIcfBottom' | 'alignCapHeight' | 'alignBaseline' | 'alignLeading';
 
 const lineAlignmentMap = new KeyMap({
   LeftOrTopLineJustify: 'leftOrTopLineJustify',

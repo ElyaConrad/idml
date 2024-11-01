@@ -1,9 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080">
     
-    <!-- canvas border -->
     <rect x="0" y="0" width="100%" height="100%" style="fill: none; stroke: #000;" />
-    <!-- contents -->
-    <rect x="10" y="10" width="200" height="200" style="fill: #f00;" />
+
+    <defs>
+        <mask id="mask2">
+            <image href="mask2.png" x="10" y="10" width="200" height="200" />
+            
+        </mask>
+    </defs>
+    <g style="mask: url(#mask2); transform: translate(0px, 30px);">
+        <defs>
+            <mask id="mask1">
+                <image href="mask1.png" x="10" y="10" width="200" height="200" />
+                <rect x="10" y="10" width="10" height="10" />
+            </mask>
+        </defs>
+        <g style="transform: rotate(20deg) translate(0px, 20px);">
+            <rect x="10" y="10" width="200" height="200" style="fill: #f00; mask: url(#mask1);" />
+        </g>
+    </g>
 
     <defs>
         <linearGradient id="Gradient2" x1="0" x2="0" y1="0" y2="1">
@@ -16,47 +31,8 @@
 
     <rect x="600" y="600" width="200" height="200" fill="url(#Gradient2)" />
 
-    
 
     <g style="transform: translate(0px, 1px);">
-        <!-- <defs>
-            <clipPath id="clip2" class="clip2">
-                <circle cx="300" cy="250" r="75" />
-                <path d="M 300,250 L 400,400 450,500 200,550" />
-                <g>
-                    <path d="M 350,350 L 450,350 L 450,450 L 350,450" style="transform-origin: 400px 400px; transform: rotate(45deg) translate(100px, 100px);" />
-                </g>
-                
-            </clipPath>
-            <clipPath id="clip3">
-                <path d="M225 250A75 75 0 1 0 375 250A75 75 0 1 0 225 250 M300 250L400 400L450 500L200 550 M400 470.7107L470.7107 541.4214L400 612.132L329.2893 541.4214" />
-            </clipPath>
-            <clipPath id="clip4">
-                <path d="M300 175c41.4214 0 75 33.5786 75 75c0 26.0292 -13.2598 48.9615 -33.3931 62.4104l58.3931 87.5896l50 100l-17.2589 3.4518l37.9696 37.9696l-70.7107 70.7106l-70.7107 -70.7106l21.5991 -21.5991l-150.8884 30.1777l76.2765 -228.8294c-29.7947 -9.9269 -51.2765 -38.04 -51.2765 -71.1705z" />
-            </clipPath>
-        </defs>
-        <g style="clip-path: url(#clip2);">
-            <defs>
-                <clipPath id="clip1">
-                    <rect x="250" y="200" width="433.333" height="400" style="fill: #000;" />
-                </clipPath>
-            </defs>
-            <image href="test.jpg" x="200" y="200" width="533.333" height="400" style="clip-path: url(#clip1);" />
-        </g> -->
-        <!-- <g id="g1">
-            <g style="transform: rotate(10deg);">
-                <path d="M 250,250 L 200,200 120,350" />
-                <circle cx="300" cy="250" r="75" style="transform: translate(0px, 0px)" />
-                <path d="M 300,250 L 400,400 450,500 200,550" />
-                <g style="transform-origin: 400px 400px; transform: rotate(45deg) translate(200px, 200px);">
-                    <path d="M 350,350 L 450,350 L 450,450 L 350,450" />
-                </g>
-            </g>
-        </g>
-        <g>
-            <path style="fill: rgba(255, 0, 0, 0.5);" d="M57.40007,365.52049l104.83185,-133.82931l22.88556,32.68396c14.53994,-28.7074 46.6064,-45.81632 79.93642,-39.93934c40.79207,7.19274 68.02971,46.09212 60.83697,86.88419c-4.51993,25.63378 -21.56042,45.91508 -43.72321,55.66358l42.29618,96.39879l31.87557,107.16318l-254.88435,5.82834l114.85349,-212.10774c-22.55685,-12.21009 -37.54618,-35.40433 -39.14823,-61.27123zM287.62749,672.29164l57.35764,81.9152l-81.9152,57.35764l-57.35764,-81.9152z" />
-        <g> -->
-                <!-- <rect x="350" y="200" width="200" height="400" style="fill: rgba(255, 0, 0, 0.5);" /> -->
         <defs>
             <clipPath id="clip2">
                 <rect x="350" y="200" width="200" height="400" style="fill: #000;" />
@@ -70,18 +46,15 @@
                     </clipPath>
                 </defs>
                 <g style="clip-path: url(#clip1)">
-                    <image href="test.jpg" x="200" y="200" width="600" height="450" style="transform: rotate(15deg);" />
+                    <image href="https://picsum.photos/seed/flat-svg/600/450" x="200" y="200" width="600" height="450" style="transform: rotate(15deg);" />
                 </g>
             </g>
         </g>
-
-
-        
     </g>
 
     <g style="transform: rotate(-10deg);">
         <text x="400" y="200" style="font-size: 32px; transform: translate(100px, 0px);">
-            TEXT
+            UBER FAHREN
         </text>
         <defs>
             <clipPath id="clip3">
