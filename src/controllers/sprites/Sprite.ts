@@ -259,6 +259,8 @@ export abstract class Sprite {
   }
   // Basic serialization of sprite
   serializeSprite() {
+    console.log('SERIALIZE SPRITE', this.id, this.itemTransform, createIDMLTransform(this.itemTransform));
+
     return serializeElement(
       this.type,
       {

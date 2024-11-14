@@ -1,13 +1,14 @@
-import { cleanupBluepicSVG, createInlineStyle, ensureNumber, getElementClipPath, getElementStyle, simplifySVG } from 'flat-svg';
+import { cleanupBluepicSVG, createInlineStyle, ensureNumber, getElementClipPath, getElementStyle, getElementTransformationMatrix, getTransformationsInOrder, simplifySVG } from 'flat-svg';
 import { getAllVisibleElements } from './getAllVisibleElements';
 import { cropToVisibleBBox, getVisibleBBox, renderSVG } from '@/renderSVG';
-import { createIDML, PolygonSprite, RectangleSprite, Spread, Sprite, type ColorInput, type PathCommand } from 'idml';
+import { createIDML, PolygonSprite, RectangleSprite, Spread, Sprite, type ColorInput, type PathCommand, type TransformMatrix, normalizeTransformMatrixForGivenOrigin } from 'idml';
 import SVGPathCommander, { type PathSegment } from 'svg-path-commander';
 import { getMinimalPathSegments } from './path';
 import type { SpriteWithChildren } from '../../../dist/esm/controllers/sprites/Sprite';
 import Color from 'color';
 
 (window as any).SVGPathCommander = SVGPathCommander;
+(window as any).normalizeTransformMatrixForGivenOrigin = normalizeTransformMatrixForGivenOrigin;
 
 function extractPathsFromDString(d: string) {
   const path = new SVGPathCommander(d).toAbsolute();
@@ -67,7 +68,11 @@ function extractElementIDMLStyle(element: Element) {
 }
 
 function createIDMLSprite(element: SVGElement, document: Document, spread: Spread, parentSprite?: SpriteWithChildren) {
-  console.log('createIDMLSprite', element);
+  const matrix = getElementTransformationMatrix(element);
+  const baseMatrix = [matrix._a, matrix._b, matrix._c, matrix._d, matrix._tx, matrix._ty];
+  const normalizedMatrix = normalizeTransformMatrixForGivenOrigin([matrix._a, matrix._b, matrix._c, matrix._d, matrix._tx, matrix._ty], [0, 0], spread.pageRelatedTransformOrigin);
+
+  console.log('!', normalizedMatrix);
 
   let wrappingPath: PolygonSprite | RectangleSprite;
   const clipPath = getElementClipPath(element);
@@ -140,6 +145,7 @@ function createIDMLSprite(element: SVGElement, document: Document, spread: Sprea
       },
       undefined
     );
+    newPolygon.setTranform({ translateX: -394.35903414551353, translateY: 294.6213511838755, scaleX: 1, scaleY: 1, rotate: (-25 * Math.PI) / 180 }, [0, 0]);
     console.log('newPolygon', newPolygon);
   } else if (element.nodeName === 'ellipse') {
     const x = ensureNumber(element.getAttribute('cx') ?? undefined) ?? 0;

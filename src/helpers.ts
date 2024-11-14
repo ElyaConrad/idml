@@ -1,5 +1,47 @@
 import { getElementAttributes, makeElementNode, makeTextNode, XMLNode } from 'flat-svg';
 import { GeometricBounds, Transform } from './types';
+
+export type TransformMatrix = [number, number, number, number, number, number];
+export const IdentityTransformMatrix = [1, 0, 0, 1, 0, 0];
+
+export function normalizeTransformMatrixForGivenOrigin(
+  matrix: TransformMatrix, // [a, b, c, d, e, f]
+  [originX, originY]: [number, number],
+  [internalOriginX, internalOriginY]: [number, number]
+) {
+  // Extrahiere die Matrix-Komponenten
+  const [a, b, c, d, e, f] = matrix;
+
+  // Berechne den Versatz zwischen der aktuellen Mitte und dem neuen Transformationsursprung
+  const offsetX = internalOriginX - originX;
+  const offsetY = internalOriginY - originY;
+
+  // Berechne den Skalenfaktor
+  const scaleX = Math.sqrt(a * a + b * b);
+  const scaleY = Math.sqrt(c * c + d * d);
+
+  // Berechne die Rotation in Radiant aus der Matrix
+  const rotate = Math.atan2(b, a);
+
+  // Berechne die neuen Offset-Koordinaten nach Rotation
+  const rotatedOffsetX = offsetX * Math.cos(rotate) - offsetY * Math.sin(rotate);
+  const rotatedOffsetY = offsetX * Math.sin(rotate) + offsetY * Math.cos(rotate);
+
+  // Passe die Translation an
+  const adjustedTranslateX = e - offsetX + rotatedOffsetX * scaleX;
+  const adjustedTranslateY = f - offsetY + rotatedOffsetY * scaleY;
+
+  // Rückgabe der neuen Transformationsmatrix
+  return [
+    a, // Unverändert: Skalen- und Rotationskomponente
+    b,
+    c, // Unverändert: Skalen- und Rotationskomponente
+    d,
+    adjustedTranslateX, // Neue Translation X
+    adjustedTranslateY, // Neue Translation Y
+  ];
+}
+
 export function ensureNumber(value: unknown) {
   const n = Number(value);
   if (isNaN(n)) {
@@ -71,7 +113,7 @@ export function parseIDMLGeometricBounds(geometricBoundsString: string | undefin
   }
 }
 export function createIDMLGeometricBounds(bounds: GeometricBounds) {
-  return [bounds.x, bounds.y, bounds.width, bounds.height];
+  return [bounds.x, bounds.y, bounds.height, bounds.width];
 }
 
 export type IDMLElementAttributeDescriptor = { source: 'attribute'; value: string | null };
@@ -227,6 +269,7 @@ export function calculateTransformForOrigin({ rotate, scaleX, scaleY, translateX
     rotate: rotate,
   };
 }
+
 export function normalizeTransformForGivenOrigin(transform: Transform, [originX, originY]: [number, number], internalOrigin: [number, number]): Transform {
   // Berechne den Versatz zwischen der aktuellen Mitte und dem neuen Transformationsursprung
   const offsetX = internalOrigin[0] - originX;

@@ -33,6 +33,8 @@ export { ImageSprite } from './controllers/sprites/Image.js';
 export { Sprite } from './controllers/sprites/Sprite.js';
 export { Spread } from './controllers/Spread.js';
 
+export { type TransformMatrix, normalizeTransformMatrixForGivenOrigin } from './helpers.js';
+
 export const IDML_PLAIN_BUFFER = base64ToArrayBuffer(IDML_PLAIN);
 
 export type CreateIDMLOptions = {

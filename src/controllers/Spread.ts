@@ -1,4 +1,4 @@
-import { createIDMLTransform, ensureBoolean, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement } from '../helpers.js';
+import { createIDMLTransform, ensureBoolean, flattenIDMLProperties, getIDMLElementProperties, normalizeTransformForGivenOrigin, parseIDMLTransform, serializeElement, TransformMatrix } from '../helpers.js';
 import _ from 'lodash';
 import { Page } from './Page.js';
 import { IDMLSpreadPackageContext } from './SpreadPackage.js';
@@ -233,6 +233,12 @@ export class Spread {
     const { translateX, translateY } = this.pageRelatedItemTransform;
     return [x - translateX, y - translateY] as [number, number];
   }
+  // matrixifyCSSTransform(transform: Transform, origin: [number, number]) {
+  //   return createIDMLTransform(normalizeTransformForGivenOrigin(transform, origin, this.pageRelatedTransformOrigin));
+  // }
+  // cssifyMatrixTransform(matrix: TransformMatrix, origin: [number, number]) {
+  //   return normalizeTransformForGivenOrigin(normalizeIDMLTransform(matrix), this.pageRelatedTransformOrigin, origin);
+  // }
   createGroup(
     opts: {
       transform?: Transform;
