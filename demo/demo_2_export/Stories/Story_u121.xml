@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">
+    <Story Self="u121" UserText="true" IsEndnoteStory="false" AppliedTOCStyle="n" TrackChanges="false" StoryTitle="$ID/" AppliedNamedGrid="n">
+        <StoryPreference OpticalMarginAlignment="false" OpticalMarginSize="12" FrameType="TextFrameType" StoryOrientation="Horizontal" StoryDirection="LeftToRightDirection"/>
+        <InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false"/>
+        <ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/mwgz6pkdmki">
+            <CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]" OTFContextualAlternate="false">
+                <Content>Hello World</Content>
+            </CharacterStyleRange>
+            <CharacterStyleRange AppliedCharacterStyle="CharacterStyle/dlmfgh4rnm6" OTFContextualAlternate="false">
+                <Br/>
+                <Br/>
+                <Content>safe</Content>
+            </CharacterStyleRange>
+            <CharacterStyleRange AppliedCharacterStyle="CharacterStyle/Character Style 6" OTFContextualAlternate="false">
+                <Content> mich</Content>
+            </CharacterStyleRange>
+        </ParagraphStyleRange>
+    </Story>
+</idPkg:Story>

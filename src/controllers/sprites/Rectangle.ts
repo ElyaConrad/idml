@@ -1,9 +1,10 @@
+import { Spread } from '../Spread.js';
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
 import { GeometricSprite, GeometricSpriteOpts } from './GeometricSprite.js';
 import { Sprite } from './Sprite.js';
 
 export class RectangleSprite extends GeometricSprite {
-  constructor(id: string, opts: GeometricSpriteOpts, context: IDMLSpreadPackageContext) {
+  constructor(id: string, private sprites: Sprite[], opts: GeometricSpriteOpts, context: IDMLSpreadPackageContext) {
     super(id, 'Rectangle', opts, context);
   }
   getBBox() {
@@ -16,24 +17,32 @@ export class RectangleSprite extends GeometricSprite {
       [x + width, y + height],
       [x, y + height],
     ] as [number, number][];
-    this.setPathPoints(path.map((point) => ({ anchor: point, leftDirection: point, rightDirection: point })));
+    this.setPaths([{ open: false, pathPoints: path.map((point) => ({ anchor: point, leftDirection: point, rightDirection: point })) }]);
+  }
+  addSprite(sprite: Sprite) {
+    this.sprites.push(sprite);
   }
   serialize() {
-    return this.serializeGeometricSprite();
+    const children = this.sprites.map((sprite) => Spread.serializeSprite(sprite));
+    const baseElement = this.serializeGeometricSprite();
+    baseElement.children = [...(baseElement.children ?? []), ...children];
+
+    return baseElement;
   }
 
   static parseElement(element: Element, context: IDMLSpreadPackageContext) {
     const { id, ...opts } = Sprite.parseElementOptions(element, context);
 
-    const { pathPoints, geometryPathType, open } = RectangleSprite.parsePathGeometry(element);
+    const pathGeometry = RectangleSprite.parsePathGeometry(element);
+
+    const sprites = Spread.getChildSprites(element, context);
 
     return new RectangleSprite(
       id,
+      sprites,
       {
         ...opts,
-        open,
-        geometryPathType,
-        pathPoints,
+        pathGeometry,
       },
       context
     );

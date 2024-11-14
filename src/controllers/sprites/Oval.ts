@@ -1,9 +1,10 @@
+import { Spread } from '../Spread.js';
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
 import { GeometricSprite, GeometricSpriteOpts, PathPoint } from './GeometricSprite.js';
 import { Sprite } from './Sprite.js';
 
 export class OvalSprite extends GeometricSprite {
-  constructor(id: string, opts: GeometricSpriteOpts, context: IDMLSpreadPackageContext) {
+  constructor(id: string, private sprites: Sprite[], opts: GeometricSpriteOpts, context: IDMLSpreadPackageContext) {
     super(id, 'Oval', opts, context);
   }
   // Calculate the path points for an ellipse from the 0,0 position
@@ -57,23 +58,31 @@ export class OvalSprite extends GeometricSprite {
     return { x, y, radiusX, radiusY };
   }
   setEllipse(x: number, y: number, radiusX: number, radiusY: number) {
-    this.setPathPoints(OvalSprite.calculateEllipsePathPoints(x - radiusX, y - radiusY, radiusX, radiusY));
+    this.setPaths([{ open: false, pathPoints: OvalSprite.calculateEllipsePathPoints(x - radiusX, y - radiusY, radiusX, radiusY) }]);
+  }
+  addSprite(sprite: Sprite) {
+    this.sprites.push(sprite);
   }
   serialize() {
-    return this.serializeGeometricSprite();
+    const children = this.sprites.map((sprite) => Spread.serializeSprite(sprite));
+    const baseElement = this.serializeGeometricSprite();
+    baseElement.children = [...(baseElement.children ?? []), ...children];
+
+    return baseElement;
   }
   static parseElement(element: Element, context: IDMLSpreadPackageContext) {
     const { id, ...opts } = Sprite.parseElementOptions(element, context);
 
-    const { pathPoints, geometryPathType, open } = OvalSprite.parsePathGeometry(element);
+    const pathGeometry = OvalSprite.parsePathGeometry(element);
+
+    const sprites = Spread.getChildSprites(element, context);
 
     return new OvalSprite(
       id,
+      sprites,
       {
         ...opts,
-        open,
-        geometryPathType,
-        pathPoints,
+        pathGeometry,
       },
       context
     );

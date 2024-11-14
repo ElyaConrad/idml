@@ -20,6 +20,9 @@ export class GroupSprite extends Sprite {
   getAllSprites() {
     return Spread.getChildSprittes(this.sprites);
   }
+  addSprite(sprite: Sprite) {
+    this.sprites.push(sprite);
+  }
   getGeometricBounds(): GeometricBounds {
     return {
       x: 0,

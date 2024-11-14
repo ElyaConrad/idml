@@ -1,19 +1,43 @@
 import { unzip } from 'unzipit';
+export * from './util/font.js';
 import { IDMLGraphicController } from './controllers/Graphic.js';
 import { IDMLStylesController } from './controllers/Styles.js';
-import { IDMLFontsController } from './controllers/Fonts.js';
+import { FontFamilyInput, IDMLFontsController } from './controllers/Fonts.js';
 import { IDMLPreferencesController } from './controllers/Preferences.js';
 import { downloadZip } from 'client-zip';
-import { ElementNode, makeElementNode, nodeToNode, parseXML, stringifyXMLDocument, XMLProcessingInstructionAID, XMLProcessingInstructionXML } from 'flat-svg';
+import { ElementNode, makeElementNode, nodeToNode, parseDOM, XMLProcessingInstructionAID, XMLProcessingInstructionXML } from 'flat-svg';
 import { MasterSpreadPackage } from './controllers/MasterSpreadPackage.js';
 import { SpreadPackage } from './controllers/SpreadPackage.js';
 import { BackingStory } from './controllers/BackingStory.js';
 import { StoryPackage } from './controllers/StoryPackage.js';
-import { MasterSpread } from './controllers/MasterSpread.js';
+import { CreateMasterSpreadOptions, MasterSpread } from './controllers/MasterSpread.js';
 import { Spread } from './controllers/Spread.js';
 import { Color } from './controllers/Color.js';
-import { ColorInput } from './types/index.js';
-import { getUniqueID } from 'flat-svg';
+import { ColorInput, GeometricBounds } from './types/index.js';
+import { getUniqueID, parseXML, stringifyXML, preloadJSDOM } from 'flat-svg';
+import { IDML_PLAIN } from './assets/IDML_PLAIN.js';
+import { ParagraphStyleInput } from './controllers/ParagraphStyle.js';
+import { CharacterStyleInput } from './controllers/CharacterStyle.js';
+import { FontFamily } from './controllers/FontFamily.js';
+import { extractFontTable } from './idml.js';
+import { determineFontType } from './idml.js';
+import { base64ToArrayBuffer, createArrayBuffer } from './util/arrayBuffer.js';
+import { ParagraphInput, Story } from './controllers/Story.js';
+export { type ColorInput } from './types/index.js';
+export { RectangleSprite } from './controllers/sprites/Rectangle.js';
+export { GroupSprite } from './controllers/sprites/Group.js';
+export { TextFrame } from './controllers/sprites/TextFrame.js';
+export { OvalSprite } from './controllers/sprites/Oval.js';
+export { PolygonSprite, type PathCommand } from './controllers/sprites/Polygon.js';
+export { ImageSprite } from './controllers/sprites/Image.js';
+export { Sprite } from './controllers/sprites/Sprite.js';
+export { Spread } from './controllers/Spread.js';
+
+export const IDML_PLAIN_BUFFER = base64ToArrayBuffer(IDML_PLAIN);
+
+export type CreateIDMLOptions = {
+  pageGeometricBounds: GeometricBounds;
+};
 
 export type IDMLFile = {
   path: string;
@@ -40,8 +64,8 @@ export class IDML extends EventTarget {
   backingStories: BackingStory[] = [];
   storyPackages: StoryPackage[] = [];
 
-  swatchCreatorId = 'maurice-idml';
-  swatchGroupReference = 'maurice-idml';
+  swatchCreatorId = 'elya-idml';
+  swatchGroupReference = 'elya-idml';
 
   get context(): IDMLDocumentContext {
     return {
@@ -50,13 +74,44 @@ export class IDML extends EventTarget {
   }
   constructor(private archiveBuffer: ArrayBuffer) {
     super();
-    this.extract().then(() => {
-      const readyEvent = new Event('ready');
-      this.dispatchEvent(readyEvent);
-    });
+
+    preloadJSDOM().then(() =>
+      this.extract().then(() => {
+        const readyEvent = new Event('ready');
+        this.dispatchEvent(readyEvent);
+      })
+    );
   }
+  // static create(opts: CreateIDMLOptions) {
+  //   return new Promise<IDML>((resolve) => {
+  //     const idml = new IDML(IDML_PLAIN_BUFFER);
+  //     idml.createMasterSpread(opts);
+  //     idml.addEventListener('ready', async () => {
+  //       await new Promise((resolve) => setTimeout(resolve, 10000));
+  //       // idml.masterSpreadPackages[0].masterSpread.pages[0].geometricBounds = opts.pageGeometricBounds;
+  //       //idml.createSpread();
+  //       resolve(idml);
+  //     });
+  //   });
+  // }
   getSpreads() {
     return this.spreadPackages.map((spreadPackage) => spreadPackage.getSpread());
+  }
+  createMasterSpread(opts: CreateMasterSpreadOptions, masterSpread: MasterSpread = this.masterSpreadPackages[0].masterSpread) {
+    // First, we need the id of the new master spread (which could be totally random)
+    const id = this.getUniqueID();
+    // Assume the master spread package file name is MasterSpread_{id}.xml
+    const masterSpreadPackageFileName = `MasterSpread_${id}.xml`;
+    // Assume the master spread package path is MasterSpreads/MasterSpread_{id}.xml
+    const masterSpreadPackagePath = `MasterSpreads/${masterSpreadPackageFileName}`;
+
+    // Create a master spread package first (because we need its context)
+    // The package is just the XML wrapper around the master spread
+    const masterSpreadPackage = new MasterSpreadPackage(masterSpreadPackagePath, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><idPkg:MasterSpread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0"></idPkg:MasterSpread>`, this.context);
+    // Create a master spread within the context of the master spread package
+    const newMasterSpread = MasterSpread.create(id, masterSpread, masterSpreadPackage.context, opts);
+    this.masterSpreadPackages.push(masterSpreadPackage);
+    return newMasterSpread;
   }
   createSpread(masterSpread: MasterSpread = this.masterSpreadPackages[0].masterSpread) {
     // First, we need the id of the new spread (which could be totally random)
@@ -66,7 +121,7 @@ export class IDML extends EventTarget {
     // Assume the spread package path is Spreads/Spread_{id}.xml
     const spreadPackagePath = `Spreads/${spreadPackageFileName}`;
 
-    // Create a spread package first (because we need it's context)
+    // Create a spread package first (because we need its context)
     // The package is just the XML wrapper around the spread
     const spreadPackage = new SpreadPackage(spreadPackagePath, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0"></idPkg:Spread>`, this.context);
     // Create a spread within the context of the spread package
@@ -85,6 +140,9 @@ export class IDML extends EventTarget {
       return [...allColors, ...graphicInstance.colors];
     }, [] as Color[]);
   }
+  getColorById(id: string) {
+    return this.getColors().find((color) => color.id === id);
+  }
   assumeColor(color: ColorInput | string) {
     if (typeof color === 'string') {
       const existingColor = this.getColors().find((existingColor) => existingColor.id === color);
@@ -100,14 +158,147 @@ export class IDML extends EventTarget {
       return this.graphics[0].createColor(color);
     }
   }
+  getStories() {
+    return this.storyPackages.map((storyPackage) => storyPackage.stories).flat();
+  }
+  getStoryById(id: string) {
+    return this.getStories().find((story) => story.id === id);
+  }
+  createStory(paragraphs: ParagraphInput[]) {
+    // First, create an unique id
+    const id = this.context.idml.getUniqueID();
+    // Assume the spread package file name is Story_{id}.xml
+    const storyPackageFileName = `Story_${id}.xml`;
+    // Assume the spread package path is Stories/Story_{id}.xml
+    const storyPackagePath = `Stories/${storyPackageFileName}`;
+
+    // Create a story package first (because we need its context)
+    // The package is just the XML wrapper around the story
+    const storyPackage = new StoryPackage(storyPackagePath, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0"></idPkg:Story>`, this.context);
+    // Create a spread within the context of the story package
+    const newStory = new Story(
+      id,
+      Story.getParagraphsFromInput(paragraphs, storyPackage.context),
+      {
+        inCopyExportOption: {
+          includeGraphicProxies: true,
+          includeAllResources: false,
+        },
+        storyPreference: {
+          opticalMarginAlignment: false,
+          opticalMarginSize: 12,
+          frameType: 'textFrame',
+          orientation: 'horizontal',
+          direction: 'leftToRight',
+        },
+        title: '$ID/',
+        userText: true,
+      },
+      storyPackage.context
+    );
+    // Set the new story to be THE story of the story package
+    storyPackage.setStory(newStory);
+
+    // Finally, add the story package to the IDML document
+    this.storyPackages.push(storyPackage);
+
+    // Return the new story
+    return newStory;
+  }
+  getParagraphStyles() {
+    return this.styles
+      .map((style) => {
+        return style.paragraphStyles;
+      })
+      .flat();
+  }
+  getParagraphStyleById(id: string) {
+    return this.getParagraphStyles().find((style) => style.id === id);
+  }
+  getCharacterStyles() {
+    return this.styles
+      .map((style) => {
+        return style.characterStyles;
+      })
+      .flat();
+  }
+  getCharacterStyleById(id: string) {
+    return this.getCharacterStyles().find((style) => style.id === id);
+  }
+  assumeParagraphStyle(paragraphStyle: ParagraphStyleInput | string) {
+    if (typeof paragraphStyle === 'string') {
+      const existingParagraphStyle = this.getParagraphStyleById(paragraphStyle);
+      if (!existingParagraphStyle) {
+        throw new Error(`ParagraphStyle ${paragraphStyle} not found`);
+      }
+      return existingParagraphStyle;
+    }
+    // if there is no font style defined BUT there is an applied font, we should set the font style to the first available font style
+    if (paragraphStyle.fontStyle === undefined && paragraphStyle.appliedFont !== undefined) {
+      const availableStyles = this.getFontFamily(paragraphStyle.appliedFont)?.getAvailableFontStyles();
+      if (availableStyles && availableStyles.length > 0) {
+        paragraphStyle.fontStyle = availableStyles[0];
+      }
+    }
+    const existingParagraphStyle = this.getParagraphStyles().find((existingParagraphStyle) => existingParagraphStyle.equals(paragraphStyle));
+    if (existingParagraphStyle) {
+      return existingParagraphStyle;
+    } else {
+      return this.styles[0].createParagraphStyle(paragraphStyle);
+    }
+  }
+
+  assumeCharacterStyle(characterStyle: CharacterStyleInput | string) {
+    if (typeof characterStyle === 'string') {
+      const existingCharacterStyle = this.getCharacterStyleById(characterStyle);
+      if (!existingCharacterStyle) {
+        throw new Error(`CharacterStyle ${characterStyle} not found`);
+      }
+      return existingCharacterStyle;
+    }
+    // if there is no font style defined BUT there is an applied font, we should set the font style to the first available font style
+    if (characterStyle.fontStyle === undefined && characterStyle.appliedFont !== undefined) {
+      const availableStyles = this.getFontFamily(characterStyle.appliedFont)?.getAvailableFontStyles();
+      if (availableStyles && availableStyles.length > 0) {
+        characterStyle.fontStyle = availableStyles[0];
+      }
+    }
+    const existingCharacterStyle = this.getCharacterStyles().find((existingCharacterStyle) => existingCharacterStyle.equals(characterStyle));
+    if (existingCharacterStyle) {
+      return existingCharacterStyle;
+    } else {
+      return this.styles[0].createCharacterStyle(characterStyle);
+    }
+  }
+  getFontFamilies() {
+    return this.fonts.reduce((allFontFamilies, fontController) => {
+      return [...allFontFamilies, ...fontController.fontFamilies];
+    }, [] as FontFamily[]);
+  }
+  getFontFamily(name: string) {
+    return this.getFontFamilies().find((fontFamily) => fontFamily.name === name);
+  }
+  addFont(fontFile: ArrayBuffer) {
+    const fontController = this.fonts[0];
+    const fontTable = extractFontTable(fontFile);
+    const fontType = (() => {
+      try {
+        return determineFontType(fontFile);
+      } catch {
+        return 'Unkown';
+      }
+    })();
+
+    return fontController.addFont(fontTable, fontType);
+  }
 
   async extract() {
     const { entries } = await unzip(this.archiveBuffer);
-
     const designmapEntry = entries['designmap.xml'];
     if (!designmapEntry) {
       throw new Error('designmap.xml not found');
     }
+
     this.designmap = parseXML(await designmapEntry.text());
 
     // Create controllers for each graphic declarations
@@ -189,28 +380,28 @@ export class IDML extends EventTarget {
         document.children.push(makeElementNode('idPkg:Graphic', { src: graphic.src }));
         files.push({
           path: graphic.src,
-          contents: Buffer.from(stringifyXMLDocument(graphic.serialize(), [XMLProcessingInstructionXML], true)),
+          contents: createArrayBuffer(stringifyXML(graphic.serialize(), [XMLProcessingInstructionXML], true)),
         });
       }
       for (const styles of this.styles) {
         document.children.push(makeElementNode('idPkg:Styles', { src: styles.src }));
         files.push({
           path: styles.src,
-          contents: Buffer.from(stringifyXMLDocument(styles.serialize(), [XMLProcessingInstructionXML], true)),
+          contents: createArrayBuffer(stringifyXML(styles.serialize(), [XMLProcessingInstructionXML], true)),
         });
       }
       for (const fonts of this.fonts) {
         document.children.push(makeElementNode('idPkg:Fonts', { src: fonts.src }));
         files.push({
           path: fonts.src,
-          contents: Buffer.from(stringifyXMLDocument(fonts.serialize(), [XMLProcessingInstructionXML], true)),
+          contents: createArrayBuffer(stringifyXML(fonts.serialize(), [XMLProcessingInstructionXML], true)),
         });
       }
       for (const preferences of this.preferences) {
         document.children.push(makeElementNode('idPkg:Preferences', { src: preferences.src }));
         files.push({
           path: preferences.src,
-          contents: Buffer.from(stringifyXMLDocument(preferences.serialize(), [XMLProcessingInstructionXML], true)),
+          contents: createArrayBuffer(stringifyXML(preferences.serialize(), [XMLProcessingInstructionXML], true)),
         });
       }
 
@@ -218,7 +409,7 @@ export class IDML extends EventTarget {
         document.children.push(makeElementNode('idPkg:MasterSpread', { src: masterSpreadWrapper.src }));
         files.push({
           path: masterSpreadWrapper.src,
-          contents: Buffer.from(stringifyXMLDocument(masterSpreadWrapper.serialize(), [XMLProcessingInstructionXML], true)),
+          contents: createArrayBuffer(stringifyXML(masterSpreadWrapper.serialize(), [XMLProcessingInstructionXML], true)),
         });
       }
 
@@ -226,7 +417,7 @@ export class IDML extends EventTarget {
         document.children.push(makeElementNode('idPkg:Spread', { src: spreadPackage.src }));
         files.push({
           path: spreadPackage.src,
-          contents: Buffer.from(stringifyXMLDocument(spreadPackage.serialize(), [XMLProcessingInstructionXML], true)),
+          contents: createArrayBuffer(stringifyXML(spreadPackage.serialize(), [XMLProcessingInstructionXML], true)),
         });
       }
 
@@ -234,7 +425,7 @@ export class IDML extends EventTarget {
         document.children.push(makeElementNode('idPkg:BackingStory', { src: backingStory.src }));
         files.push({
           path: backingStory.src,
-          contents: Buffer.from(stringifyXMLDocument(backingStory.serialize(), [XMLProcessingInstructionXML], true)),
+          contents: createArrayBuffer(stringifyXML(backingStory.serialize(), [XMLProcessingInstructionXML], true)),
         });
       }
 
@@ -242,14 +433,14 @@ export class IDML extends EventTarget {
         document.children.push(makeElementNode('idPkg:Story', { src: storyPackage.src }));
         files.push({
           path: storyPackage.src,
-          contents: Buffer.from(stringifyXMLDocument(storyPackage.serialize(), [XMLProcessingInstructionXML], true)),
+          contents: createArrayBuffer(stringifyXML(storyPackage.serialize(), [XMLProcessingInstructionXML], true)),
         });
       }
 
-      const designmapXMLDocument = stringifyXMLDocument(document, [XMLProcessingInstructionXML, XMLProcessingInstructionAID], true);
+      const designmapXMLDocument = stringifyXML(document, [XMLProcessingInstructionXML, XMLProcessingInstructionAID], true);
       files.push({
         path: 'designmap.xml',
-        contents: Buffer.from(designmapXMLDocument),
+        contents: createArrayBuffer(designmapXMLDocument),
       });
 
       // const overwriteFiles: string[] = [
@@ -316,6 +507,19 @@ export class IDML extends EventTarget {
   getUniqueID(prefix?: string) {
     return getUniqueID(prefix);
   }
+  getUID() {}
 }
 
 export { simplifySVG } from 'flat-svg';
+
+export function createIDML(opts: CreateIDMLOptions) {
+  return new Promise<IDML>((resolve) => {
+    const idml = new IDML(IDML_PLAIN_BUFFER);
+    idml.addEventListener('ready', async () => {
+      idml.masterSpreadPackages[0].masterSpread.pages[0].geometricBounds = opts.pageGeometricBounds;
+      idml.masterSpreadPackages[0].masterSpread.pages[0].itemTransform = { translateX: -opts.pageGeometricBounds.width / 2, translateY: -opts.pageGeometricBounds.height / 2, scaleX: 1, scaleY: 1, rotate: 0 };
+      idml.createSpread();
+      resolve(idml);
+    });
+  });
+}

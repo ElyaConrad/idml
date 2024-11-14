@@ -106,4 +106,13 @@ export class Color {
       ['Properties']
     );
   }
+  toColorInput(): ColorInput {
+    if (this.space === 'rgb') {
+      return { type: 'rgb', red: this.value[0], green: this.value[1], blue: this.value[2] };
+    } else if (this.space === 'cmyk') {
+      return { type: 'cmyk', cyan: this.value[0], magenta: this.value[1], yellow: this.value[2], black: this.value[3] };
+    } else {
+      throw new Error('Unsupported color space');
+    }
+  }
 }

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">
+    
+    <Spread Self="uef" PageTransitionType="None" PageTransitionDirection="NotApplicable" PageTransitionDuration="Medium" ShowMasterItems="true" PageCount="1" BindingLocation="0" SpreadHidden="false" AllowPageShuffle="true" ItemTransform="1 0 0 1 0 1260" FlattenerOverride="Default" Hidden="false">
+        <FlattenerPreference LineArtAndTextResolution="300" GradientAndMeshResolution="150" ClipComplexRegions="false" ConvertAllStrokesToOutlines="false" ConvertAllTextToOutlines="false">
+            <Properties >
+                <RasterVectorBalance type="double">50</RasterVectorBalance>
+            </Properties>
+        </FlattenerPreference>
+        <Page Self="uf4" TabOrder="" AppliedMaster="ub9" OverrideList="" MasterPageTransform="1 0 0 1 0 0" Name="2" AppliedTrapPreset="TrapPreset/$ID/kDefaultTrapStyleName" GeometricBounds="0 0 1080 1920" ItemTransform="1 0 0 1 -960 -540" AppliedAlternateLayout="ub4" LayoutRule="UseMaster" SnapshotBlendingMode="IgnoreLayoutSnapshots" OptionalPage="false" GridStartingPoint="TopOutside" UseMasterGrid="true">
+            <Properties >
+                <PageColor type="enumeration">UseMasterColor</PageColor>
+                <Descriptor type="list">
+                    <ListItem type="string">
+                    </ListItem>
+                    <ListItem type="enumeration">Arabic</ListItem>
+                    <ListItem type="boolean">false</ListItem>
+                    <ListItem type="boolean">false</ListItem>
+                    <ListItem type="long">2</ListItem>
+                    <ListItem type="long">2</ListItem>
+                    <ListItem type="string">
+                    </ListItem>
+                </Descriptor>
+            </Properties>
+            <MarginPreference ColumnCount="1" ColumnGutter="12" Top="36" Bottom="36" Left="36" Right="36" ColumnDirection="Horizontal" ColumnsPositions="0, 1848" />
+            <GridDataInformation FontStyle="Regular" PointSize="12" CharacterAki="0" LineAki="9" HorizontalScale="100" VerticalScale="100" LineAlignment="LeftOrTopLineJustify" GridAlignment="AlignEmCenter" CharacterAlignment="AlignEmCenter">
+                <Properties >
+                    <AppliedFont type="string">Minion Pro</AppliedFont>
+                </Properties>
+            </GridDataInformation>
+        </Page>
+        <Polygon Self="u13b" ContentType="Unassigned" StoryTitle="$ID/" OverriddenPageItemProps="" Visible="true" Name="$ID/" HorizontalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" VerticalLayoutConstraints="FlexibleDimension FixedDimension FlexibleDimension" FillColor="Color/RGB Green" GradientFillStart="0 0" GradientFillLength="0" GradientFillAngle="0" GradientStrokeStart="0 0" GradientStrokeLength="0" GradientStrokeAngle="0" ItemLayer="ub8" Locked="false" LocalDisplaySetting="Default" GradientFillHiliteLength="0" GradientFillHiliteAngle="0" GradientStrokeHiliteLength="0" GradientStrokeHiliteAngle="0" AppliedObjectStyle="ObjectStyle/$ID/[Normal Graphics Frame]" ItemTransform="1 0 0 1 -13.999999940499038 -1284.3041401924047" ParentInterfaceChangeCount="" TargetInterfaceChangeCount="" LastUpdatedInterfaceChangeCount="">
+            <Properties >
+                <PathGeometry >
+                    <GeometryPathType GeometryPathType="NormalPath" PathOpen="false">
+                        <PathPointArray >
+                            <PathPointType Anchor="-769.7848247888127 798.5" LeftDirection="-769.7848247888127 798.5" RightDirection="-769.7848247888127 798.5" />
+                            <PathPointType Anchor="-852.2151752111874 798.5" LeftDirection="-852.2151752111874 798.5" RightDirection="-852.2151752111874 798.5" />
+                            <PathPointType Anchor="-893.4303504223748 874" LeftDirection="-893.4303504223748 874" RightDirection="-893.4303504223748 874" />
+                            <PathPointType Anchor="-852.2151752111874 949.5" LeftDirection="-852.2151752111874 949.5" RightDirection="-852.2151752111874 949.5" />
+                            <PathPointType Anchor="-769.7848247888127 949.5" LeftDirection="-769.7848247888127 949.5" RightDirection="-769.7848247888127 949.5" />
+                            <PathPointType Anchor="-728.5696495776252 874.0000000000001" LeftDirection="-728.5696495776252 874.0000000000001" RightDirection="-728.5696495776252 874.0000000000001" />
+                        </PathPointArray>
+                    </GeometryPathType>
+                </PathGeometry>
+            </Properties>
+            <FrameFittingOption AutoFit="false" LeftCrop="0" TopCrop="0" RightCrop="0" BottomCrop="0" FittingOnEmptyFrame="None" FittingAlignment="CenterAnchor" />
+            <ObjectExportOption AltTextSourceType="SourceXMLStructure" ActualTextSourceType="SourceXMLStructure" CustomAltText="$ID/" CustomActualText="$ID/" ApplyTagType="TagFromStructure" ImageConversionType="JPEG" ImageExportResolution="Ppi300" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="true" JPEGOptionsQuality="High" JPEGOptionsFormat="BaselineEncoding" ImageAlignment="AlignLeft" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" CustomImageAlignment="false" SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing" EpubType="$ID/" SizeType="DefaultSize" CustomSize="$ID/" PreserveAppearanceFromLayout="PreserveAppearanceDefault">
+                <Properties >
+                    <AltMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" />
+                    <ActualMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" />
+                </Properties>
+            </ObjectExportOption>
+            <TextWrapPreference Inverse="false" ApplyToMasterPageOnly="false" TextWrapSide="BothSides" TextWrapMode="None">
+                <Properties >
+                    <TextWrapOffset Top="0" Left="0" Bottom="0" Right="0" />
+                </Properties>
+            </TextWrapPreference>
+            <InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />
+        </Polygon>
+    </Spread>
+</idPkg:Spread>

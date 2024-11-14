@@ -1,7 +1,19 @@
+import { parseXML } from 'flat-svg';
 import { createIDMLTransform, ensureBoolean, ensureNumber, ensurePropertyArray, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement } from '../helpers.js';
-import { Transform } from '../types/index.js';
+import { GeometricBounds, Transform } from '../types/index.js';
+import { GridDataInformation } from './GridDataInformation.js';
 import { IDMLMasterSpreadPackageContext } from './MasterSpreadPackage.js';
 import { Page } from './Page.js';
+import _ from 'lodash';
+
+export type CreateMasterSpreadOptions = {
+  name?: string;
+  namePrefix?: string;
+  baseName?: string;
+  pageGeometricBounds?: GeometricBounds;
+  pageItemTransform?: Transform;
+  pageColor?: string;
+};
 
 export class MasterSpread {
   private baseName: string;
@@ -108,5 +120,63 @@ export class MasterSpread {
       },
       context
     );
+  }
+  static create(id: string, inheritMasterSpread: MasterSpread, context: IDMLMasterSpreadPackageContext, opts: CreateMasterSpreadOptions = {}) {
+    const newPages = inheritMasterSpread.pages.map((masterSpreadPage, masterPageIndex) => {
+      // Get an ID for the page
+      const id = context.idml.getUniqueID('Page');
+      const geometricBounds = _.cloneDeep(opts.pageGeometricBounds ?? masterSpreadPage.geometricBounds);
+      const itemTransform = { translateX: -geometricBounds.width / 2, translateY: -geometricBounds.height / 2, scaleX: 1, scaleY: 1, rotate: 0 };
+      return new Page(
+        id,
+        {
+          // The name of the page will be the inner index of the page in the master spread (normally just 0) + the offset of already existing pages in the document
+          name: opts.namePrefix ?? masterSpreadPage.name,
+          // Now fill up the properties of the page with the properties of the master spread page
+          pageColor: masterSpreadPage.pageColor,
+          optionalPage: masterSpreadPage.optionalPage,
+          gridStartingPoint: masterSpreadPage.gridStartingPoint,
+          // Clone master spread page properties
+          geometricBounds,
+          itemTransform,
+          masterPageTransform: _.cloneDeep(masterSpreadPage.masterPageTransform),
+          marginPreference: _.cloneDeep(masterSpreadPage.marginPreference),
+          gridDataInformation: new GridDataInformation(
+            {
+              fontSize: masterSpreadPage.gridDataInformation.fontSize,
+              fontStyle: masterSpreadPage.gridDataInformation.fontStyle,
+              characterAki: masterSpreadPage.gridDataInformation.characterAki,
+              lineAki: masterSpreadPage.gridDataInformation.lineAki,
+              horizontalScale: masterSpreadPage.gridDataInformation.horizontalScale,
+              verticalScale: masterSpreadPage.gridDataInformation.verticalScale,
+              lineAlignment: masterSpreadPage.gridDataInformation.lineAlignment,
+              characterAlignment: masterSpreadPage.gridDataInformation.characterAlignment,
+              gridAlignment: masterSpreadPage.gridDataInformation.gridAlignment,
+              appliedFont: masterSpreadPage.gridDataInformation.appliedFont,
+            },
+            context
+          ),
+        },
+        context
+      );
+    });
+
+    const newMasterSpread = new MasterSpread(
+      id,
+      newPages,
+      {
+        name: opts.name ?? inheritMasterSpread.name,
+        namePrefix: inheritMasterSpread.namePrefix,
+        baseName: inheritMasterSpread.baseName,
+        itemTransform: _.cloneDeep(inheritMasterSpread.itemTransform),
+        overridenPageItemProps: _.cloneDeep(inheritMasterSpread.overridenPageItemProps),
+        pageColor: opts.pageColor ?? inheritMasterSpread.pageColor,
+        primaryTextFrame: inheritMasterSpread.primaryTextFrame,
+        showMasterItems: inheritMasterSpread.showMasterItems,
+      },
+      context
+    );
+
+    return newMasterSpread;
   }
 }

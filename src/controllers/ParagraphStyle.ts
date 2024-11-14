@@ -1,11 +1,29 @@
+import { ElementNode, makeElementNode, makeTextNode } from 'flat-svg';
 import { ensureArray, ensureBoolean, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, serializeElement } from '../helpers.js';
+import { ColorInput } from '../types/index.js';
 import { KeyMap } from '../util/keyMap.js';
 import { IDMLStylesContext } from './Styles.js';
+
+export type ParagraphStyleInput = {
+  appliedFont?: string;
+  fontSize?: number;
+  leading?: number;
+  align?: Align;
+  fillColor?: ColorInput;
+  strokeColor?: ColorInput;
+  strokeWeight?: number;
+  strokeTint?: number;
+  skew?: number;
+  capitalization?: Capitalization;
+  fontStyle?: string;
+  underline?: boolean;
+  strikeThrough?: boolean;
+};
 
 export type Align = 'left' | 'right' | 'center' | 'justify' | 'justifyLeft' | 'justifyRight' | 'justifyCenter' | 'justifyAll';
 export type Capitalization = 'normal' | 'smallCaps' | 'allCaps';
 
-const alignMap = new KeyMap({
+export const alignMap = new KeyMap({
   LeftAlign: 'left',
   RightALign: 'right',
   CenterAlign: 'center',
@@ -16,49 +34,49 @@ const alignMap = new KeyMap({
   JustifyAll: 'justifyAll',
 } as const);
 
-const capitalizationMap = new KeyMap({
+export const capitalizationMap = new KeyMap({
   Normal: 'normal',
   SmallCaps: 'smallCaps',
   AllCaps: 'allCaps',
 } as const);
 
 export class ParagraphStyle {
-  private name?: string;
-  private extendedKeyboardShortcut?: number[];
-  private includeClass?: boolean;
-  private styleUID?: string;
-  private imported?: boolean;
-  private splitDocument?: boolean;
-  private emitCss?: boolean;
+  public name?: string;
+  public extendedKeyboardShortcut?: number[];
+  public includeClass?: boolean;
+  public styleUID?: string;
+  public imported?: boolean;
+  public splitDocument?: boolean;
+  public emitCss?: boolean;
 
-  private appliedFont?: string;
-  private fontSize?: number;
-  private leading?: number;
-  private align?: Align;
-  private fillColorId?: string;
-  private tint?: number;
-  private strokeColorId?: string;
-  private strokeWeight?: number;
-  private strokeTint?: number;
-  private skew?: number;
-  private capitalization?: Capitalization;
-  private fontStyle?: string;
-  private tracking?: number;
-  private baselineShift?: number;
-  private underline?: boolean;
-  private strikeThrough?: boolean;
-  private spaceBefore?: number;
-  private spaceAfter?: number;
-  private leftIndent?: number;
-  private rightIndent?: number;
-  private firstLineIndent?: number;
+  public appliedFont?: string;
+  public fontSize?: number;
+  public leading?: number;
+  public align?: Align;
+  public fillColorId?: string;
+  public tint?: number;
+  public strokeColorId?: string;
+  public strokeWeight?: number;
+  public strokeTint?: number;
+  public skew?: number;
+  public capitalization?: Capitalization;
+  public fontStyle?: string;
+  public tracking?: number;
+  public baselineShift?: number;
+  public underline?: boolean;
+  public strikeThrough?: boolean;
+  public spaceBefore?: number;
+  public spaceAfter?: number;
+  public leftIndent?: number;
+  public rightIndent?: number;
+  public firstLineIndent?: number;
 
-  private hyphenation?: boolean;
-  private alignToBaseline?: boolean;
+  public hyphenation?: boolean;
+  public alignToBaseline?: boolean;
 
   public rootParagraphStyleGroupId?: string;
   constructor(
-    private id: string,
+    public id: string,
     opts: {
       name?: string;
       extendedKeyboardShortcut?: number[];
@@ -133,7 +151,7 @@ export class ParagraphStyle {
     this.rootParagraphStyleGroupId = opts.rootParagraphStyleGroupId;
   }
   serialize() {
-    return serializeElement(
+    const baseElement = serializeElement(
       'ParagraphStyle',
       {
         Name: this.name,
@@ -144,7 +162,7 @@ export class ParagraphStyle {
         IncludeClass: this.includeClass,
         ExtendedKeyboardShortcut: this.extendedKeyboardShortcut?.join(' '),
 
-        AppliedFont: this.appliedFont,
+        // AppliedFont: this.appliedFont,
         PointSize: this.fontSize,
         Leading: this.leading,
         Justification: alignMap.getExternal(this.align),
@@ -173,6 +191,58 @@ export class ParagraphStyle {
       this.context.stylesRoot,
       ['Properties']
     );
+
+    let propertiesElement = baseElement.children?.find((child) => child.type === 'element' && child.tagName === 'Properties') as ElementNode | undefined;
+    if (!propertiesElement) {
+      propertiesElement = makeElementNode('Properties', {}, []);
+      baseElement.children = [propertiesElement, ...(baseElement.children ?? [])];
+    }
+    const existingAppliedFontElement = propertiesElement.children?.find((child) => child.type === 'element' && child.tagName === 'AppliedFont') as ElementNode | undefined;
+    const existingLeadingElement = propertiesElement.children?.find((child) => child.type === 'element' && child.tagName === 'Leading') as ElementNode | undefined;
+
+    if (existingAppliedFontElement) {
+      propertiesElement.children = propertiesElement.children?.filter((child) => child !== existingAppliedFontElement);
+    }
+    if (existingLeadingElement) {
+      propertiesElement.children = propertiesElement.children?.filter((child) => child !== existingLeadingElement);
+    }
+    propertiesElement.children = [...(propertiesElement.children ?? []), ...(this.appliedFont ? [makeElementNode('AppliedFont', { type: 'string' }, [makeTextNode(this.appliedFont)])] : [])];
+
+    return baseElement;
+  }
+  toParagraphStyleInput() {
+    return {
+      appliedFont: this.appliedFont,
+      fontSize: this.fontSize,
+      leading: this.leading,
+      align: this.align,
+      fillColor: this.fillColorId ? this.context.idml.getColorById(this.fillColorId)?.toColorInput() : undefined,
+      strokeColor: this.strokeColorId ? this.context.idml.getColorById(this.strokeColorId)?.toColorInput() : undefined,
+      strokeWeight: this.strokeWeight,
+      strokeTint: this.strokeTint,
+      skew: this.skew,
+      capitalization: this.capitalization,
+      fontStyle: this.fontStyle,
+      underline: this.underline,
+      strikeThrough: this.strikeThrough,
+    };
+  }
+  equals(input: ParagraphStyleInput) {
+    const appliedFontEquals = this.appliedFont === input.appliedFont;
+    const fontSizeEquals = this.fontSize === input.fontSize;
+    const leadingEquals = this.leading === input.leading;
+    const alignEquals = this.align === input.align;
+    const fillColorEquals = this.fillColorId && input.fillColor ? this.context.idml.getColorById(this.fillColorId)?.equals(input.fillColor) : !this.fillColorId && !input.fillColor;
+    const strokeColorEquals = this.strokeColorId && input.strokeColor ? this.context.idml.getColorById(this.strokeColorId)?.equals(input.strokeColor) : !this.strokeColorId && !input.strokeColor;
+    const strokeWeightEquals = this.strokeWeight === input.strokeWeight;
+    const strokeTintEquals = this.strokeTint === input.strokeTint;
+    const skewEquals = this.skew === input.skew;
+    const capitalizationEquals = this.capitalization === input.capitalization;
+    const fontStyleEquals = this.fontStyle === input.fontStyle;
+    const underlineEquals = !!this.underline === !!input.underline;
+    const strikeThroughEquals = !!this.strikeThrough === !!input.strikeThrough;
+
+    return appliedFontEquals && fontSizeEquals && leadingEquals && alignEquals && fillColorEquals && strokeColorEquals && strokeWeightEquals && strokeTintEquals && skewEquals && capitalizationEquals && fontStyleEquals && underlineEquals && strikeThroughEquals;
   }
   static parseElement(element: Element, context: IDMLStylesContext) {
     const rootParagraphStyleGroupId = element.parentElement?.getAttribute('Self') ?? undefined;

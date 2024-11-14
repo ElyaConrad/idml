@@ -1,8 +1,40 @@
+import { makeElementNode } from 'flat-svg';
 import { createIDMLTransform, ensureArray, ensureBoolean, ensureEnumArray, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement, normalizeTransformForGivenOrigin } from '../../helpers.js';
-import { GeometricBounds, Transform } from '../../types/index.js';
+import { ColorInput, GeometricBounds, Transform } from '../../types/index.js';
 import { KeyMap } from '../../util/keyMap.js';
 import { Spread } from '../Spread.js';
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
+import { RectangleSprite } from './Rectangle.js';
+import { OvalSprite } from './Oval.js';
+import { PolygonSprite } from './Polygon.js';
+import { GroupSprite } from './Group.js';
+
+export type SpriteWithChildren = RectangleSprite | OvalSprite | PolygonSprite | GroupSprite;
+
+export type BlendingSetting = {
+  opacity: number;
+};
+export type DropShadowSetting = {
+  mode: 'drop';
+  xOffset: number;
+  yOffset: number;
+  size: number;
+  effectColorId: string;
+  spread: number;
+};
+export type TransparencySetting = {
+  blendingSetting?: BlendingSetting;
+  dropShadowSetting?: DropShadowSetting;
+};
+
+export type DropShadowInput = {
+  mode: 'drop';
+  xOffset: number;
+  yOffset: number;
+  size: number;
+  effectColor: ColorInput;
+  spread: number;
+};
 
 export type SpriteOpts = {
   name?: string;
@@ -28,6 +60,8 @@ export type SpriteOpts = {
   objectExportOption?: ObjectExportOption;
   textWrapPreference?: TextWrapPreference;
   inCopyExportOption?: InCopyExportOption;
+
+  transparencySetting?: TransparencySetting;
 };
 
 export type LayoutDimension = 'fixedDimension' | 'flexibleDimension';
@@ -37,6 +71,10 @@ export type VerticalLayoutConstraints = [LayoutDimension, LayoutDimension, Layou
 const layoutDimensionMap = new KeyMap({
   FixedDimension: 'fixedDimension',
   FlexibleDimension: 'flexibleDimension',
+} as const);
+
+const dropShadowSettingModeMap = new KeyMap({
+  Drop: 'drop',
 } as const);
 
 export type FrameFittingOption = {
@@ -77,6 +115,8 @@ export abstract class Sprite {
   private textWrapPreference?: TextWrapPreference;
   private inCopyExportOption?: InCopyExportOption;
 
+  private transparencySetting?: TransparencySetting;
+
   constructor(private id: string, private type: string, opts: SpriteOpts, public context: IDMLSpreadPackageContext) {
     this.name = opts.name;
     this.appliedObjectStyleId = opts.appliedObjectStyleId;
@@ -101,6 +141,8 @@ export abstract class Sprite {
 
     this.strokeColorId = opts.strokeColorId;
     this.strokeWeight = opts.strokeWeight;
+
+    this.transparencySetting = opts.transparencySetting;
   }
   // abstract serialize(): ElementNode;
   abstract getGeometricBounds(): GeometricBounds;
@@ -112,6 +154,74 @@ export abstract class Sprite {
     }
     return parentSpread;
   }
+  getFillColor() {
+    return this.fillColorId ? this.context.idml.getColorById(this.fillColorId) : undefined;
+  }
+  getStrokeColor() {
+    return this.strokeColorId ? this.context.idml.getColorById(this.strokeColorId) : undefined;
+  }
+  getStrokeWeight() {
+    return this.strokeWeight;
+  }
+  setFillColor(color: ColorInput) {
+    this.fillColorId = this.context.idml.assumeColor(color).id;
+  }
+  setStrokeColor(color: ColorInput) {
+    this.strokeColorId = this.context.idml.assumeColor(color).id;
+  }
+  setStrokeWeight(weight: number) {
+    this.strokeWeight = weight;
+  }
+  getOpacity() {
+    return this.transparencySetting?.blendingSetting?.opacity ?? 100;
+  }
+  setOpacity(opacity: number) {
+    if (!this.transparencySetting) {
+      this.transparencySetting = {};
+    }
+    if (!this.transparencySetting.blendingSetting) {
+      this.transparencySetting.blendingSetting = {
+        opacity,
+      };
+    } else {
+      this.transparencySetting.blendingSetting.opacity = opacity;
+    }
+  }
+  getDropShadow() {
+    if (!this.transparencySetting) {
+      return undefined;
+    }
+    if (!this.transparencySetting.dropShadowSetting) {
+      return undefined;
+    }
+    return {
+      mode: 'drop',
+      xOffset: this.transparencySetting.dropShadowSetting.xOffset,
+      yOffset: this.transparencySetting.dropShadowSetting.yOffset,
+      size: this.transparencySetting.dropShadowSetting.size,
+      effectColor: this.context.idml.getColorById(this.transparencySetting.dropShadowSetting.effectColorId)!,
+      spread: this.transparencySetting.dropShadowSetting.spread,
+    };
+  }
+  setDropShadow(dropShadow: DropShadowInput) {
+    if (!this.transparencySetting) {
+      this.transparencySetting = {};
+    }
+    this.transparencySetting.dropShadowSetting = {
+      mode: 'drop',
+      xOffset: dropShadow.xOffset,
+      yOffset: dropShadow.yOffset,
+      size: dropShadow.size,
+      effectColorId: dropShadow.effectColor ? this.context.idml.assumeColor(dropShadow.effectColor).id : 'Color/Black',
+      spread: dropShadow.spread,
+    };
+  }
+  getVisible() {
+    return this.visible;
+  }
+  setVisible(visible: boolean) {
+    this.visible = visible;
+  }
 
   // Get a transform object for a given origin
   getTransform(origin: [number, number]) {
@@ -120,6 +230,32 @@ export abstract class Sprite {
   // Set a transform object for a given origin
   setTranform(transform: Transform, origin: [number, number]) {
     this.itemTransform = normalizeTransformForGivenOrigin(transform, origin, this.parentSpread.pageRelatedTransformOrigin);
+  }
+  serializeTransparencySetting() {
+    if (!this.transparencySetting) {
+      return undefined;
+    }
+    return makeElementNode('TransparencySetting', {}, [
+      ...(this.transparencySetting.blendingSetting
+        ? [
+            makeElementNode('BlendingSetting', {
+              Opacity: this.transparencySetting.blendingSetting.opacity,
+            }),
+          ]
+        : []),
+      ...(this.transparencySetting.dropShadowSetting
+        ? [
+            makeElementNode('DropShadowSetting', {
+              Mode: dropShadowSettingModeMap.getExternal(this.transparencySetting.dropShadowSetting.mode),
+              XOffset: this.transparencySetting.dropShadowSetting.xOffset,
+              YOffset: this.transparencySetting.dropShadowSetting.yOffset,
+              Size: this.transparencySetting.dropShadowSetting.size,
+              EffectColor: this.transparencySetting.dropShadowSetting.effectColorId,
+              Spread: this.transparencySetting.dropShadowSetting.spread,
+            }),
+          ]
+        : []),
+    ]);
   }
   // Basic serialization of sprite
   serializeSprite() {
@@ -147,7 +283,7 @@ export abstract class Sprite {
       this.id,
       this.context.spreadPackageRoot,
       ['Properties'],
-      [this.frameFittingOption ? serializeElement('FrameFittingOption', {}, this.frameFittingOption?.sourceElement, this.context.spreadPackageRoot, ['Properties']) : undefined, this.objectExportOption ? serializeElement('ObjectExportOption', {}, this.objectExportOption?.sourceElement, this.context.spreadPackageRoot, ['Properties']) : undefined, this.textWrapPreference ? serializeElement('TextWrapPreference', {}, this.textWrapPreference?.sourceElement, this.context.spreadPackageRoot, ['Properties']) : undefined, this.inCopyExportOption ? serializeElement('InCopyExportOption', {}, this.inCopyExportOption?.sourceElement, this.context.spreadPackageRoot, ['Properties']) : undefined].filter((v) => v !== undefined)
+      [this.frameFittingOption ? serializeElement('FrameFittingOption', {}, this.frameFittingOption?.sourceElement, this.context.spreadPackageRoot, ['Properties']) : undefined, this.objectExportOption ? serializeElement('ObjectExportOption', {}, this.objectExportOption?.sourceElement, this.context.spreadPackageRoot, ['Properties']) : undefined, this.textWrapPreference ? serializeElement('TextWrapPreference', {}, this.textWrapPreference?.sourceElement, this.context.spreadPackageRoot, ['Properties']) : undefined, this.inCopyExportOption ? serializeElement('InCopyExportOption', {}, this.inCopyExportOption?.sourceElement, this.context.spreadPackageRoot, ['Properties']) : undefined, this.serializeTransparencySetting()].filter((v) => v !== undefined)
     );
   }
 
@@ -209,6 +345,9 @@ export abstract class Sprite {
         }
       : undefined;
 
+    const transparencySettingElement = Spread.getDirectChildren(element, 'TransparencySetting')[0] as Element | undefined;
+    const transparencySetting = transparencySettingElement ? Sprite.parseTransparencySetting(transparencySettingElement) : undefined;
+
     return {
       id,
       name,
@@ -232,6 +371,41 @@ export abstract class Sprite {
       inCopyExportOption,
       strokeColorId,
       strokeWeight,
+      transparencySetting,
+    };
+  }
+  static parseBlendingSetting(element: Element) {
+    const opacity = ensureNumber(element.getAttribute('Opacity')) ?? 100;
+    return {
+      opacity,
+    };
+  }
+  static parseDropShadowSetting(element: Element) {
+    const mode = dropShadowSettingModeMap.getInternal(element.getAttribute('Mode')) ?? 'drop';
+    const xOffset = ensureNumber(element.getAttribute('XOffset')) ?? 0;
+    const yOffset = ensureNumber(element.getAttribute('YOffset')) ?? 0;
+    const size = ensureNumber(element.getAttribute('Size')) ?? 0;
+    const effectColorId = element.getAttribute('EffectColor') ?? 'Color/Black';
+    const spread = ensureNumber(element.getAttribute('Spread')) ?? 0;
+
+    return {
+      mode,
+      xOffset,
+      yOffset,
+      size,
+      effectColorId,
+      spread,
+    };
+  }
+  static parseTransparencySetting(element: Element) {
+    const blendingSettingElement = Spread.getDirectChildren(element, 'BlendingSetting')[0] as Element | undefined;
+    const dropShadowSettingElement = Spread.getDirectChildren(element, 'DropShadowSetting')[0] as Element | undefined;
+    const blendingSetting = blendingSettingElement ? Sprite.parseBlendingSetting(blendingSettingElement) : undefined;
+    const dropShadowSetting = dropShadowSettingElement ? Sprite.parseDropShadowSetting(dropShadowSettingElement) : undefined;
+
+    return {
+      blendingSetting,
+      dropShadowSetting,
     };
   }
 }

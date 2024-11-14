@@ -3,6 +3,16 @@ import { KeyMap } from '../util/keyMap.js';
 import { makeElementNode, makeTextNode } from 'flat-svg';
 import { IDMLBackingStoryContext } from './BackingStory.js';
 import { Spread } from './Spread.js';
+import { ParagraphStyleInput } from './ParagraphStyle.js';
+import { CharacterStyleInput } from './CharacterStyle.js';
+
+export type ParagraphInput = {
+  paragraphStyle: ParagraphStyleInput;
+  features: {
+    characterStyle: CharacterStyleInput;
+    content: string;
+  }[];
+};
 
 export type FrameType = 'textFrame' | 'graphicFrame' | 'unassignedFrame';
 export type StoryOrientation = 'horizontal' | 'vertical';
@@ -56,7 +66,7 @@ export class Story {
   private storyPreference?: StoryPreference;
   private inCopyExportOption?: InCopyExportOption;
   constructor(
-    private id: string,
+    public id: string,
     private paragraphs: ParagraphStyleRange[],
     opts: {
       userText?: boolean;
@@ -70,6 +80,51 @@ export class Story {
     this.title = opts.title;
     this.storyPreference = opts.storyPreference;
     this.inCopyExportOption = opts.inCopyExportOption;
+  }
+  getParagraphs(toInput = false) {
+    return this.paragraphs.map((paragraph) => {
+      const paragraphStyle = this.context.idml.getParagraphStyleById(paragraph.appliedParagraphStyle);
+      return {
+        appliedParagraphStyle: toInput ? paragraphStyle?.toParagraphStyleInput() : paragraphStyle,
+        features: paragraph.features.map((feature) => {
+          const characterStyle = this.context.idml.getCharacterStyleById(feature.appliedCharacterStyle);
+          return {
+            appliedCharacterStyle: toInput ? characterStyle?.toCharacterStyleInput() : characterStyle,
+            content: feature.content,
+          };
+        }),
+      };
+    });
+  }
+  static getParagraphsFromInput(paragraphs: ParagraphInput[], context: IDMLBackingStoryContext) {
+    return paragraphs.map((paragraph) => {
+      return {
+        appliedParagraphStyle: context.idml.assumeParagraphStyle(paragraph.paragraphStyle).id,
+        features: paragraph.features.map((feature) => {
+          return {
+            appliedCharacterStyle: context.idml.assumeCharacterStyle(feature.characterStyle).id,
+            otfContextualAlternate: false,
+            content: feature.content,
+          };
+        }),
+      };
+    });
+  }
+  setPagaraphs(paragraphs: ParagraphInput[]) {
+    this.paragraphs = Story.getParagraphsFromInput(paragraphs, this.context);
+  }
+  serializeContent(content: string) {
+    return content
+      .split('\n')
+      .map((line) => {
+        if (line === '') {
+          return [makeElementNode('Br', {}, [])];
+        } else {
+          return [makeElementNode('Content', {}, [makeTextNode(line)]), makeElementNode('Br', {}, [])];
+        }
+      })
+      .flat()
+      .slice(0, -1);
   }
   serialize(tagName: 'Story' | 'XmlStory') {
     return serializeElement(
@@ -128,7 +183,7 @@ export class Story {
                 feature.sourceElement,
                 this.context.storyPackageRoot,
                 ['Properties'],
-                [...(feature.sourceElement ? Spread.keepChildren(feature.sourceElement).filter((xmlNode) => xmlNode.type !== 'element' || xmlNode.tagName !== 'Content') : []), makeElementNode('Content', {}, [makeTextNode(feature.content)])]
+                [...(feature.sourceElement ? Spread.keepChildren(feature.sourceElement).filter((xmlNode) => xmlNode.type !== 'element' || !(xmlNode.tagName === 'Content' || xmlNode.tagName === 'Br' || xmlNode.tagName === 'Properties')) : []), ...this.serializeContent(feature.content)]
               )
             )
           )
@@ -178,7 +233,17 @@ export class Story {
       throw new Error('CharacterStyleRange element must have an AppliedCharacterStyle attribute');
     }
     const otfContextualAlternate = ensureBoolean(props.OTFContextualAlternate);
-    const content = element.textContent ?? '';
+    const contentAndBreakElements = Array.from(element.children).filter((child) => child.tagName === 'Content' || child.tagName === 'Br');
+
+    const content = contentAndBreakElements
+      .map((contentOrBreakElement) => {
+        if (contentOrBreakElement.tagName === 'Content') {
+          return contentOrBreakElement.textContent ?? '';
+        } else {
+          return '\n';
+        }
+      })
+      .join('');
 
     return {
       appliedCharacterStyle,

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">
+    <Story Self="mixmu7svdwk" UserText="true" Title="$ID/">
+        <StoryPreference OpticalMarginAlignment="false" OpticalMarginSize="12" FrameType="TextFrameType" StoryOrientation="Horizontal" StoryDirection="LeftToRightDirection"/>
+        <InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false"/>
+        <ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/ueam7qhy3w">
+            <CharacterStyleRange AppliedCharacterStyle="CharacterStyle/eotqt9w2yun" OTFContextualAlternate="false">
+                <Content>I was created manually :)</Content>
+            </CharacterStyleRange>
+        </ParagraphStyleRange>
+    </Story>
+</idPkg:Story>

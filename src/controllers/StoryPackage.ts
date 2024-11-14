@@ -10,7 +10,7 @@ export type IDMLStoryPackageContext = IDMLDocumentContext & {
 export class StoryPackage extends SuperController {
   static elementsImplemented = ['Story'];
   context: IDMLStoryPackageContext;
-  story: Story;
+  stories: Story[] = [];
   constructor(public src: string, raw: string, topContext: IDMLDocumentContext) {
     super();
 
@@ -21,18 +21,28 @@ export class StoryPackage extends SuperController {
       storyPackageRoot: doc,
     };
 
-    const storyElement = doc.getElementsByTagName('Story')[0];
-    if (!storyElement) {
-      throw new Error('Story element not found');
+    const storyElements = Array.from(doc.getElementsByTagName('Story'));
+    for (const storyElement of storyElements) {
+      this.stories.push(Story.parseElement(storyElement, this.context));
     }
-    this.story = Story.parseElement(storyElement, this.context);
+
+    // const storyElement = doc.getElementsByTagName('Story')[0];
+    // if (!storyElement) {
+    //   throw new Error('Story element not found');
+    // }
+    // this.story = Story.parseElement(storyElement, this.context);
+  }
+  setStory(story: Story) {
+    this.stories = [story];
   }
   serialize() {
     const document = nodeToNode(this.context.storyPackageRoot) as ElementNode;
     document.children = document.children ?? [];
     document.children = document.children.filter((child) => child.type === 'text' || child.type === 'cdata' || !StoryPackage.elementsImplemented.includes(child.tagName));
 
-    document.children.push(this.story.serialize('Story'));
+    for (const story of this.stories) {
+      document.children.push(story.serialize('Story'));
+    }
 
     return document;
   }

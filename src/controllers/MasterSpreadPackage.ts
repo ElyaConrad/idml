@@ -9,7 +9,7 @@ export type IDMLMasterSpreadPackageContext = IDMLDocumentContext & {
 
 export class MasterSpreadPackage extends SuperController {
   static elementsImplemented = ['MasterSpread'];
-  private context: IDMLMasterSpreadPackageContext;
+  public context: IDMLMasterSpreadPackageContext;
   // Master spread package should only have one spread
   private masterSpreads: MasterSpread[] = [];
   constructor(public src: string, raw: string, topContext: IDMLDocumentContext) {

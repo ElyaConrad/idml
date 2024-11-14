@@ -2,16 +2,19 @@ import { createIDMLTransform, ensureBoolean, flattenIDMLProperties, getIDMLEleme
 import _ from 'lodash';
 import { Page } from './Page.js';
 import { IDMLSpreadPackageContext } from './SpreadPackage.js';
-import { Sprite } from './sprites/Sprite.js';
-import { RectangleSprite } from './sprites/Rectangle.js';
-import { GroupSprite } from './sprites/Group.js';
-import { TextFrame } from './sprites/TextFrame.js';
+import { DropShadowInput, DropShadowSetting, Sprite, SpriteWithChildren, TransparencySetting } from './sprites/Sprite.js';
 import { getElementAttributes, makeElementNode, parseXML, XMLNode } from 'flat-svg';
 import { MasterSpread } from './MasterSpread.js';
 import { GridDataInformation } from './GridDataInformation.js';
 import { ColorInput, Transform } from '../types/index.js';
-import { PathPoint } from './sprites/GeometricSprite.js';
+import { PathGeometry, PathPoint } from './sprites/GeometricSprite.js';
+import { RectangleSprite } from './sprites/Rectangle.js';
+import { GroupSprite } from './sprites/Group.js';
+import { TextFrame } from './sprites/TextFrame.js';
 import { OvalSprite } from './sprites/Oval.js';
+import { PolygonSprite, PathCommand } from './sprites/Polygon.js';
+import { ImageSprite } from './sprites/Image.js';
+import { ParagraphInput } from './Story.js';
 
 export type FlattenerPreference = {
   sourceElement: Element;
@@ -37,7 +40,10 @@ export class Spread {
     this.flattenerPreference = opts.flattenerPreference;
   }
   serialize() {
-    return serializeElement(
+    const sprites = this.sprites.map((sprite) => Spread.serializeSprite(sprite));
+
+    const customChildNodes = [this.flattenerPreference ? serializeElement('FlattenerPreference', {}, this.flattenerPreference.sourceElement, this.context.spreadPackageRoot, ['Properties']) : undefined, ...this.pages.map((page) => page.serialize()), ...sprites].filter((x) => x !== undefined);
+    const serializedSpread = serializeElement(
       'Spread',
       {
         Hidden: this.hidden,
@@ -46,8 +52,10 @@ export class Spread {
       this.id,
       this.context.spreadPackageRoot,
       ['Properties'],
-      [this.flattenerPreference ? serializeElement('FlattenerPreference', {}, this.flattenerPreference.sourceElement, this.context.spreadPackageRoot, ['Properties']) : undefined, ...this.pages.map((page) => page.serialize()), ...this.sprites.map((sprite) => Spread.serializeSprite(sprite))].filter((x) => x !== undefined)
+      customChildNodes
     );
+
+    return serializedSpread;
   }
   static serializeSprite(sprite: Sprite) {
     {
@@ -59,6 +67,10 @@ export class Spread {
         return sprite.serialize();
       } else if (sprite instanceof TextFrame) {
         return sprite.serialize();
+      } else if (sprite instanceof PolygonSprite) {
+        return sprite.serialize();
+      } else if (sprite instanceof ImageSprite) {
+        return sprite.serialize();
       } else {
         throw new Error(`Unknown sprite type: ${sprite}`);
       }
@@ -67,8 +79,8 @@ export class Spread {
   static getDirectChildren(element: Element, tagName: string) {
     return Array.from(element.children).filter((child) => child.tagName === tagName);
   }
-  static getChildSprites(element: Element, context: IDMLSpreadPackageContext) {
-    return [...Spread.getDirectChildren(element, 'Group').map((groupElement) => GroupSprite.parseElement(groupElement, context)), ...Spread.getDirectChildren(element, 'Rectangle').map((rectangleElement) => RectangleSprite.parseElement(rectangleElement, context)), ...Spread.getDirectChildren(element, 'TextFrame').map((textFrameElement) => TextFrame.parseElement(textFrameElement, context)), ...Spread.getDirectChildren(element, 'Oval').map((ovalElement) => OvalSprite.parseElement(ovalElement, context))];
+  static getChildSprites(element: Element, context: IDMLSpreadPackageContext): Sprite[] {
+    return [...Spread.getDirectChildren(element, 'Group').map((groupElement) => GroupSprite.parseElement(groupElement, context)), ...Spread.getDirectChildren(element, 'Rectangle').map((rectangleElement) => RectangleSprite.parseElement(rectangleElement, context)), ...Spread.getDirectChildren(element, 'TextFrame').map((textFrameElement) => TextFrame.parseElement(textFrameElement, context)), ...Spread.getDirectChildren(element, 'Oval').map((ovalElement) => OvalSprite.parseElement(ovalElement, context)), ...Spread.getDirectChildren(element, 'Polygon').map((polygonElement) => PolygonSprite.parseElement(polygonElement, context)), ...Spread.getDirectChildren(element, 'Image').map((imageElement) => ImageSprite.parseElement(imageElement, context))];
   }
   static keepChildren(element: Element): XMLNode[] {
     const children = Array.from(element.childNodes);
@@ -187,6 +199,8 @@ export class Spread {
     return sprites.reduce((all, sprite) => {
       if (sprite instanceof GroupSprite) {
         return [...all, ...sprite.getAllSprites(), sprite];
+      } else if (sprite instanceof PolygonSprite) {
+        return [...all, ...sprite.getSprites(), sprite];
       } else {
         return [...all, sprite];
       }
@@ -219,8 +233,32 @@ export class Spread {
     const { translateX, translateY } = this.pageRelatedItemTransform;
     return [x - translateX, y - translateY] as [number, number];
   }
+  createGroup(
+    opts: {
+      transform?: Transform;
+    },
+    targetGroup?: GroupSprite
+  ) {
+    const id = this.context.idml.getUniqueID('Group');
 
-  createRectangle(opts: { x: number; y: number; width: number; height: number; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: Transform }) {
+    const group = new GroupSprite(
+      id,
+      [],
+      {
+        itemTransform: opts.transform ?? { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 },
+      },
+      this.context
+    );
+
+    if (targetGroup) {
+      targetGroup.addSprite(group);
+    } else {
+      this.sprites.push(group);
+    }
+
+    return group;
+  }
+  createTextFrame(opts: { x: number; y: number; width: number; height: number; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: Transform; opacity?: number; dropShadow?: DropShadowInput; paragraphs: ParagraphInput[] }, targetSprite?: SpriteWithChildren) {
     const pathPoints: PathPoint[] = [this.relativeCoords(opts.x, opts.y), this.relativeCoords(opts.x + opts.width, opts.y), this.relativeCoords(opts.x + opts.width, opts.y + opts.height), this.relativeCoords(opts.x, opts.y + opts.height)].map(([x, y]) => {
       return {
         anchor: [x, y],
@@ -229,19 +267,42 @@ export class Spread {
       };
     });
 
-    const id = this.context.idml.getUniqueID('Rectangle');
-    const rectangle = new RectangleSprite(
+    const transparencySetting: TransparencySetting = {
+      blendingSetting:
+        opts.opacity !== undefined
+          ? {
+              opacity: opts.opacity,
+            }
+          : undefined,
+      dropShadowSetting: opts.dropShadow
+        ? {
+            mode: opts.dropShadow.mode,
+            size: opts.dropShadow.size,
+            spread: opts.dropShadow.spread,
+            xOffset: opts.dropShadow.xOffset,
+            yOffset: opts.dropShadow.yOffset,
+            effectColorId: opts.dropShadow.effectColor ? this.context.idml.assumeColor(opts.dropShadow.effectColor).id : 'Color/Black',
+          }
+        : undefined,
+    };
+
+    const id = this.context.idml.getUniqueID('TextFrame');
+
+    const parentStory = this.context.idml.createStory(opts.paragraphs);
+
+    const textFrame = new TextFrame(
       id,
+      parentStory.id,
       {
         name: '$ID/',
         visible: true,
         horizontalLayoutConstraints: ['flexibleDimension', 'fixedDimension', 'flexibleDimension'],
         verticalLayoutConstraints: ['flexibleDimension', 'fixedDimension', 'flexibleDimension'],
-        appliedObjectStyleId: 'ObjectStyle/$ID/[Normal Graphics Frame]',
-        contentType: 'Unassigned',
+        appliedObjectStyleId: 'ObjectStyle/$ID/[Normal Text Frame]',
+        contentType: 'TextType',
         fillColorId: opts.fill ? this.context.idml.assumeColor(opts.fill).id : 'Color/None',
         strokeColorId: opts.stroke ? this.context.idml.assumeColor(opts.stroke).id : 'Color/None',
-        strokeWeight: opts.strokeWeight ?? 1,
+        strokeWeight: opts.strokeWeight ?? 0,
 
         gradientFillAngle: 0,
         gradientStart: [0, 0],
@@ -251,9 +312,13 @@ export class Spread {
         gradientStrokeAngle: 0,
         itemTransform: opts.transform ?? { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 },
         storyTitle: '$ID/',
-        open: false,
-        pathPoints,
-        geometryPathType: 'normalPath',
+        pathGeometry: [
+          {
+            open: false,
+            pathPoints,
+            geometryPathType: 'normalPath',
+          },
+        ],
         frameFittingOption: {
           sourceElement: parseXML(`<FrameFittingOption AutoFit="false" LeftCrop="0" TopCrop="0" RightCrop="0" BottomCrop="0" FittingOnEmptyFrame="None" FittingAlignment="CenterAnchor" />`),
         },
@@ -266,20 +331,291 @@ export class Spread {
         inCopyExportOption: {
           sourceElement: parseXML(`<InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />`),
         },
+        textFramePreference: {
+          sourceElement: parseXML(`
+            <TextFramePreference FootnotesEnableOverrides="false" FootnotesSpanAcrossColumns="false" FootnotesMinimumSpacing="12" FootnotesSpaceBetween="6" TextColumnCount="1" TextColumnGutter="12" TextColumnFixedWidth="144" UseFixedColumnWidth="false" FirstBaselineOffset="AscentOffset" MinimumFirstBaselineOffset="0" VerticalJustification="TopAlign" VerticalThreshold="0" IgnoreWrap="false" VerticalBalanceColumns="false" UseFlexibleColumnWidth="false" TextColumnMaxWidth="0" AutoSizingType="Off" AutoSizingReferencePoint="CenterPoint" UseMinimumHeightForAutoSizing="false" MinimumHeightForAutoSizing="0" UseMinimumWidthForAutoSizing="false" MinimumWidthForAutoSizing="0" UseNoLineBreaksForAutoSizing="false" ColumnRuleOverride="false" ColumnRuleOffset="0" ColumnRuleTopInset="0" ColumnRuleInsetChainOverride="true" ColumnRuleBottomInset="0" ColumnRuleStrokeWidth="1" ColumnRuleStrokeColor="Color/Black" ColumnRuleStrokeType="StrokeStyle/$ID/Solid" ColumnRuleStrokeTint="100" ColumnRuleOverprintOverride="false">
+              <Properties>
+                <InsetSpacing type="list">
+                  <ListItem type="unit">0</ListItem>
+                  <ListItem type="unit">0</ListItem>
+                  <ListItem type="unit">0</ListItem>
+                  <ListItem type="unit">0</ListItem>
+                </InsetSpacing>
+              </Properties>
+            </TextFramePreference>`),
+        },
+        transparencySetting,
       },
       this.context
     );
-    this.sprites.push(rectangle);
+
+    if (targetSprite) {
+      targetSprite.addSprite(textFrame);
+    } else {
+      this.sprites.push(textFrame);
+    }
+
+    return textFrame;
+  }
+  createImage(
+    opts: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      fill?: ColorInput | string;
+      stroke?: ColorInput | string;
+      strokeWeight?: number;
+      transform?: Transform;
+      opacity?: number;
+      dropShadow?: DropShadowInput;
+      data: ArrayBuffer;
+    },
+    targetSprite?: SpriteWithChildren
+  ) {
+    const [left, top] = this.relativeCoords(opts.x, opts.y);
+    const [right, bottom] = this.relativeCoords(opts.x + opts.width, opts.y + opts.height);
+
+    const geometricBounds = { left, top, right, bottom };
+
+    const transparencySetting: TransparencySetting = {
+      blendingSetting:
+        opts.opacity !== undefined
+          ? {
+              opacity: opts.opacity,
+            }
+          : undefined,
+      dropShadowSetting: opts.dropShadow
+        ? {
+            mode: opts.dropShadow.mode,
+            size: opts.dropShadow.size,
+            spread: opts.dropShadow.spread,
+            xOffset: opts.dropShadow.xOffset,
+            yOffset: opts.dropShadow.yOffset,
+            effectColorId: opts.dropShadow.effectColor ? this.context.idml.assumeColor(opts.dropShadow.effectColor).id : 'Color/Black',
+          }
+        : undefined,
+    };
+
+    const id = this.context.idml.getUniqueID('Image');
+
+    const image = new ImageSprite(
+      id,
+      opts.data,
+      geometricBounds,
+      {
+        appliedObjectStyleId: 'ObjectStyle/$ID/[None]',
+        //contentType: 'GraphicType',
+        itemTransform: { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 },
+        pathGeometry: [],
+        textWrapPreference: {
+          sourceElement: parseXML(`<TextWrapPreference Inverse="false" ApplyToMasterPageOnly="false" TextWrapSide="BothSides" TextWrapMode="None"><Properties><TextWrapOffset Top="0" Left="0" Bottom="0" Right="0" /></Properties></TextWrapPreference>`),
+        },
+        visible: true,
+      },
+      this.context
+    );
+
+    if (targetSprite) {
+      targetSprite.addSprite(image);
+    } else {
+      this.sprites.push(image);
+    }
+    return image;
+  }
+  createPolygon(opts: { paths: PathCommand[][]; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: Transform; opacity?: number; dropShadow?: DropShadowInput }, targetSprite?: SpriteWithChildren) {
+    const pathGeometry = PolygonSprite.getPathsFromCommands(opts.paths).map<PathGeometry>(({ pathPoints, open }) => {
+      return {
+        geometryPathType: 'normalPath',
+        open,
+        pathPoints: pathPoints.map(({ anchor, leftDirection, rightDirection }) => {
+          return {
+            anchor: this.relativeCoords(anchor[0], anchor[1]),
+            leftDirection: this.relativeCoords(leftDirection[0], leftDirection[1]),
+            rightDirection: this.relativeCoords(rightDirection[0], rightDirection[1]),
+          };
+        }),
+      };
+    });
+
+    const transparencySetting: TransparencySetting = {
+      blendingSetting:
+        opts.opacity !== undefined
+          ? {
+              opacity: opts.opacity,
+            }
+          : undefined,
+      dropShadowSetting: opts.dropShadow
+        ? {
+            mode: opts.dropShadow.mode,
+            size: opts.dropShadow.size,
+            spread: opts.dropShadow.spread,
+            xOffset: opts.dropShadow.xOffset,
+            yOffset: opts.dropShadow.yOffset,
+            effectColorId: opts.dropShadow.effectColor ? this.context.idml.assumeColor(opts.dropShadow.effectColor).id : 'Color/Black',
+          }
+        : undefined,
+    };
+
+    const id = this.context.idml.getUniqueID('Polygon');
+
+    const polygon = new PolygonSprite(
+      id,
+      [],
+      {
+        name: '$ID/',
+        visible: true,
+        horizontalLayoutConstraints: ['flexibleDimension', 'fixedDimension', 'flexibleDimension'],
+        verticalLayoutConstraints: ['flexibleDimension', 'fixedDimension', 'flexibleDimension'],
+        appliedObjectStyleId: 'ObjectStyle/$ID/[Normal Graphics Frame]',
+        contentType: 'Unassigned',
+        fillColorId: opts.fill ? this.context.idml.assumeColor(opts.fill).id : 'Color/None',
+        strokeColorId: opts.stroke ? this.context.idml.assumeColor(opts.stroke).id : 'Color/None',
+        strokeWeight: opts.strokeWeight ?? 0,
+
+        gradientFillAngle: 0,
+        gradientStart: [0, 0],
+        gradientFillLength: 0,
+        gradientStrokeStart: [0, 0],
+        gradientStrokeLength: 0,
+        gradientStrokeAngle: 0,
+        itemTransform: opts.transform ?? { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 },
+        storyTitle: '$ID/',
+        pathGeometry,
+        frameFittingOption: {
+          sourceElement: parseXML(`<FrameFittingOption AutoFit="false" LeftCrop="0" TopCrop="0" RightCrop="0" BottomCrop="0" FittingOnEmptyFrame="None" FittingAlignment="CenterAnchor" />`),
+        },
+        objectExportOption: {
+          sourceElement: parseXML(`<ObjectExportOption AltTextSourceType="SourceXMLStructure" ActualTextSourceType="SourceXMLStructure" CustomAltText="$ID/" CustomActualText="$ID/" ApplyTagType="TagFromStructure" ImageConversionType="JPEG" ImageExportResolution="Ppi300" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="true" JPEGOptionsQuality="High" JPEGOptionsFormat="BaselineEncoding" ImageAlignment="AlignLeft" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" CustomImageAlignment="false" SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing" EpubType="$ID/" SizeType="DefaultSize" CustomSize="$ID/" PreserveAppearanceFromLayout="PreserveAppearanceDefault"><Properties><AltMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" /><ActualMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" /></Properties></ObjectExportOption>`),
+        },
+        textWrapPreference: {
+          sourceElement: parseXML(`<TextWrapPreference Inverse="false" ApplyToMasterPageOnly="false" TextWrapSide="BothSides" TextWrapMode="None"><Properties><TextWrapOffset Top="0" Left="0" Bottom="0" Right="0" /></Properties></TextWrapPreference>`),
+        },
+        inCopyExportOption: {
+          sourceElement: parseXML(`<InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />`),
+        },
+        transparencySetting,
+      },
+      this.context
+    );
+
+    if (targetSprite) {
+      targetSprite.addSprite(polygon);
+    } else {
+      this.sprites.push(polygon);
+    }
+
+    return polygon;
+  }
+  createRectangle(opts: { x: number; y: number; width: number; height: number; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: Transform; opacity?: number; dropShadow?: DropShadowInput }, targetSprite?: SpriteWithChildren) {
+    const pathPoints: PathPoint[] = [this.relativeCoords(opts.x, opts.y), this.relativeCoords(opts.x + opts.width, opts.y), this.relativeCoords(opts.x + opts.width, opts.y + opts.height), this.relativeCoords(opts.x, opts.y + opts.height)].map(([x, y]) => {
+      return {
+        anchor: [x, y],
+        leftDirection: [x, y],
+        rightDirection: [x, y],
+      };
+    });
+
+    const transparencySetting: TransparencySetting = {
+      blendingSetting:
+        opts.opacity !== undefined
+          ? {
+              opacity: opts.opacity,
+            }
+          : undefined,
+      dropShadowSetting: opts.dropShadow
+        ? {
+            mode: opts.dropShadow.mode,
+            size: opts.dropShadow.size,
+            spread: opts.dropShadow.spread,
+            xOffset: opts.dropShadow.xOffset,
+            yOffset: opts.dropShadow.yOffset,
+            effectColorId: opts.dropShadow.effectColor ? this.context.idml.assumeColor(opts.dropShadow.effectColor).id : 'Color/Black',
+          }
+        : undefined,
+    };
+
+    const id = this.context.idml.getUniqueID('Rectangle');
+    const rectangle = new RectangleSprite(
+      id,
+      [],
+      {
+        name: '$ID/',
+        visible: true,
+        horizontalLayoutConstraints: ['flexibleDimension', 'fixedDimension', 'flexibleDimension'],
+        verticalLayoutConstraints: ['flexibleDimension', 'fixedDimension', 'flexibleDimension'],
+        appliedObjectStyleId: 'ObjectStyle/$ID/[Normal Graphics Frame]',
+        contentType: 'Unassigned',
+        fillColorId: opts.fill ? this.context.idml.assumeColor(opts.fill).id : 'Color/None',
+        strokeColorId: opts.stroke ? this.context.idml.assumeColor(opts.stroke).id : 'Color/None',
+        strokeWeight: opts.strokeWeight ?? 0,
+
+        gradientFillAngle: 0,
+        gradientStart: [0, 0],
+        gradientFillLength: 0,
+        gradientStrokeStart: [0, 0],
+        gradientStrokeLength: 0,
+        gradientStrokeAngle: 0,
+        itemTransform: opts.transform ?? { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 },
+        storyTitle: '$ID/',
+        pathGeometry: [
+          {
+            open: false,
+            pathPoints,
+            geometryPathType: 'normalPath',
+          },
+        ],
+        frameFittingOption: {
+          sourceElement: parseXML(`<FrameFittingOption AutoFit="false" LeftCrop="0" TopCrop="0" RightCrop="0" BottomCrop="0" FittingOnEmptyFrame="None" FittingAlignment="CenterAnchor" />`),
+        },
+        objectExportOption: {
+          sourceElement: parseXML(`<ObjectExportOption AltTextSourceType="SourceXMLStructure" ActualTextSourceType="SourceXMLStructure" CustomAltText="$ID/" CustomActualText="$ID/" ApplyTagType="TagFromStructure" ImageConversionType="JPEG" ImageExportResolution="Ppi300" GIFOptionsPalette="AdaptivePalette" GIFOptionsInterlaced="true" JPEGOptionsQuality="High" JPEGOptionsFormat="BaselineEncoding" ImageAlignment="AlignLeft" ImageSpaceBefore="0" ImageSpaceAfter="0" UseImagePageBreak="false" ImagePageBreak="PageBreakBefore" CustomImageAlignment="false" SpaceUnit="CssPixel" CustomLayout="false" CustomLayoutType="AlignmentAndSpacing" EpubType="$ID/" SizeType="DefaultSize" CustomSize="$ID/" PreserveAppearanceFromLayout="PreserveAppearanceDefault"><Properties><AltMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" /><ActualMetadataProperty NamespacePrefix="$ID/" PropertyPath="$ID/" /></Properties></ObjectExportOption>`),
+        },
+        textWrapPreference: {
+          sourceElement: parseXML(`<TextWrapPreference Inverse="false" ApplyToMasterPageOnly="false" TextWrapSide="BothSides" TextWrapMode="None"><Properties><TextWrapOffset Top="0" Left="0" Bottom="0" Right="0" /></Properties></TextWrapPreference>`),
+        },
+        inCopyExportOption: {
+          sourceElement: parseXML(`<InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />`),
+        },
+        transparencySetting,
+      },
+      this.context
+    );
+    if (targetSprite) {
+      targetSprite.addSprite(rectangle);
+    } else {
+      this.sprites.push(rectangle);
+    }
     return rectangle;
   }
-  createOval(opts: { x: number; y: number; radiusX: number; radiusY: number; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: Transform }) {
+  createOval(opts: { x: number; y: number; radiusX: number; radiusY: number; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: Transform; opacity?: number; dropShadow?: DropShadowInput }, targetSprite?: SpriteWithChildren) {
     const [x, y] = this.relativeCoords(opts.x, opts.y);
     const pathPoints = OvalSprite.calculateEllipsePathPoints(x - opts.radiusX, y - opts.radiusY, opts.radiusX, opts.radiusY);
+
+    const transparencySetting: TransparencySetting = {
+      blendingSetting:
+        opts.opacity !== undefined
+          ? {
+              opacity: opts.opacity,
+            }
+          : undefined,
+      dropShadowSetting: opts.dropShadow
+        ? {
+            mode: opts.dropShadow.mode,
+            size: opts.dropShadow.size,
+            spread: opts.dropShadow.spread,
+            xOffset: opts.dropShadow.xOffset,
+            yOffset: opts.dropShadow.yOffset,
+            effectColorId: opts.dropShadow.effectColor ? this.context.idml.assumeColor(opts.dropShadow.effectColor).id : 'Color/Black',
+          }
+        : undefined,
+    };
 
     const id = this.context.idml.getUniqueID('Oval');
 
     const oval = new OvalSprite(
       id,
+      [],
       {
         name: '$ID/',
         visible: true,
@@ -289,7 +625,7 @@ export class Spread {
         contentType: 'Unassigned',
         fillColorId: opts.fill ? this.context.idml.assumeColor(opts.fill).id : 'Color/None',
         strokeColorId: opts.stroke ? this.context.idml.assumeColor(opts.stroke).id : 'Color/None',
-        strokeWeight: opts.strokeWeight ?? 1,
+        strokeWeight: opts.strokeWeight ?? 0,
         gradientFillAngle: 0,
         gradientStart: [0, 0],
         gradientFillLength: 0,
@@ -298,9 +634,13 @@ export class Spread {
         gradientStrokeAngle: 0,
         itemTransform: opts.transform ?? { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 },
         storyTitle: '$ID/',
-        open: false,
-        pathPoints,
-        geometryPathType: 'normalPath',
+        pathGeometry: [
+          {
+            open: false,
+            pathPoints,
+            geometryPathType: 'normalPath',
+          },
+        ],
         frameFittingOption: {
           sourceElement: parseXML(`<FrameFittingOption AutoFit="false" LeftCrop="0" TopCrop="0" RightCrop="0" BottomCrop="0" FittingOnEmptyFrame="None" FittingAlignment="CenterAnchor" />`),
         },
@@ -313,11 +653,16 @@ export class Spread {
         inCopyExportOption: {
           sourceElement: parseXML(`<InCopyExportOption IncludeGraphicProxies="true" IncludeAllResources="false" />`),
         },
+        transparencySetting,
       },
       this.context
     );
 
-    this.sprites.push(oval);
+    if (targetSprite) {
+      targetSprite.addSprite(oval);
+    } else {
+      this.sprites.push(oval);
+    }
 
     return oval;
   }

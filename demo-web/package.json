@@ -11,12 +11,26 @@
     "type-check": "vue-tsc --build --force"
   },
   "dependencies": {
+    "@vicons/ionicons5": "^0.12.0",
+    "bytes": "^3.1.2",
+    "color": "^4.2.3",
+    "downloadjs": "^1.4.7",
+    "flat-svg": "^0.0.4",
+    "naive-ui": "^2.40.1",
     "paper": "^0.12.18",
-    "vue": "^3.5.12"
+    "svg-arc-to-cubic-bezier": "^3.2.0",
+    "svg-path-commander": "^2.1.5",
+    "vue": "^3.5.12",
+    "vue-router": "^4.4.5"
   },
   "devDependencies": {
     "@tsconfig/node20": "^20.1.4",
+    "@types/bytes": "^3.1.4",
+    "@types/color": "^4.2.0",
+    "@types/downloadjs": "^1.4.6",
     "@types/node": "^20.17.0",
+    "@types/pngjs": "^6.0.5",
+    "@types/svg-arc-to-cubic-bezier": "^3.2.3",
     "@vitejs/plugin-vue": "^5.1.4",
     "@vue/tsconfig": "^0.5.1",
     "npm-run-all2": "^7.0.1",
