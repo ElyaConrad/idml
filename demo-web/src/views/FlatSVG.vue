@@ -71,10 +71,10 @@ import { NUpload, NUploadDragger, NP, NText, NIcon, NCard, NCheckbox, NScrollbar
 import { ArchiveOutline, CodeSlashOutline } from '@vicons/ionicons5';
 import { ref } from 'vue';
 import { cleanupBluepicSVG, simplifySVG } from 'flat-svg';
-import { cropToVisibleBBox, getVisibleBBox, renderSVG } from '@/renderSVG';
+import { cropToVisibleBBox, getVisibleBBox, renderSVG } from '../renderSVG';
 import bytes from 'bytes';
-import { useFile } from '@/util/fileUpload';
-import { getAllVisibleElements } from '@/util/getAllVisibleElements';
+import { useFile } from '../util/fileUpload';
+import { getAllVisibleElements } from '../util/getAllVisibleElements';
 
 const keepGroupTransforms = ref(false);
 const rasterizeAllMasks = ref(false);

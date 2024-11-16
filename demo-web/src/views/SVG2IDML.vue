@@ -48,12 +48,10 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { NUpload, NUploadDragger, NText, NP, NIcon, NCard, NButton, NScrollbar, type UploadFileInfo } from 'naive-ui';
+import { NUpload, NUploadDragger, NText, NP, NIcon, NCard, NButton, NScrollbar } from 'naive-ui';
 import { CodeSlashOutline, ArchiveOutline, CloudDownloadOutline } from '@vicons/ionicons5';
-import { useFile } from '@/util/fileUpload';
-import { cropToVisibleBBox, getVisibleBBox, renderSVG } from '@/renderSVG';
+import { useFile } from '../util/fileUpload';
 import download from 'downloadjs';
-import { svg2idml } from 'idml';
 
 const { file, handleNewFileList, readFile } = useFile();
 
@@ -71,35 +69,35 @@ const triggerSVG2IDML = async () => {
   const svg = await readFile();
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
 
-  const { idml, simlifiedSVGDocument } = await svg2idml(
-    doc,
-    async function rasterize(svg) {
-      const ab = await renderSVG(svg);
-      const visibleBBox = await getVisibleBBox(ab);
-      if (!visibleBBox) {
-        console.error('Failed to get visible bbox');
-        return undefined;
-      }
-      return {
-        left: visibleBBox?.left,
-        top: visibleBBox?.top,
-        width: visibleBBox?.width,
-        height: visibleBBox?.height,
-        buffer: await cropToVisibleBBox(ab, visibleBBox),
-      };
-    },
-    async function applyColorMatrix(data, matrix) {
-      // Nothing to do since canvas API renders SVG with filters already
-      return data;
-    },
-    {
-      vectorizeAllTexts: false,
-      keepGroupTransforms: false,
-    }
-  );
-  simplifiedSVG.value = simlifiedSVGDocument;
+  // const { idml, simlifiedSVGDocument } = await svg2idml(
+  //   doc,
+  //   async function rasterize(svg) {
+  //     const ab = await renderSVG(svg);
+  //     const visibleBBox = await getVisibleBBox(ab);
+  //     if (!visibleBBox) {
+  //       console.error('Failed to get visible bbox');
+  //       return undefined;
+  //     }
+  //     return {
+  //       left: visibleBBox?.left,
+  //       top: visibleBBox?.top,
+  //       width: visibleBBox?.width,
+  //       height: visibleBBox?.height,
+  //       buffer: await cropToVisibleBBox(ab, visibleBBox),
+  //     };
+  //   },
+  //   async function applyColorMatrix(data, matrix) {
+  //     // Nothing to do since canvas API renders SVG with filters already
+  //     return data;
+  //   },
+  //   {
+  //     vectorizeAllTexts: false,
+  //     keepGroupTransforms: false,
+  //   }
+  // );
+  // simplifiedSVG.value = simlifiedSVGDocument;
 
-  idmlResult.value = new Blob([await idml.export()], { type: 'application/vnd.adobe.indesign-idml-package' });
+  // idmlResult.value = new Blob([await idml.export()], { type: 'application/vnd.adobe.indesign-idml-package' });
 };
 const triggerDownloadIDML = () => {
   if (!idmlResult.value) {

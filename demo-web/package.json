@@ -1,42 +1,29 @@
 {
-  "name": "demo-web",
-  "version": "0.0.0",
+  "name": "demo-web2",
   "private": true,
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "run-p type-check \"build-only {@}\" --",
-    "preview": "vite preview",
-    "build-only": "vite build",
-    "type-check": "vue-tsc --build --force"
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "idml": "^0.0.1",
+    "@types/downloadjs": "^1.4.6",
     "@vicons/ionicons5": "^0.12.0",
     "bytes": "^3.1.2",
-    "color": "^4.2.3",
     "downloadjs": "^1.4.7",
+    "flat-svg": "^0.0.7",
     "naive-ui": "^2.40.1",
-    "paper": "^0.12.18",
-    "svg-arc-to-cubic-bezier": "^3.2.0",
-    "svg-path-commander": "^2.1.5",
     "vue": "^3.5.12",
     "vue-router": "^4.4.5"
   },
   "devDependencies": {
-    "@tsconfig/node20": "^20.1.4",
     "@types/bytes": "^3.1.4",
-    "@types/color": "^4.2.0",
-    "@types/downloadjs": "^1.4.6",
-    "@types/node": "^20.17.0",
-    "@types/pngjs": "^6.0.5",
-    "@types/svg-arc-to-cubic-bezier": "^3.2.3",
     "@vitejs/plugin-vue": "^5.1.4",
-    "@vue/tsconfig": "^0.5.1",
-    "npm-run-all2": "^7.0.1",
-    "sass": "^1.80.5",
-    "typescript": "~5.6.0",
+    "sass-embedded": "^1.81.0",
+    "typescript": "~5.6.2",
     "vite": "^5.4.10",
-    "vue-tsc": "^2.1.6"
+    "vue-tsc": "^2.1.8"
   }
 }
