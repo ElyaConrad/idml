@@ -44,8 +44,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - name: Install latest idml
-        run: npm install idml@latest
+      - name: Install latest idml and flat-svg
+        run: npm install idml@latest flat-svg@latest
         working-directory: demo-web
       - name: test installed version
         run: cat package.json | grep -e '"idml":'
