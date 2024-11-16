@@ -1,6 +1,6 @@
 {
   "name": "idml",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "type": "module",
   "main": "./dist/cjs/main.js",
   "module": "./dist/esm/main.js",
@@ -40,6 +40,13 @@
       ]
     }
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ElyaConrad/idml.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ElyaConrad/idml/issues"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -62,7 +69,7 @@
     "client-zip": "^2.4.5",
     "color": "^4.2.3",
     "css-expression": "^0.0.8",
-    "flat-svg": "^0.0.4",
+    "flat-svg": "^0.0.7",
     "fontkit": "^2.0.4",
     "image-type": "^5.2.0",
     "inline-style-parser": "^0.2.4",

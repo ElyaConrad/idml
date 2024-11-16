@@ -11,11 +11,11 @@
     "type-check": "vue-tsc --build --force"
   },
   "dependencies": {
+    "idml": "^0.0.1",
     "@vicons/ionicons5": "^0.12.0",
     "bytes": "^3.1.2",
     "color": "^4.2.3",
     "downloadjs": "^1.4.7",
-    "flat-svg": "^0.0.4",
     "naive-ui": "^2.40.1",
     "paper": "^0.12.18",
     "svg-arc-to-cubic-bezier": "^3.2.0",

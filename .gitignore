@@ -3,3 +3,4 @@ node_modules
 compare
 compare_old
 dist
+package-lock.json
