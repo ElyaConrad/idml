@@ -82,7 +82,7 @@ idml.addEventListener('ready', async () => {
             fontSize: 22,
             leading: 10,
           },
-          content: '\n\nsafe',
+          content: '\n\nwhats',
         },
         {
           characterStyle: {
@@ -91,7 +91,7 @@ idml.addEventListener('ready', async () => {
             strokeColor: { type: 'rgb', red: 0, green: 0, blue: 255 },
             strikeThrough: true,
           },
-          content: ' mich',
+          content: ' up?',
         },
       ],
     },
@@ -102,17 +102,6 @@ idml.addEventListener('ready', async () => {
   const myPolygon = spread2.createPolygon(
     {
       paths: [[{ type: 'move', x: 100, y: 100 }, { type: 'cubicBezier', x: 200, y: 200, x1: 110, y1: 10, x2: 220, y2: 30 }, { type: 'line', x: 320, y: 320 }, { type: 'line', x: 320, y: 500 }, { type: 'close' }]],
-      // fill: { type: 'rgb', red: 0, green: 255, blue: 0 },
-      // stroke: { type: 'rgb', red: 0, green: 0, blue: 255 },
-      // opacity: 100,
-      // dropShadow: {
-      //   mode: 'drop',
-      //   xOffset: 10,
-      //   yOffset: 10,
-      //   size: 50,
-      //   spread: 0,
-      //   effectColor: { type: 'rgb', red: 255, green: 0, blue: 0 },
-      // }
     },
     myGroup
   );
