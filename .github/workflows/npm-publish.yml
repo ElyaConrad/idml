@@ -20,6 +20,12 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
 
+      - name: Inject plain idml
+        run: npm run inject-idml-plain
+
+      - name: test
+        run: cat src/assets/IDML_PLAIN.ts
+
       - name: Build and publish
         run: npm run build
 
