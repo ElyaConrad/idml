@@ -1,5 +1,5 @@
 import { makeElementNode } from 'flat-svg';
-import { createIDMLTransform, ensureArray, ensureBoolean, ensureEnumArray, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement, normalizeTransformForGivenOrigin } from '../../helpers.js';
+import { createIDMLTransform, ensureArray, ensureBoolean, ensureEnumArray, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement, normalizeTransformForGivenOrigin, TransformMatrix } from '../../helpers.js';
 import { ColorInput, GeometricBounds, Transform } from '../../types/index.js';
 import { KeyMap } from '../../util/keyMap.js';
 import { Spread } from '../Spread.js';
@@ -39,7 +39,7 @@ export type DropShadowInput = {
 export type SpriteOpts = {
   name?: string;
   appliedObjectStyleId?: string;
-  itemTransform: Transform;
+  itemTransform: TransformMatrix;
   storyTitle?: string;
   contentType?: string;
   visible?: boolean;
@@ -93,7 +93,7 @@ export type InCopyExportOption = {
 export abstract class Sprite {
   private name?: string;
   private appliedObjectStyleId?: string;
-  private itemTransform: Transform;
+  private itemTransform: TransformMatrix;
   private storyTitle?: string;
   private contentType?: string;
   private visible?: boolean;
@@ -225,11 +225,14 @@ export abstract class Sprite {
 
   // Get a transform object for a given origin
   getTransform(origin: [number, number]) {
-    return normalizeTransformForGivenOrigin(this.itemTransform, this.parentSpread.pageRelatedTransformOrigin, origin);
+    return this.parentSpread.cssifyTransformMatrix(this.itemTransform, origin);
   }
   // Set a transform object for a given origin
   setTranform(transform: Transform, origin: [number, number]) {
-    this.itemTransform = normalizeTransformForGivenOrigin(transform, origin, this.parentSpread.pageRelatedTransformOrigin);
+    this.itemTransform = this.parentSpread.matrixifyCSSTransform(transform, origin);
+  }
+  setTransformFromMatrix(matrix: TransformMatrix) {
+    this.itemTransform = matrix;
   }
   serializeTransparencySetting() {
     if (!this.transparencySetting) {
@@ -259,14 +262,14 @@ export abstract class Sprite {
   }
   // Basic serialization of sprite
   serializeSprite() {
-    console.log('SERIALIZE SPRITE', this.id, this.itemTransform, createIDMLTransform(this.itemTransform));
+    console.log('SERIALIZE SPRITE', this.id, this.itemTransform);
 
     return serializeElement(
       this.type,
       {
         Name: this.name,
         AppliedObjectStyle: this.appliedObjectStyleId,
-        ItemTransform: this.itemTransform ? createIDMLTransform(this.itemTransform).join(' ') : undefined,
+        ItemTransform: this.itemTransform ? this.itemTransform.join(' ') : undefined,
         StoryTitle: this.storyTitle,
         ContentType: this.contentType,
         Visible: this.visible,

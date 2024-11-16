@@ -26,8 +26,8 @@ export class FontFamily {
   getAvailableFontStyles() {
     return this.fonts.map((font) => font.fontStyleName);
   }
-  addFontStyle(styleName: string, postScriptName: string, status: FontStatus, type: string) {
-    const name = `${this.name} ${styleName}`;
+  addFontStyle(fullName: string, styleName: string, postScriptName: string, status: FontStatus, type: string) {
+    const name = fullName;
     const id = `${this.id}Fontn${name}`;
     const font = {
       id,

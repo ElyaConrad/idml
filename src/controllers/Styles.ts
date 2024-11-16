@@ -89,6 +89,7 @@ export class IDMLStylesController extends SuperController {
       name: `Character Style ${this.characterStyles.length + 1}`,
       appliedFont: characterStyle.appliedFont ?? baseCharacterStyle?.appliedFont,
       fontStyle: characterStyle.fontStyle ?? baseCharacterStyle?.fontStyle,
+      strokeWeight: characterStyle.strokeWeight ?? baseCharacterStyle?.strokeWeight,
       fontSize: characterStyle.fontSize ?? baseCharacterStyle?.fontSize,
       fillColorId: characterStyle.fillColor ? this.context.idml.assumeColor(characterStyle.fillColor).id : baseCharacterStyle?.fillColorId,
       strokeColorId: characterStyle.strokeColor ? this.context.idml.assumeColor(characterStyle.strokeColor).id : baseCharacterStyle?.strokeColorId,

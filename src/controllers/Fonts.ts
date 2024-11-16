@@ -61,7 +61,7 @@ export class IDMLFontsController extends SuperController {
       fontFamily = new FontFamily(id, fontTable.fontFamily, [], {}, this.context);
       this.fontFamilies.push(fontFamily);
     }
-    const font = fontFamily.addFontStyle(fontTable.styleName, fontTable.postScriptName, 'installed', type);
+    const font = fontFamily.addFontStyle(fontTable.fullName, fontTable.styleName, fontTable.postScriptName, 'installed', type);
 
     return font;
   }

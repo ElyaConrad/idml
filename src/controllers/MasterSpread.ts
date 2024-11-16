@@ -1,5 +1,5 @@
 import { parseXML } from 'flat-svg';
-import { createIDMLTransform, ensureBoolean, ensureNumber, ensurePropertyArray, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement } from '../helpers.js';
+import { createIDMLTransform, ensureBoolean, ensureNumber, ensurePropertyArray, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement, TransformMatrix } from '../helpers.js';
 import { GeometricBounds, Transform } from '../types/index.js';
 import { GridDataInformation } from './GridDataInformation.js';
 import { IDMLMasterSpreadPackageContext } from './MasterSpreadPackage.js';
@@ -11,7 +11,7 @@ export type CreateMasterSpreadOptions = {
   namePrefix?: string;
   baseName?: string;
   pageGeometricBounds?: GeometricBounds;
-  pageItemTransform?: Transform;
+  pageItemTransform?: TransformMatrix;
   pageColor?: string;
 };
 
@@ -21,7 +21,7 @@ export class MasterSpread {
   //   private pageCount: number;
   private overridenPageItemProps: string[];
   private primaryTextFrame: string;
-  public itemTransform: Transform;
+  public itemTransform: TransformMatrix;
   private pageColor: string;
   private name: string;
   private namePrefix: string;
@@ -36,7 +36,7 @@ export class MasterSpread {
       //   pageCount: number;
       overridenPageItemProps: string[];
       primaryTextFrame: string;
-      itemTransform: Transform;
+      itemTransform: TransformMatrix;
       pageColor: string;
     },
     private context: IDMLMasterSpreadPackageContext
@@ -61,7 +61,7 @@ export class MasterSpread {
         PageCount: this.pages.length,
         OverridenPageItemProps: this.overridenPageItemProps.join(', '),
         PrimaryTextFrame: this.primaryTextFrame,
-        ItemTransform: createIDMLTransform(this.itemTransform).join(' '),
+        ItemTransform: this.itemTransform.join(' '),
         PageColor: this.pageColor,
         BaseName: this.baseName,
       },
@@ -126,7 +126,7 @@ export class MasterSpread {
       // Get an ID for the page
       const id = context.idml.getUniqueID('Page');
       const geometricBounds = _.cloneDeep(opts.pageGeometricBounds ?? masterSpreadPage.geometricBounds);
-      const itemTransform = { translateX: -geometricBounds.width / 2, translateY: -geometricBounds.height / 2, scaleX: 1, scaleY: 1, rotate: 0 };
+      const itemTransform: TransformMatrix = [1, 0, 0, 1, -geometricBounds.width / 2, -geometricBounds.height / 2];
       return new Page(
         id,
         {

@@ -251,6 +251,8 @@ export class IDML extends EventTarget {
   }
 
   assumeCharacterStyle(characterStyle: CharacterStyleInput | string) {
+    console.log('!!! assumeCharacterStyle !!!', characterStyle);
+
     if (typeof characterStyle === 'string') {
       const existingCharacterStyle = this.getCharacterStyleById(characterStyle);
       if (!existingCharacterStyle) {
@@ -519,7 +521,7 @@ export function createIDML(opts: CreateIDMLOptions) {
     const idml = new IDML(IDML_PLAIN_BUFFER);
     idml.addEventListener('ready', async () => {
       idml.masterSpreadPackages[0].masterSpread.pages[0].geometricBounds = opts.pageGeometricBounds;
-      idml.masterSpreadPackages[0].masterSpread.pages[0].itemTransform = { translateX: -opts.pageGeometricBounds.width / 2, translateY: -opts.pageGeometricBounds.height / 2, scaleX: 1, scaleY: 1, rotate: 0 };
+      idml.masterSpreadPackages[0].masterSpread.pages[0].itemTransform = [1, 0, 0, 1, -opts.pageGeometricBounds.width / 2, -opts.pageGeometricBounds.height / 2];
       idml.createSpread();
       resolve(idml);
     });

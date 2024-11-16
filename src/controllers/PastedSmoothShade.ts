@@ -1,4 +1,4 @@
-import { createIDMLTransform, ensureBoolean, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement } from '../helpers.js';
+import { createIDMLTransform, ensureBoolean, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement, TransformMatrix } from '../helpers.js';
 import { Transform } from '../types/index.js';
 import { KeyMap } from '../util/keyMap.js';
 import { IDMLGraphicContext } from './Graphic.js';
@@ -27,7 +27,7 @@ export class PastedSmoothShade {
   private contentsVersion: number;
   private contentsType: PastedSmoothShadeContentsType;
   private contentsEncoding: PastedSmoothShadeContentsEndcoding;
-  private transform: Transform;
+  private transform: TransformMatrix;
   private editable: boolean;
   private removable: boolean;
   private visible: boolean;
@@ -41,7 +41,7 @@ export class PastedSmoothShade {
       contentsVersion: number;
       contentsType: PastedSmoothShadeContentsType;
       contentsEncoding: PastedSmoothShadeContentsEndcoding;
-      transform: Transform;
+      transform: TransformMatrix;
       editable: boolean;
       removable: boolean;
       visible: boolean;
@@ -69,7 +69,7 @@ export class PastedSmoothShade {
         ContentVersion: this.contentsVersion,
         ContentsType: contentsTypeMap.getExternal(this.contentsType),
         ContentsEncoding: contentsEncodingMap.getExternal(this.contentsEncoding),
-        Transform: createIDMLTransform(this.transform).join(' '),
+        Transform: this.transform.join(' '),
         ColorEditable: this.editable,
         ColorRemovable: this.removable,
         Visible: this.visible,

@@ -3,6 +3,7 @@
 // export { TextFrame } from './controllers/sprites/TextFrame.js';
 
 export * from './idml.js';
+export * from './svg2idml.js';
 
 // import { unzip } from 'unzipit';
 // import { IDMLGraphicController } from './controllers/Graphic.js';

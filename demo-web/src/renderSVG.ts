@@ -250,18 +250,22 @@ export async function cropToVisibleBBox(arrayBuffer: ArrayBuffer, bbox: { left: 
   });
 }
 
-export function cropVisibleImage(imageData: ArrayBuffer) {
-  console.log('!');
-
-  //   const bbox = getVisibleBBox(image);
-  //   if (!bbox) {
-  //     return undefined;
-  //   }
-  //   return {
-  //     left: bbox.left,
-  //     top: bbox.top,
-  //     width: bbox.width,
-  //     height: bbox.height,
-  //     buffer: cropImage(image, bbox),
-  //   };
+export async function rasterize(svg: SVGSVGElement) {
+  const ab = await renderSVG(svg);
+  const visibleBBox = await getVisibleBBox(ab);
+  if (!visibleBBox) {
+    console.error('Failed to get visible bbox');
+    return undefined;
+  }
+  return {
+    left: visibleBBox?.left,
+    top: visibleBBox?.top,
+    width: visibleBBox?.width,
+    height: visibleBBox?.height,
+    buffer: await cropToVisibleBBox(ab, visibleBBox),
+  };
+}
+export async function applyColorMatrix(data: ArrayBuffer, matrix: ColorMatrix) {
+  // Nothing to do since canvas API renders SVG with filters already
+  return data;
 }

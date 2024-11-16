@@ -1,4 +1,4 @@
-import { createIDMLGeometricBounds, createIDMLTransform, ensureArray, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLGeometricBounds, parseIDMLTransform, serializeElement } from '../helpers.js';
+import { createIDMLGeometricBounds, createIDMLTransform, ensureArray, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLGeometricBounds, parseIDMLTransform, serializeElement, TransformMatrix } from '../helpers.js';
 import { KeyMap } from '../util/keyMap.js';
 import { makeElementNode } from 'flat-svg';
 import { GridDataInformation } from './GridDataInformation.js';
@@ -40,9 +40,9 @@ const gridStartingPointMap = new KeyMap({
 export class Page {
   public name?: string;
   public pageColor?: string;
-  public masterPageTransform?: Transform;
+  public masterPageTransform?: TransformMatrix;
   public geometricBounds: GeometricBounds;
-  public itemTransform: Transform;
+  public itemTransform: TransformMatrix;
   public gridStartingPoint?: GridStartingPoint;
   public optionalPage?: boolean;
 
@@ -55,9 +55,9 @@ export class Page {
     opts: {
       name?: string;
       pageColor?: string;
-      masterPageTransform?: Transform;
+      masterPageTransform?: TransformMatrix;
       geometricBounds: GeometricBounds;
-      itemTransform: Transform;
+      itemTransform: TransformMatrix;
       gridStartingPoint?: GridStartingPoint;
       optionalPage?: boolean;
       marginPreference: MarginPreference;
@@ -81,9 +81,9 @@ export class Page {
       {
         Name: this.name,
         PageColor: this.pageColor,
-        MasterPageTransform: this.masterPageTransform ? createIDMLTransform(this.masterPageTransform).join(' ') : undefined,
+        MasterPageTransform: this.masterPageTransform ? this.masterPageTransform.join(' ') : undefined,
         GeometricBounds: this.geometricBounds ? createIDMLGeometricBounds(this.geometricBounds).join(' ') : undefined,
-        ItemTransform: this.itemTransform ? createIDMLTransform(this.itemTransform).join(' ') : undefined,
+        ItemTransform: this.itemTransform ? this.itemTransform.join(' ') : undefined,
         GridStartingPoint: gridStartingPointMap.getExternal(this.gridStartingPoint),
         OptionalPage: this.optionalPage,
       },

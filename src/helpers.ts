@@ -2,13 +2,24 @@ import { getElementAttributes, makeElementNode, makeTextNode, XMLNode } from 'fl
 import { GeometricBounds, Transform } from './types';
 
 export type TransformMatrix = [number, number, number, number, number, number];
-export const IdentityTransformMatrix = [1, 0, 0, 1, 0, 0];
+export const IdentityTransformMatrix = [1, 0, 0, 1, 0, 0] as TransformMatrix;
+
+export function parseIDMLTransform(str: string | undefined) {
+  if (!str) {
+    return IdentityTransformMatrix;
+  } else {
+    return str
+      .split(' ')
+      .map(ensureNumber)
+      .filter((n) => n !== undefined) as TransformMatrix;
+  }
+}
 
 export function normalizeTransformMatrixForGivenOrigin(
   matrix: TransformMatrix, // [a, b, c, d, e, f]
   [originX, originY]: [number, number],
   [internalOriginX, internalOriginY]: [number, number]
-) {
+): TransformMatrix {
   // Extrahiere die Matrix-Komponenten
   const [a, b, c, d, e, f] = matrix;
 
@@ -61,20 +72,8 @@ export function ensureArray(value: string | null | undefined) {
     .filter((n) => n !== undefined);
 }
 
-export function parseIDMLTransform(transformString: string | undefined): Transform {
-  if (!transformString) {
-    return {
-      translateX: 0,
-      translateY: 0,
-      scaleX: 1,
-      scaleY: 1,
-      rotate: 0,
-    };
-  }
-  const [a, b, c, d, e, f] = transformString
-    .split(' ')
-    .map(ensureNumber)
-    .filter((n) => n !== undefined);
+export function cssifyIDMLTransform(transformMatrix: TransformMatrix): Transform {
+  const [a, b, c, d, e, f] = transformMatrix;
   const scaleX = Math.sqrt(a * a + b * b);
   const scaleY = Math.sqrt(c * c + d * d);
   const rotate = Math.atan2(b, a);
@@ -107,8 +106,8 @@ export function parseIDMLGeometricBounds(geometricBoundsString: string | undefin
     return {
       x: bounds[0],
       y: bounds[1],
-      width: bounds[2],
-      height: bounds[3],
+      width: bounds[3],
+      height: bounds[2],
     };
   }
 }

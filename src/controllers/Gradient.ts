@@ -1,4 +1,4 @@
-import { createIDMLTransform, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement } from '../helpers.js';
+import { createIDMLTransform, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement, TransformMatrix } from '../helpers.js';
 import { makeElementNode } from 'flat-svg';
 import { KeyMap } from '../util/keyMap.js';
 import { IDMLGraphicContext } from './Graphic.js';
@@ -19,7 +19,7 @@ const gradienTypeMap = new KeyMap({
 export class Gradient {
   private length?: number;
   private angle?: number;
-  private transform: Transform;
+  private transform: TransformMatrix;
   constructor(
     private id: string,
     private type: GradientType,
@@ -27,7 +27,7 @@ export class Gradient {
     options: {
       length?: number;
       angle?: number;
-      transform: Transform;
+      transform: TransformMatrix;
     },
     private context: IDMLGraphicContext
   ) {
@@ -42,7 +42,7 @@ export class Gradient {
         GradientType: gradienTypeMap.getExternal(this.type),
         Length: this.length,
         Angle: this.angle,
-        GradientTransform: createIDMLTransform(this.transform).join(' '),
+        GradientTransform: this.transform.join(' '),
       },
       this.id,
       this.context.graphicRoot,

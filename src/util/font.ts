@@ -1,4 +1,5 @@
 import * as opentype from 'opentype.js';
+import * as fontkit from 'fontkit';
 
 export function toArrayBuffer(buffer: Buffer) {
   const arrayBuffer = new ArrayBuffer(buffer.length);
@@ -39,15 +40,20 @@ export function extractFontTable(fontBuffer: ArrayBuffer): FontTable {
   };
 }
 
-export function determineFontType(fontBuffer: ArrayBuffer): string {
-  const font = opentype.parse(fontBuffer);
+// export function determineFontType(fontBuffer: ArrayBuffer): string {
+//   const font = opentype.parse(fontBuffer);
 
-  if (font.tables.cff) {
-    if (font.tables.cff.cidFont) {
-      return 'OpenTypeCID';
-    }
-    return 'OpenType';
-  } else {
-    return 'TrueType';
-  }
+//   if (font.tables.cff) {
+//     if (font.tables.cff.cidFont) {
+//       return 'OpenTypeCID';
+//     }
+//     return 'OpenType';
+//   } else {
+//     return 'TrueType';
+//   }
+// }
+
+export function determineFontType(fontBuffer: ArrayBuffer): string {
+  const font = fontkit.create(new Uint8Array(fontBuffer) as any);
+  return font.type;
 }

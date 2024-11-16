@@ -17,7 +17,6 @@ import { NConfigProvider, NDialogProvider, NMessageProvider } from 'naive-ui';
 // import { onMounted, ref } from 'vue';
 // import download from 'downloadjs';
 // import { IDML } from 'idml';
-import { applyColorMatricesToImage, cropToVisibleBBox, cropVisibleImage, getVisibleBBox, renderSVG } from './renderSVG';
 // console.log(simplifySVG);
 
 // console.log(IDML);

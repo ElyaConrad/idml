@@ -7,6 +7,7 @@ export type CharacterStyleInput = {
   appliedFont?: string;
   fontStyle?: string;
   fontSize?: number;
+  strokeWeight?: number;
   fillColor?: ColorInput;
   strokeColor?: ColorInput;
   underline?: boolean;
@@ -20,6 +21,7 @@ export class CharacterStyle {
   public appliedFont?: string;
   public fontStyle?: string;
   public fontSize?: number;
+  public strokeWeight?: number;
   public fillColorId?: string;
   public strokeColorId?: string;
   public underline?: boolean;
@@ -46,6 +48,7 @@ export class CharacterStyle {
       appliedFont?: string;
       fontStyle?: string;
       fontSize?: number;
+      strokeWeight?: number;
       fillColorId?: string;
       strokeColorId?: string;
       underline?: boolean;
@@ -65,6 +68,7 @@ export class CharacterStyle {
     this.name = opts.name;
     this.appliedFont = opts.appliedFont;
     this.fontStyle = opts.fontStyle;
+    this.strokeWeight = opts.strokeWeight;
     this.fontSize = opts.fontSize;
     this.fillColorId = opts.fillColorId;
     this.strokeColorId = opts.strokeColorId;
@@ -81,6 +85,7 @@ export class CharacterStyle {
       fontSize: this.fontSize,
       fillColor: this.fillColorId ? this.context.idml.getColorById(this.fillColorId)?.toColorInput() : undefined,
       strokeColor: this.strokeColorId ? this.context.idml.getColorById(this.strokeColorId)?.toColorInput() : undefined,
+      strokeWeight: this.strokeWeight,
       tracking: this.tracking,
       leading: this.leading,
       underline: this.underline,
@@ -98,6 +103,7 @@ export class CharacterStyle {
         PointSize: this.fontSize,
         FillColor: this.fillColorId,
         StrokeColor: this.strokeColorId,
+        StrokeWeight: this.strokeWeight,
         Underline: this.underline,
         StrikeThru: this.strikeThrough,
         Tracking: this.tracking,
@@ -139,8 +145,9 @@ export class CharacterStyle {
     const strikeThroughEquals = !!this.strikeThrough === !!input.strikeThrough;
     const trackingEquals = this.tracking === input.tracking;
     const leadingEquals = this.leading === input.leading;
+    const strokeWeightEquals = this.strokeWeight === input.strokeWeight;
 
-    return appliedFontEquals && fontStyleEquals && fontSizeEquals && fillColorEquals && strokeColorEquals && underlineEquals && strikeThroughEquals && trackingEquals && leadingEquals;
+    return appliedFontEquals && fontStyleEquals && fontSizeEquals && fillColorEquals && strokeColorEquals && underlineEquals && strikeThroughEquals && trackingEquals && leadingEquals && strokeWeightEquals;
   }
   static parseElement(element: Element, context: IDMLStylesContext) {
     const rootCharacterStyleGroupId = element.parentElement?.getAttribute('Self') ?? undefined;
@@ -165,6 +172,7 @@ export class CharacterStyle {
     const fontSize = ensureNumber(props.PointSize);
     const fillColorId = props.FillColor;
     const strokeColorId = props.StrokeColor;
+    const strokeWeight = ensureNumber(props.StrokeWeight);
     const underline = ensureBoolean(props.Underline);
     const strikeThrough = ensureBoolean(props.StrikeThru);
     const tracking = ensureNumber(props.Tracking);
@@ -185,6 +193,7 @@ export class CharacterStyle {
         fontSize,
         fillColorId,
         strokeColorId,
+        strokeWeight,
         underline,
         strikeThrough,
         tracking,

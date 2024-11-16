@@ -131,9 +131,11 @@ idml.addEventListener('ready', async () => {
           features: [
             {
               characterStyle: {
-                appliedFont: 'Montserrat',
-                fontStyle: 'Black',
+                appliedFont: 'Anybody SemiBold',
+                // fontStyle: 'Black',
                 fontSize: 20,
+                strokeWeight: 0,
+                fillColor: { type: 'rgb', red: 0, green: 0, blue: 255 },
               },
               content: 'I was created manually :)',
             },

@@ -1,4 +1,4 @@
-import { createIDMLTransform, ensureBoolean, flattenIDMLProperties, getIDMLElementProperties, normalizeTransformForGivenOrigin, parseIDMLTransform, serializeElement, TransformMatrix } from '../helpers.js';
+import { createIDMLTransform, cssifyIDMLTransform, ensureBoolean, flattenIDMLProperties, getIDMLElementProperties, IdentityTransformMatrix, normalizeTransformForGivenOrigin, parseIDMLTransform, serializeElement, TransformMatrix } from '../helpers.js';
 import _ from 'lodash';
 import { Page } from './Page.js';
 import { IDMLSpreadPackageContext } from './SpreadPackage.js';
@@ -22,7 +22,7 @@ export type FlattenerPreference = {
 
 export class Spread {
   private hidden?: boolean;
-  private itemTransform?: Transform;
+  private itemTransform?: TransformMatrix;
   private flattenerPreference?: FlattenerPreference;
   constructor(
     private id: string,
@@ -30,7 +30,7 @@ export class Spread {
     private sprites: Sprite[],
     opts: {
       hidden?: boolean;
-      itemTransform?: Transform;
+      itemTransform?: TransformMatrix;
       flattenerPreference?: FlattenerPreference;
     },
     private context: IDMLSpreadPackageContext
@@ -47,7 +47,7 @@ export class Spread {
       'Spread',
       {
         Hidden: this.hidden,
-        ItemTransform: this.itemTransform ? createIDMLTransform(this.itemTransform).join(' ') : undefined,
+        ItemTransform: this.itemTransform ? this.itemTransform.join(' ') : undefined,
       },
       this.id,
       this.context.spreadPackageRoot,
@@ -214,7 +214,7 @@ export class Spread {
     return page.itemTransform;
   }
   get pageRelatedTransformOrigin() {
-    const { translateX, translateY } = this.pageRelatedItemTransform;
+    const [, , , , translateX, translateY] = this.pageRelatedItemTransform;
     return [-translateX, -translateY] as [number, number];
   }
   getSprites() {
@@ -226,22 +226,22 @@ export class Spread {
   }
 
   relativeCoords(x: number, y: number) {
-    const { translateX, translateY } = this.pageRelatedItemTransform;
+    const [, , , , translateX, translateY] = this.pageRelatedItemTransform;
     return [x + translateX, y + translateY] as [number, number];
   }
   normalizeCoords(x: number, y: number) {
-    const { translateX, translateY } = this.pageRelatedItemTransform;
+    const [, , , , translateX, translateY] = this.pageRelatedItemTransform;
     return [x - translateX, y - translateY] as [number, number];
   }
-  // matrixifyCSSTransform(transform: Transform, origin: [number, number]) {
-  //   return createIDMLTransform(normalizeTransformForGivenOrigin(transform, origin, this.pageRelatedTransformOrigin));
-  // }
-  // cssifyMatrixTransform(matrix: TransformMatrix, origin: [number, number]) {
-  //   return normalizeTransformForGivenOrigin(normalizeIDMLTransform(matrix), this.pageRelatedTransformOrigin, origin);
-  // }
+  matrixifyCSSTransform(transform: Transform, origin: [number, number]) {
+    return createIDMLTransform(normalizeTransformForGivenOrigin(transform, origin, this.pageRelatedTransformOrigin));
+  }
+  cssifyTransformMatrix(matrix: TransformMatrix, origin: [number, number]) {
+    return normalizeTransformForGivenOrigin(cssifyIDMLTransform(matrix), this.pageRelatedTransformOrigin, origin);
+  }
   createGroup(
     opts: {
-      transform?: Transform;
+      transform?: TransformMatrix;
     },
     targetGroup?: GroupSprite
   ) {
@@ -251,7 +251,7 @@ export class Spread {
       id,
       [],
       {
-        itemTransform: opts.transform ?? { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 },
+        itemTransform: opts.transform ?? IdentityTransformMatrix,
       },
       this.context
     );
@@ -264,7 +264,7 @@ export class Spread {
 
     return group;
   }
-  createTextFrame(opts: { x: number; y: number; width: number; height: number; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: Transform; opacity?: number; dropShadow?: DropShadowInput; paragraphs: ParagraphInput[] }, targetSprite?: SpriteWithChildren) {
+  createTextFrame(opts: { x: number; y: number; width: number; height: number; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: TransformMatrix; opacity?: number; dropShadow?: DropShadowInput; paragraphs: ParagraphInput[] }, targetSprite?: SpriteWithChildren) {
     const pathPoints: PathPoint[] = [this.relativeCoords(opts.x, opts.y), this.relativeCoords(opts.x + opts.width, opts.y), this.relativeCoords(opts.x + opts.width, opts.y + opts.height), this.relativeCoords(opts.x, opts.y + opts.height)].map(([x, y]) => {
       return {
         anchor: [x, y],
@@ -296,6 +296,8 @@ export class Spread {
 
     const parentStory = this.context.idml.createStory(opts.paragraphs);
 
+    console.log('CREATING text frame...', opts);
+
     const textFrame = new TextFrame(
       id,
       parentStory.id,
@@ -316,7 +318,7 @@ export class Spread {
         gradientStrokeStart: [0, 0],
         gradientStrokeLength: 0,
         gradientStrokeAngle: 0,
-        itemTransform: opts.transform ?? { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 },
+        itemTransform: opts.transform ?? IdentityTransformMatrix,
         storyTitle: '$ID/',
         pathGeometry: [
           {
@@ -412,7 +414,7 @@ export class Spread {
       {
         appliedObjectStyleId: 'ObjectStyle/$ID/[None]',
         //contentType: 'GraphicType',
-        itemTransform: { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 },
+        itemTransform: IdentityTransformMatrix,
         pathGeometry: [],
         textWrapPreference: {
           sourceElement: parseXML(`<TextWrapPreference Inverse="false" ApplyToMasterPageOnly="false" TextWrapSide="BothSides" TextWrapMode="None"><Properties><TextWrapOffset Top="0" Left="0" Bottom="0" Right="0" /></Properties></TextWrapPreference>`),
@@ -429,7 +431,7 @@ export class Spread {
     }
     return image;
   }
-  createPolygon(opts: { paths: PathCommand[][]; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: Transform; opacity?: number; dropShadow?: DropShadowInput }, targetSprite?: SpriteWithChildren) {
+  createPolygon(opts: { paths: PathCommand[][]; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: TransformMatrix; opacity?: number; dropShadow?: DropShadowInput }, targetSprite?: SpriteWithChildren) {
     const pathGeometry = PolygonSprite.getPathsFromCommands(opts.paths).map<PathGeometry>(({ pathPoints, open }) => {
       return {
         geometryPathType: 'normalPath',
@@ -485,7 +487,7 @@ export class Spread {
         gradientStrokeStart: [0, 0],
         gradientStrokeLength: 0,
         gradientStrokeAngle: 0,
-        itemTransform: opts.transform ?? { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 },
+        itemTransform: opts.transform ?? IdentityTransformMatrix,
         storyTitle: '$ID/',
         pathGeometry,
         frameFittingOption: {
@@ -513,7 +515,7 @@ export class Spread {
 
     return polygon;
   }
-  createRectangle(opts: { x: number; y: number; width: number; height: number; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: Transform; opacity?: number; dropShadow?: DropShadowInput }, targetSprite?: SpriteWithChildren) {
+  createRectangle(opts: { x: number; y: number; width: number; height: number; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: TransformMatrix; opacity?: number; dropShadow?: DropShadowInput }, targetSprite?: SpriteWithChildren) {
     const pathPoints: PathPoint[] = [this.relativeCoords(opts.x, opts.y), this.relativeCoords(opts.x + opts.width, opts.y), this.relativeCoords(opts.x + opts.width, opts.y + opts.height), this.relativeCoords(opts.x, opts.y + opts.height)].map(([x, y]) => {
       return {
         anchor: [x, y],
@@ -562,7 +564,7 @@ export class Spread {
         gradientStrokeStart: [0, 0],
         gradientStrokeLength: 0,
         gradientStrokeAngle: 0,
-        itemTransform: opts.transform ?? { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 },
+        itemTransform: opts.transform ?? IdentityTransformMatrix,
         storyTitle: '$ID/',
         pathGeometry: [
           {
@@ -594,7 +596,7 @@ export class Spread {
     }
     return rectangle;
   }
-  createOval(opts: { x: number; y: number; radiusX: number; radiusY: number; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: Transform; opacity?: number; dropShadow?: DropShadowInput }, targetSprite?: SpriteWithChildren) {
+  createOval(opts: { x: number; y: number; radiusX: number; radiusY: number; fill?: ColorInput | string; stroke?: ColorInput | string; strokeWeight?: number; transform?: TransformMatrix; opacity?: number; dropShadow?: DropShadowInput }, targetSprite?: SpriteWithChildren) {
     const [x, y] = this.relativeCoords(opts.x, opts.y);
     const pathPoints = OvalSprite.calculateEllipsePathPoints(x - opts.radiusX, y - opts.radiusY, opts.radiusX, opts.radiusY);
 
@@ -638,7 +640,7 @@ export class Spread {
         gradientStrokeStart: [0, 0],
         gradientStrokeLength: 0,
         gradientStrokeAngle: 0,
-        itemTransform: opts.transform ?? { translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotate: 0 },
+        itemTransform: opts.transform ?? IdentityTransformMatrix,
         storyTitle: '$ID/',
         pathGeometry: [
           {
