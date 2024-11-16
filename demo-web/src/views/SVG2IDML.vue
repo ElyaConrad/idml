@@ -93,7 +93,7 @@ const triggerSVG2IDML = async () => {
       return data;
     },
     {
-      vectorizeAllTexts: true,
+      vectorizeAllTexts: false,
       keepGroupTransforms: false,
     }
   );
