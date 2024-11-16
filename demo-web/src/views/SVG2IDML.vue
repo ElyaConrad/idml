@@ -89,6 +89,7 @@ const triggerSVG2IDML = async () => {
       };
     },
     async function applyColorMatrix(data, matrix) {
+      matrix;
       // Nothing to do since canvas API renders SVG with filters already
       return data;
     },
