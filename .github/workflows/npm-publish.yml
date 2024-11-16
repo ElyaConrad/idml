@@ -44,11 +44,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - name: Install latest zoompinch
-        run: npm install zoompinch@latest
+      - name: Install latest idml
+        run: npm install idml@latest
         working-directory: demo-web
       - name: test installed version
-        run: cat package.json | grep -e '"zoompinch":'
+        run: cat package.json | grep -e '"idml":'
         working-directory: demo-web
       - name: Build demo-web
         run: npm run build
