@@ -266,6 +266,7 @@ export async function rasterize(svg: SVGSVGElement) {
   };
 }
 export async function applyColorMatrix(data: ArrayBuffer, matrix: ColorMatrix) {
+  matrix;
   // Nothing to do since canvas API renders SVG with filters already
   return data;
 }

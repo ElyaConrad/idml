@@ -1,8 +1,6 @@
-import { createRouter, createWebHistory, createWebHashHistory } from 'vue-router';
+import { createRouter, createWebHistory } from 'vue-router';
 import SVG2IDML from './views/SVG2IDML.vue';
 import FlatSVG from './views/FlatSVG.vue';
-
-import { useDialog } from 'naive-ui';
 
 const routes = [
   {

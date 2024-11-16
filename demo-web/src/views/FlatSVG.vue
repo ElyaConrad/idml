@@ -67,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { NUpload, NUploadDragger, NP, NText, NIcon, NCard, NCheckbox, NScrollbar, NButton, NSpace, type UploadFileInfo } from 'naive-ui';
+import { NUpload, NUploadDragger, NP, NText, NIcon, NCard, NCheckbox, NScrollbar, NButton, NSpace } from 'naive-ui';
 import { ArchiveOutline, CodeSlashOutline } from '@vicons/ionicons5';
 import { ref } from 'vue';
 import { cleanupBluepicSVG, simplifySVG } from 'flat-svg';
@@ -118,6 +118,7 @@ async function triggerFlatSVG() {
       };
     },
     async applyColorMatrix(data, matrix) {
+      matrix;
       // Nothing to do since canvas API renders SVG with filters already
       return data;
     },
