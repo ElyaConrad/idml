@@ -117,7 +117,7 @@ async function convertSVG2IDMLPackage(svgRaw: string) {
       })();
       return { name: `${font.fullName}.${ext}`, input: font.data };
     }),
-  ]).arrayBuffer();
+  ]).blob();
 
   return archive;
 }
