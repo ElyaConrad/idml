@@ -55,6 +55,8 @@ import download from 'downloadjs';
 import { svg2idml } from 'idml';
 import { cropToVisibleBBox, getVisibleBBox, renderSVG } from '../renderSVG';
 import { ColorMatrix } from 'flat-svg';
+import { downloadZip } from 'client-zip';
+import { extension } from 'mime-types';
 
 const { file, handleNewFileList, readFile } = useFile();
 
@@ -93,12 +95,40 @@ async function applyColorMatrix(data: ArrayBuffer, matrices: ColorMatrix[]) {
 (window as any).rasterize = rasterize;
 (window as any).applyColorMatrix = applyColorMatrix;
 
+async function convertSVG2IDMLPackage(svgRaw: string) {
+  const doc = new DOMParser().parseFromString(svgRaw, 'image/svg+xml');
+  const { idml, simlifiedSVGDocument, collectedFonts } = await svg2idml(doc, rasterize, applyColorMatrix, {
+    vectorizeAllTexts: false,
+    keepGroupTransforms: false,
+  });
+
+  const archive = await downloadZip([
+    { name: 'file.idml', input: await idml.export() },
+    { name: 'file.svg', input: new XMLSerializer().serializeToString(simlifiedSVGDocument) },
+    ...collectedFonts.map((font) => {
+      const ext = (() => {
+        if (font.src.startsWith('data:')) {
+          const mime = font.src.split(';')[0].split(':')[1];
+          return extension(mime) || 'otf';
+        } else {
+          const url = new URL(font.src);
+          return url.pathname.split('.').pop();
+        }
+      })();
+      return { name: `${font.fullName}.${ext}`, input: font.data };
+    }),
+  ]).arrayBuffer();
+
+  return archive;
+}
+(window as any).convertSVG2IDMLPackage = convertSVG2IDMLPackage;
+
 const triggerSVG2IDML = async () => {
   if (!file) return;
   const svg = await readFile();
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
 
-  const { idml, simlifiedSVGDocument } = await svg2idml(doc, rasterize, applyColorMatrix, {
+  const { idml, simlifiedSVGDocument, collectedFonts } = await svg2idml(doc, rasterize, applyColorMatrix, {
     vectorizeAllTexts: false,
     keepGroupTransforms: false,
   });

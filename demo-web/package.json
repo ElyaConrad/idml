@@ -12,9 +12,11 @@
     "@types/downloadjs": "^1.4.6",
     "@vicons/ionicons5": "^0.12.0",
     "bytes": "^3.1.2",
+    "client-zip": "^2.4.6",
     "downloadjs": "^1.4.7",
     "flat-svg": "^0.0.7",
-    "idml": "^0.0.1",
+    "idml": "^0.0.2",
+    "mime-types": "^2.1.35",
     "naive-ui": "^2.40.1",
     "vue": "^3.5.12",
     "vue-router": "^4.4.5"
@@ -22,6 +24,7 @@
   "devDependencies": {
     "@rollup/plugin-inject": "^5.0.5",
     "@types/bytes": "^3.1.4",
+    "@types/mime-types": "^2.1.4",
     "@vitejs/plugin-vue": "^5.1.4",
     "buffer": "^6.0.3",
     "rollup-plugin-polyfill-node": "^0.13.0",
