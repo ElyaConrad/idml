@@ -124,7 +124,7 @@ export async function svg2idml(
 
   const spread = idml.getSpreads()[0];
 
-  const collectedFonts: { fullName: string; data: ArrayBuffer }[] = [];
+  const collectedFonts: { fullName: string; data: ArrayBuffer; src: string }[] = [];
 
   //   const rect = spread.createRectangle({
   //     x: 20,
@@ -346,7 +346,7 @@ export async function svg2idml(
 
               console.log('FONT TABLE', fontTable);
 
-              collectedFonts.push({ fullName: fontTable.fullName, data: fontFile.buffer });
+              collectedFonts.push({ fullName: fontTable.fullName, data: fontFile.buffer, src: fontSrc });
 
               return {
                 characterStyle: {
