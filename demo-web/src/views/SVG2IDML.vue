@@ -128,7 +128,7 @@ const triggerSVG2IDML = async () => {
   const svg = await readFile();
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
 
-  const { idml, simlifiedSVGDocument, collectedFonts } = await svg2idml(doc, rasterize, applyColorMatrix, {
+  const { idml, simlifiedSVGDocument } = await svg2idml(doc, rasterize, applyColorMatrix, {
     vectorizeAllTexts: false,
     keepGroupTransforms: false,
   });
