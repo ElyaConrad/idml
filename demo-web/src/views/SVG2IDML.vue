@@ -54,6 +54,7 @@ import { useFile } from '../util/fileUpload';
 import download from 'downloadjs';
 import { svg2idml } from 'idml';
 import { cropToVisibleBBox, getVisibleBBox, renderSVG } from '../renderSVG';
+import { ColorMatrix } from 'flat-svg';
 
 const { file, handleNewFileList, readFile } = useFile();
 
@@ -66,38 +67,41 @@ const simplifiedSVGStr = computed(() => {
   return new XMLSerializer().serializeToString(simplifiedSVG.value);
 });
 
+async function rasterize(svg: SVGSVGElement) {
+  const ab = await renderSVG(svg);
+  const visibleBBox = await getVisibleBBox(ab);
+  if (!visibleBBox) {
+    console.error('Failed to get visible bbox');
+    return undefined;
+  }
+  return {
+    left: visibleBBox?.left,
+    top: visibleBBox?.top,
+    width: visibleBBox?.width,
+    height: visibleBBox?.height,
+    buffer: await cropToVisibleBBox(ab, visibleBBox),
+  };
+}
+
+async function applyColorMatrix(data: ArrayBuffer, matrices: ColorMatrix[]) {
+  matrices;
+  // Nothing to do since canvas API renders SVG with filters already
+  return data;
+}
+
+(window as any).svg2idml = svg2idml;
+(window as any).rasterize = rasterize;
+(window as any).applyColorMatrix = applyColorMatrix;
+
 const triggerSVG2IDML = async () => {
   if (!file) return;
   const svg = await readFile();
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
 
-  const { idml, simlifiedSVGDocument } = await svg2idml(
-    doc,
-    async function rasterize(svg) {
-      const ab = await renderSVG(svg);
-      const visibleBBox = await getVisibleBBox(ab);
-      if (!visibleBBox) {
-        console.error('Failed to get visible bbox');
-        return undefined;
-      }
-      return {
-        left: visibleBBox?.left,
-        top: visibleBBox?.top,
-        width: visibleBBox?.width,
-        height: visibleBBox?.height,
-        buffer: await cropToVisibleBBox(ab, visibleBBox),
-      };
-    },
-    async function applyColorMatrix(data, matrix) {
-      matrix;
-      // Nothing to do since canvas API renders SVG with filters already
-      return data;
-    },
-    {
-      vectorizeAllTexts: false,
-      keepGroupTransforms: false,
-    }
-  );
+  const { idml, simlifiedSVGDocument } = await svg2idml(doc, rasterize, applyColorMatrix, {
+    vectorizeAllTexts: false,
+    keepGroupTransforms: false,
+  });
   simplifiedSVG.value = simlifiedSVGDocument;
 
   idmlResult.value = new Blob([await idml.export()], { type: 'application/vnd.adobe.indesign-idml-package' });
