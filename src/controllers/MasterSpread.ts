@@ -20,7 +20,7 @@ export class MasterSpread {
   private showMasterItems: boolean;
   //   private pageCount: number;
   private overridenPageItemProps: string[];
-  private primaryTextFrame: string;
+  private primaryTextFrame?: string;
   public itemTransform: TransformMatrix;
   private pageColor: string;
   private name: string;
@@ -35,7 +35,7 @@ export class MasterSpread {
       showMasterItems: boolean;
       //   pageCount: number;
       overridenPageItemProps: string[];
-      primaryTextFrame: string;
+      primaryTextFrame?: string;
       itemTransform: TransformMatrix;
       pageColor: string;
     },
@@ -94,9 +94,11 @@ export class MasterSpread {
     }
     const showMasterItems = ensureBoolean(props['ShowMasterItems'] as string);
     const overridenPageItemProps = ensurePropertyArray(props['OverridenPageItemProps'] as string);
-    const primaryTextFrame = props['PrimaryTextFrame'] as string;
+    const primaryTextFrame = props['PrimaryTextFrame'] as string | undefined;
     if (!primaryTextFrame) {
-      throw new Error('MasterSpread element missing PrimaryTextFrame property');
+      console.log('lümmel!');
+      
+      //throw new Error('MasterSpread element missing PrimaryTextFrame property');
     }
     const itemTransform = parseIDMLTransform(props['ItemTransform'] as string);
 

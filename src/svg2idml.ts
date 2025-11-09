@@ -124,7 +124,7 @@ export async function svg2idml(
 
   const spread = idml.getSpreads()[0];
 
-  const collectedFonts: { fullName: string; data: ArrayBuffer; src: string }[] = [];
+  const collectedFonts: { fullName: string; data: ArrayBufferLike; src: string }[] = [];
 
   //   const rect = spread.createRectangle({
   //     x: 20,

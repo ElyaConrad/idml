@@ -19,7 +19,7 @@ export interface FontTable {
   italic: boolean;
 }
 
-export function extractFontTable(fontBuffer: ArrayBuffer): FontTable {
+export function extractFontTable(fontBuffer: ArrayBufferLike): FontTable {
   const font = opentype.parse(fontBuffer);
 
   const fontFamily = font.names.fontFamily.en; // Englischer Name
@@ -53,7 +53,7 @@ export function extractFontTable(fontBuffer: ArrayBuffer): FontTable {
 //   }
 // }
 
-export function determineFontType(fontBuffer: ArrayBuffer): string {
+export function determineFontType(fontBuffer: ArrayBufferLike): string {
   const font = fontkit.create(new Uint8Array(fontBuffer) as any);
   return font.type;
 }
