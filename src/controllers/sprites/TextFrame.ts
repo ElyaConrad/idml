@@ -25,6 +25,9 @@ export class TextFrame extends GeometricSprite {
 
     this.textFramePreference = opts.textFramePreference;
   }
+  getDefaultFillColor() {
+    return this.context.idml.getColorById('Color/Black');
+  }
   getBBox() {
     return this.getGeometricBounds();
   }
@@ -40,6 +43,7 @@ export class TextFrame extends GeometricSprite {
   getStory() {
     return this.context.idml.getStoryById(this.parentStoryId);
   }
+
   serialize() {
     const baseElement = this.serializeGeometricSprite();
     baseElement.attributes = {

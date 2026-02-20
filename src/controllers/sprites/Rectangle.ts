@@ -19,6 +19,9 @@ export class RectangleSprite extends GeometricSprite {
     ] as [number, number][];
     this.setPaths([{ open: false, pathPoints: path.map((point) => ({ anchor: point, leftDirection: point, rightDirection: point })) }]);
   }
+  getSprites() {
+    return this.sprites;
+  }
   addSprite(sprite: Sprite) {
     this.sprites.push(sprite);
   }

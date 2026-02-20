@@ -1,5 +1,3 @@
-// import png from 'pngjs';
-// import { cropImage, getVisibleBBox } from './util/png';
 function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
   const [metadata, data] = dataUrl.split(',');
 
@@ -17,40 +15,103 @@ function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
   return buffer;
 }
 
-export function renderSVG(svg: SVGElement) {
-  const viewBox = svg
-    .getAttribute('viewBox')
-    ?.split(' ')
-    .map((v) => parseFloat(v)) ?? [0, 0, 100, 100];
+async function ensureAllImagesLoaded(svg: SVGElement): Promise<void> {
+  const images = Array.from(svg.querySelectorAll('image'));
 
-  return new Promise<ArrayBuffer>((resolve, reject) => {
-    const canvas = document.createElement('canvas');
-    canvas.style.position = 'absolute';
-    canvas.style.top = '-1000%';
-    canvas.style.left = '-1000%';
-
-    document.body.appendChild(canvas);
-    canvas.width = viewBox[2];
-    canvas.height = viewBox[3];
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      return reject(new Error('Failed to get 2d context'));
+  const loadPromises = images.map((image) => {
+    const href = image.getAttributeNS('http://www.w3.org/1999/xlink', 'href') || image.getAttribute('href');
+    if (href?.startsWith('data:')) {
+      return new Promise<void>((resolve, reject) => {
+        const img = new Image();
+        img.src = href;
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error(`Fehler beim Laden des Bildes: ${href}`));
+      });
     }
+    return Promise.resolve(); // Falls kein Bild oder externe Quelle
+  });
 
-    const svgString = new XMLSerializer().serializeToString(svg);
-    const image = new Image();
-    image.src = `data:image/svg+xml;base64,${btoa(svgString)}`;
-    image.addEventListener('load', () => {
-      ctx.drawImage(image, 0, 0);
-      const buffer = dataUrlToArrayBuffer(canvas.toDataURL('image/png'));
-      document.body.removeChild(canvas);
-      resolve(buffer);
+  await Promise.all(loadPromises);
+}
+
+export function renderSVG(
+  svg: SVGElement,
+  type: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/jpge',
+  resultType: 'arrayBuffer',
+  svgLoadWaitDelay?: number
+): Promise<ArrayBuffer>;
+export function renderSVG(
+  svg: SVGElement,
+  type: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/jpge',
+  resultType: 'blob',
+  svgLoadWaitDelay?: number
+): Promise<Blob>;
+export function renderSVG(
+  svg: SVGElement,
+  type: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/jpge' = 'image/png',
+  resultType: 'arrayBuffer' | 'blob' = 'arrayBuffer',
+  svgLoadWaitDelay = 150
+) {
+  return ensureAllImagesLoaded(svg).then(() => {
+    return new Promise<ArrayBuffer | Blob>((resolve, reject) => {
+      const viewBox = svg
+        .getAttribute('viewBox')
+        ?.split(' ')
+        .map((v) => parseFloat(v)) ?? [0, 0, 100, 100];
+
+        console.log('viewBox', viewBox);
+
+        if (svg.getAttribute('width') === null) {
+          svg.setAttribute('width', String(viewBox[2]));
+        }
+        if (svg.getAttribute('height') === null) {
+          svg.setAttribute('height', String(viewBox[3]));
+        }
+
+      const canvas = document.createElement('canvas');
+      canvas.style.position = 'absolute';
+      canvas.style.top = '-1000%';
+      canvas.style.left = '-1000%';
+
+      document.body.appendChild(canvas);
+      canvas.width = viewBox[2];
+      canvas.height = viewBox[3];
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        return reject(new Error('Failed to get 2d context'));
+      }
+
+      const svgString = new XMLSerializer().serializeToString(svg);
+      const image = new Image();
+
+      image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString)
+      image.addEventListener('load', async () => {
+        await new Promise((resolve) => setTimeout(resolve, svgLoadWaitDelay));
+        ctx.drawImage(image, 0, 0);
+        if (resultType === 'arrayBuffer') {
+          const buffer = dataUrlToArrayBuffer(canvas.toDataURL(type));
+          resolve(buffer);
+          document.body.removeChild(canvas);
+        } else {
+          canvas.toBlob((blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              reject(new Error('Failed to convert canvas to blob'));
+            }
+            document.body.removeChild(canvas);
+          }, type);
+        }
+      });
     });
   });
 }
 type ColorMatrix = number[];
-function applyColorMatrixToColor({ r, g, b, a }: { r: number; g: number; b: number; a: number }, matrix: ColorMatrix): { r: number; g: number; b: number; a: number } {
+export function applyColorMatrixToColor(
+  { r, g, b, a }: { r: number; g: number; b: number; a: number },
+  matrix: ColorMatrix
+): { r: number; g: number; b: number; a: number } {
   const newR = matrix[0] * r + matrix[1] * g + matrix[2] * b + matrix[3] * a + matrix[4] * 255;
   const newG = matrix[5] * r + matrix[6] * g + matrix[7] * b + matrix[8] * a + matrix[9] * 255;
   const newB = matrix[10] * r + matrix[11] * g + matrix[12] * b + matrix[13] * a + matrix[14] * 255;
@@ -125,7 +186,9 @@ export async function applyColorMatricesToImage(imageData: ArrayBuffer, matrices
   });
 }
 
-export async function getVisibleBBox(arrayBuffer: ArrayBuffer): Promise<{ left: number; top: number; width: number; height: number } | undefined> {
+export async function getVisibleBBox(
+  arrayBuffer: ArrayBuffer
+): Promise<{ left: number; top: number; width: number; height: number } | undefined> {
   return new Promise((resolve, reject) => {
     // Erstelle ein Blob aus dem ArrayBuffer und setze es als Quelle für ein Image-Element
     const blob = new Blob([arrayBuffer], { type: 'image/png' });
@@ -147,21 +210,17 @@ export async function getVisibleBBox(arrayBuffer: ArrayBuffer): Promise<{ left: 
       const imageData = ctx.getImageData(0, 0, img.width, img.height);
       const { data, width, height } = imageData;
 
-      // Variablen für die Bounding-Box der sichtbaren (nicht transparenten) Bereiche
       let minX = width,
         minY = height,
         maxX = 0,
         maxY = 0;
       let hasVisiblePixel = false;
-
-      // Durchlaufe alle Pixel und finde die Grenzen der sichtbaren Bereiche
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const index = (y * width + x) * 4;
-          const alpha = data[index + 3]; // Alpha-Wert (Transparenz)
+          const alpha = data[index + 3]; 
 
           if (alpha > 0) {
-            // Wenn der Pixel nicht vollständig transparent ist
             hasVisiblePixel = true;
             minX = Math.min(minX, x);
             minY = Math.min(minY, y);
@@ -171,13 +230,11 @@ export async function getVisibleBBox(arrayBuffer: ArrayBuffer): Promise<{ left: 
         }
       }
 
-      // Falls keine sichtbaren Pixel gefunden wurden, gibt es keine Bounding-Box
       if (!hasVisiblePixel) {
         resolve(undefined);
         return;
       }
 
-      // Berechne die Breite und Höhe der sichtbaren Bounding-Box
       const bbox = {
         left: minX,
         top: minY,
@@ -194,7 +251,10 @@ export async function getVisibleBBox(arrayBuffer: ArrayBuffer): Promise<{ left: 
   });
 }
 
-export async function cropToVisibleBBox(arrayBuffer: ArrayBuffer, bbox: { left: number; top: number; width: number; height: number }): Promise<ArrayBuffer> {
+export async function cropToVisibleBBox(
+  arrayBuffer: ArrayBuffer,
+  bbox: { left: number; top: number; width: number; height: number }
+): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
     // Bild laden und auf das Canvas zeichnen
     const blob = new Blob([arrayBuffer], { type: 'image/png' });
@@ -251,7 +311,7 @@ export async function cropToVisibleBBox(arrayBuffer: ArrayBuffer, bbox: { left: 
 }
 
 export async function rasterize(svg: SVGSVGElement) {
-  const ab = await renderSVG(svg);
+  const ab = await renderSVG(svg, 'image/png', 'arrayBuffer');
   const visibleBBox = await getVisibleBBox(ab);
   if (!visibleBBox) {
     console.error('Failed to get visible bbox');
@@ -265,8 +325,7 @@ export async function rasterize(svg: SVGSVGElement) {
     buffer: await cropToVisibleBBox(ab, visibleBBox),
   };
 }
-export async function applyColorMatrix(data: ArrayBuffer, matrix: ColorMatrix) {
-  matrix;
+export async function applyColorMatrix(data: ArrayBuffer, matrices: ColorMatrix[]) {
   // Nothing to do since canvas API renders SVG with filters already
   return data;
 }

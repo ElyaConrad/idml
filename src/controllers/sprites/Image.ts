@@ -4,7 +4,7 @@ import { Spread } from '../Spread.js';
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
 import { GeometricSprite, GeometricSpriteOpts } from './GeometricSprite.js';
 import { Sprite } from './Sprite.js';
-import imageType from 'image-type';
+import {fileTypeFromBuffer} from 'file-type';
 import { arrayBufferToBase64, base64ToArrayBuffer } from '../../util/arrayBuffer.js';
 
 export type GraphicBounds = {
@@ -23,21 +23,12 @@ export class ImageSprite extends GeometricSprite {
     this.contents = contents;
     this.graphicBounds = graphicBounds;
   }
-  // getBBox() {
-  //   return this.getGeometricBounds();
-  // }
-  // setBBox(x: number, y: number, width: number, height: number) {
-  //   const path = [
-  //     [x, y],
-  //     [x + width, y],
-  //     [x + width, y + height],
-  //     [x, y + height],
-  //   ] as [number, number][];
-  //   this.setPaths([{ open: false, pathPoints: path.map((point) => ({ anchor: point, leftDirection: point, rightDirection: point })) }]);
-  // }
-  getImageType() {
+  async getImageType() {
     if (!this.contents) throw new Error('No contents');
-    return imageType(new Uint8Array(this.contents));
+    return await fileTypeFromBuffer(new Uint8Array(this.contents));
+  }
+  getContents() {
+    return this.contents;
   }
   async getNaturalSize() {
     const type = await this.getImageType();

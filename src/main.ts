@@ -4,6 +4,13 @@
 
 export * from './idml.js';
 export * from './svg2idml.js';
+export * from './idml2svg.js';
+
+export * from './controllers/Story.js';
+export * from './controllers/Color.js';
+
+export * from './util/renderTextParagraphs.js';
+export * from './util/fill.js';
 
 // import { unzip } from 'unzipit';
 // import { IDMLGraphicController } from './controllers/Graphic.js';

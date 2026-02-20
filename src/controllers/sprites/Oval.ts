@@ -63,6 +63,9 @@ export class OvalSprite extends GeometricSprite {
   addSprite(sprite: Sprite) {
     this.sprites.push(sprite);
   }
+  getSprites() {
+    return this.sprites;
+  }
   serialize() {
     const children = this.sprites.map((sprite) => Spread.serializeSprite(sprite));
     const baseElement = this.serializeGeometricSprite();

@@ -51,7 +51,7 @@ export class Page {
   public gridDataInformation: GridDataInformation;
 
   constructor(
-    private id: string,
+    public id: string,
     opts: {
       name?: string;
       pageColor?: string;

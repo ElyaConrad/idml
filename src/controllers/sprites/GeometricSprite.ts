@@ -23,6 +23,12 @@ export type PathPoint = {
   rightDirection: [number, number];
 };
 
+export type PathCommandMove = { type: 'move'; x: number; y: number };
+export type PathCommandLine = { type: 'line'; x: number; y: number };
+export type PathCommandCubicBezier = { type: 'cubicBezier'; x1: number; y1: number; x2: number; y2: number; x: number; y: number };
+export type PathCommandClose = { type: 'close' };
+export type PathCommand = PathCommandMove | PathCommandLine | PathCommandCubicBezier | PathCommandClose;
+
 const geometryPathTypeMap = new KeyMap({
   NormalPath: 'normalPath',
   ClippingPath: 'clippingPath',
@@ -120,24 +126,6 @@ export class GeometricSprite extends Sprite {
         geometryPathType,
       };
     });
-
-    // const open = ensureBoolean(geometryPathTypeElement.getAttribute('PathOpen'));
-    // const geometryPathType = geometryPathTypeMap.getInternal(geometryPathTypeElement.getAttribute('GeometryPathType'));
-
-    // const pathPointArrayElement = pathGeometryElement.querySelector('PathPointArray');
-    // if (!pathPointArrayElement) {
-    //   throw new Error('PathPointArray element not found');
-    // }
-
-    // const pathPointElements = Array.from(pathPointArrayElement.querySelectorAll('PathPointType'));
-
-    // const pathPoints = pathPointElements.map((pathPointElement) => {
-    //   return {
-    //     anchor: ensureArray(pathPointElement.getAttribute('Anchor') ?? '0 0') as [number, number],
-    //     leftDirection: ensureArray(pathPointElement.getAttribute('LeftDirection') ?? '0 0') as [number, number],
-    //     rightDirection: ensureArray(pathPointElement.getAttribute('RightDirection') ?? '0 0') as [number, number],
-    //   };
-    // });
 
     return paths;
   }

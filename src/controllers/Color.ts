@@ -87,6 +87,22 @@ export class Color {
       return false;
     }
   }
+  getCSSColor() {
+    return Color.colorInputToCSSColor(this.toColorInput());
+  }
+  getRBG() {
+    const colorInput = this.toColorInput();
+    if (colorInput.type === 'rgb') {
+      return { red: colorInput.red, green: colorInput.green, blue: colorInput.blue };
+    }
+    else if (colorInput.type === 'cmyk') {
+      return Color.cmykToRgb(colorInput.cyan, colorInput.magenta, colorInput.yellow, colorInput.black);
+    }
+    else {
+      throw new Error('Unsupported color space for RGB conversion');
+    }
+     
+  }
   serialize() {
     return serializeElement(
       'Color',
@@ -113,6 +129,22 @@ export class Color {
       return { type: 'cmyk', cyan: this.value[0], magenta: this.value[1], yellow: this.value[2], black: this.value[3] };
     } else {
       throw new Error('Unsupported color space');
+    }
+  }
+  static cmykToRgb(cyan: number, magenta: number, yellow: number, black: number) {
+    const r = 255 * (1 - cyan / 100) * (1 - black / 100);
+    const g = 255 * (1 - magenta / 100) * (1 - black / 100);
+    const b = 255 * (1 - yellow / 100) * (1 - black / 100);
+    return { red: Math.round(r), green: Math.round(g), blue: Math.round(b) };
+  }
+  static colorInputToCSSColor(color: ColorInput): string {
+    if (color.type === 'rgb') {
+      return `rgb(${color.red}, ${color.green}, ${color.blue})`;
+    } else if (color.type === 'cmyk') {
+      const { red, green, blue } = Color.cmykToRgb(color.cyan, color.magenta, color.yellow, color.black);
+      return `rgb(${red}, ${green}, ${blue})`;
+    } else {
+      throw new Error('Unsupported color space for CSS conversion');
     }
   }
 }

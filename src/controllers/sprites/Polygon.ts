@@ -174,6 +174,26 @@ export class PolygonSprite extends GeometricSprite {
 
     return baseElement;
   }
+  static pathsToSVGDAttribute(commands: PathCommand[][]): string {
+    return commands
+      .map((commandSet) => {
+        return commandSet
+          .map((command) => {
+            switch (command.type) {
+              case 'move':
+                return `M ${command.x} ${command.y}`;
+              case 'line':
+                return `L ${command.x} ${command.y}`;
+              case 'cubicBezier':
+                return `C ${command.x1} ${command.y1}, ${command.x2} ${command.y2}, ${command.x} ${command.y}`;
+              case 'close':
+                return 'Z';
+            }
+          })
+          .join(' ');
+      })
+      .join(' ');
+  }
 
   static parseElement(element: Element, context: IDMLSpreadPackageContext) {
     const { id, ...opts } = Sprite.parseElementOptions(element, context);

@@ -104,15 +104,15 @@ export function parseIDMLGeometricBounds(geometricBoundsString: string | undefin
     throw new Error('Invalid geometric bounds');
   } else {
     return {
-      x: bounds[0],
-      y: bounds[1],
-      width: bounds[3],
-      height: bounds[2],
+      x: bounds[1],
+      y: bounds[0],
+      width: bounds[3] - bounds[1],
+      height: bounds[2] - bounds[0],
     };
   }
 }
 export function createIDMLGeometricBounds(bounds: GeometricBounds) {
-  return [bounds.x, bounds.y, bounds.height, bounds.width];
+  return [bounds.y, bounds.x, bounds.y + bounds.height, bounds.x + bounds.width];
 }
 
 export type IDMLElementAttributeDescriptor = { source: 'attribute'; value: string | null };

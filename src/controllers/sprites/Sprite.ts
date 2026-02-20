@@ -38,6 +38,7 @@ export type DropShadowInput = {
 
 export type SpriteOpts = {
   name?: string;
+  parentPageId?: string;
   appliedObjectStyleId?: string;
   itemTransform: TransformMatrix;
   storyTitle?: string;
@@ -92,8 +93,21 @@ export type InCopyExportOption = {
 
 export abstract class Sprite {
   private name?: string;
+  private parentPageId?: string;
+  getParentPage() {
+    if (!this.parentPageId) {
+      return this.parentSpread.pages[0];
+    }
+    else {
+      const page = this.parentSpread.pages.find(page => page.id === this.parentPageId);
+      if (!page) {
+        throw new Error(`Parent page with id ${this.parentPageId} not found`);
+      }
+      return page;
+    }
+  }
   private appliedObjectStyleId?: string;
-  private itemTransform: TransformMatrix;
+  public itemTransform: TransformMatrix;
   private storyTitle?: string;
   private contentType?: string;
   private visible?: boolean;
@@ -117,8 +131,9 @@ export abstract class Sprite {
 
   private transparencySetting?: TransparencySetting;
 
-  constructor(private id: string, private type: string, opts: SpriteOpts, public context: IDMLSpreadPackageContext) {
+  constructor(private id: string, public type: string, opts: SpriteOpts, public context: IDMLSpreadPackageContext) {
     this.name = opts.name;
+    this.parentPageId = opts.parentPageId;
     this.appliedObjectStyleId = opts.appliedObjectStyleId;
     this.itemTransform = opts.itemTransform;
     this.storyTitle = opts.storyTitle;
@@ -157,8 +172,20 @@ export abstract class Sprite {
   getFillColor() {
     return this.fillColorId ? this.context.idml.getColorById(this.fillColorId) : undefined;
   }
+  getFillGradient() {
+    return this.fillColorId ? this.context.idml.getGradientById(this.fillColorId) : undefined;
+  }
+  getGradientFillAngle() {
+    return this.gradientFillAngle;
+  }
   getStrokeColor() {
     return this.strokeColorId ? this.context.idml.getColorById(this.strokeColorId) : undefined;
+  }
+  getDefaulStrokeColor() {
+    return this.context.idml.getColorById('Color/Black');
+  }
+  getStrokeGradient() {
+    return this.strokeColorId ? this.context.idml.getGradientById(this.strokeColorId) : undefined;
   }
   getStrokeWeight() {
     return this.strokeWeight;
@@ -302,6 +329,7 @@ export abstract class Sprite {
       throw new Error('Sprite element must have a Self attribute');
     }
     const name = props.Name;
+    const parentPageId = props.ParentPage;
     const appliedObjectStyleId = props.AppliedObjectStyle;
     const itemTransform = parseIDMLTransform(props.ItemTransform);
     const storyTitle = props.StoryTitle;
@@ -319,6 +347,10 @@ export abstract class Sprite {
 
     const strokeColorId = props.StrokeColor;
     const strokeWeight = ensureNumber(props.StrokeWeight);
+
+    if (element.getAttribute('Self') === 'u16e') {
+      console.log('strokeWeight', strokeWeight);
+    }
 
     // TODO: Make a real implementation
     const frameFittingOptionElement = Spread.getDirectChildren(element, 'FrameFittingOption')[0] as Element | undefined;
@@ -356,6 +388,7 @@ export abstract class Sprite {
     return {
       id,
       name,
+      parentPageId,
       appliedObjectStyleId,
       itemTransform,
       storyTitle,

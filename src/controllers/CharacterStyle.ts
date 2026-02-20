@@ -79,7 +79,7 @@ export class CharacterStyle {
     this.rootCharacterStyleGroupId = opts.rootCharacterStyleGroupId;
   }
   toCharacterStyleInput() {
-    return {
+    return Object.fromEntries(Object.entries({
       appliedFont: this.appliedFont,
       fontStyle: this.fontStyle,
       fontSize: this.fontSize,
@@ -90,7 +90,7 @@ export class CharacterStyle {
       leading: this.leading,
       underline: this.underline,
       strikeThrough: this.strikeThrough,
-    };
+    }).filter(([_, value]) => value !== undefined)) as CharacterStyleInput;
   }
   serialize() {
     const baseElement = serializeElement(

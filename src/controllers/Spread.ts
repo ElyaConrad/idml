@@ -22,10 +22,10 @@ export type FlattenerPreference = {
 
 export class Spread {
   private hidden?: boolean;
-  private itemTransform?: TransformMatrix;
+  public itemTransform?: TransformMatrix;
   private flattenerPreference?: FlattenerPreference;
   constructor(
-    private id: string,
+    public id: string,
     public pages: Page[],
     private sprites: Sprite[],
     opts: {
@@ -200,6 +200,10 @@ export class Spread {
       if (sprite instanceof GroupSprite) {
         return [...all, ...sprite.getAllSprites(), sprite];
       } else if (sprite instanceof PolygonSprite) {
+        return [...all, ...sprite.getSprites(), sprite];
+      } else if (sprite instanceof RectangleSprite) {
+        return [...all, ...sprite.getSprites(), sprite];
+      } else if (sprite instanceof OvalSprite) {
         return [...all, ...sprite.getSprites(), sprite];
       } else {
         return [...all, sprite];

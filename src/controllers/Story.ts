@@ -3,7 +3,7 @@ import { KeyMap } from '../util/keyMap.js';
 import { makeElementNode, makeTextNode } from 'flat-svg';
 import { IDMLBackingStoryContext } from './BackingStory.js';
 import { Spread } from './Spread.js';
-import { ParagraphStyleInput } from './ParagraphStyle.js';
+import { alignMap, capitalizationMap, ParagraphStyleInput } from './ParagraphStyle.js';
 import { CharacterStyleInput } from './CharacterStyle.js';
 
 export type ParagraphInput = {
@@ -52,12 +52,24 @@ export type CharacterStyleRange = {
   otfContextualAlternate: boolean;
   content: string;
   sourceElement?: Element;
+  localCharacterStyleInput: CharacterStyleInput;
 };
 
 export type ParagraphStyleRange = {
   appliedParagraphStyle: string;
   features: CharacterStyleRange[];
   sourceElement?: Element;
+  localParagraphStyleInput: ParagraphStyleInput;
+};
+
+export type ParagraphOutput = {
+  appliedParagraphStyle?: ParagraphStyleInput;
+  localParagraphStyle?: ParagraphStyleInput;
+  features: {
+    appliedCharacterStyle?: CharacterStyleInput;
+    localCharacterStyleInput?: CharacterStyleInput;
+    content: string;
+  }[];
 };
 
 export class Story {
@@ -81,15 +93,17 @@ export class Story {
     this.storyPreference = opts.storyPreference;
     this.inCopyExportOption = opts.inCopyExportOption;
   }
-  getParagraphs(toInput = false) {
+  getParagraphs(): ParagraphOutput[] {
     return this.paragraphs.map((paragraph) => {
       const paragraphStyle = this.context.idml.getParagraphStyleById(paragraph.appliedParagraphStyle);
       return {
-        appliedParagraphStyle: toInput ? paragraphStyle?.toParagraphStyleInput() : paragraphStyle,
+        appliedParagraphStyle: paragraphStyle?.toParagraphStyleInput(),
+        localParagraphStyle: paragraph.localParagraphStyleInput,
         features: paragraph.features.map((feature) => {
           const characterStyle = this.context.idml.getCharacterStyleById(feature.appliedCharacterStyle);
           return {
-            appliedCharacterStyle: toInput ? characterStyle?.toCharacterStyleInput() : characterStyle,
+            appliedCharacterStyle: characterStyle?.toCharacterStyleInput(),
+            localCharacterStyleInput: feature.localCharacterStyleInput,
             content: feature.content,
           };
         }),
@@ -97,12 +111,14 @@ export class Story {
     });
   }
   static getParagraphsFromInput(paragraphs: ParagraphInput[], context: IDMLBackingStoryContext) {
-    return paragraphs.map((paragraph) => {
+    return paragraphs.map<ParagraphStyleRange>((paragraph) => {
       return {
         appliedParagraphStyle: context.idml.assumeParagraphStyle(paragraph.paragraphStyle).id,
-        features: paragraph.features.map((feature) => {
+        localParagraphStyleInput: {},
+        features: paragraph.features.map<CharacterStyleRange>((feature) => {
           return {
             appliedCharacterStyle: context.idml.assumeCharacterStyle(feature.characterStyle).id,
+            'localCharacterStyleInput': {},
             otfContextualAlternate: false,
             content: feature.content,
           };
@@ -223,48 +239,84 @@ export class Story {
       direction,
     };
   }
-  static parseCharacterStyleRange(element: Element): CharacterStyleRange {
+  static parseCharacterStyleRange(element: Element, context: IDMLBackingStoryContext): CharacterStyleRange {
     const props = flattenIDMLProperties(getIDMLElementProperties(element, ['Properties'], [])) as {
       [k: string]: string | undefined;
     };
+
+
+    const localCharacterStyleInput: CharacterStyleInput = Object.fromEntries(Object.entries({
+      appliedFont: props.AppliedFont,
+      fontStyle: props.FontStyle,
+      fontSize: ensureNumber(props.PointSize),
+      fillColor: props.FillColor ? context.idml.getColorById(props.FillColor)?.toColorInput() : undefined,
+      strokeColor: props.StrokeColor ? context.idml.getColorById(props.StrokeColor)?.toColorInput() : undefined,
+      strokeWeight: ensureNumber(props.StrokeWeight),
+      underline: props.Underline ? ensureBoolean(props.Underline) : undefined,
+      strikeThrough: props.StrikeThru ? ensureBoolean(props.StrikeThru) : undefined,
+      tracking: ensureNumber(props.Tracking),
+      leading: ensureNumber(props.Leading),
+    }).filter(([_, value]) => value !== undefined)) as CharacterStyleInput;
 
     const appliedCharacterStyle = props.AppliedCharacterStyle;
     if (!appliedCharacterStyle) {
       throw new Error('CharacterStyleRange element must have an AppliedCharacterStyle attribute');
     }
     const otfContextualAlternate = ensureBoolean(props.OTFContextualAlternate);
-    const contentAndBreakElements = Array.from(element.children).filter((child) => child.tagName === 'Content' || child.tagName === 'Br');
+    const collectChildrenContents = (element: Element): string[] => {
+      const allRelevantChildNodes = Array.from(element.children).filter((child) => child.tagName === 'Content' || child.tagName === 'Br' || child.tagName === 'XMLElement');
+      return allRelevantChildNodes
+        .map((childNode) => {
+          if (childNode.tagName === 'Content') {
+            return [childNode.textContent ?? ''];
+          } else if (childNode.tagName === 'XMLElement') {
+            return collectChildrenContents(childNode);
+          } else {
+            return ['\n'];
+          }
+        })
+        .flat();
+    };
 
-    const content = contentAndBreakElements
-      .map((contentOrBreakElement) => {
-        if (contentOrBreakElement.tagName === 'Content') {
-          return contentOrBreakElement.textContent ?? '';
-        } else {
-          return '\n';
-        }
-      })
-      .join('');
+    const content = collectChildrenContents(element).join('');
 
     return {
       appliedCharacterStyle,
+      localCharacterStyleInput,
       otfContextualAlternate,
       content,
       sourceElement: element,
     };
   }
-  static parseParagraphStyleRange(element: Element): ParagraphStyleRange {
+  static parseParagraphStyleRange(element: Element, context: IDMLBackingStoryContext): ParagraphStyleRange {
     const props = flattenIDMLProperties(getIDMLElementProperties(element, ['Properties'], [])) as {
       [k: string]: string | undefined;
     };
+
+    const localParagraphStyleInput: ParagraphStyleInput = Object.fromEntries(Object.entries({
+      appliedFont: props.AppliedFont,
+      fontStyle: props.FontStyle,
+      fontSize: ensureNumber(props.PointSize),
+      fillColor: props.FillColor ? context.idml.getColorById(props.FillColor)?.toColorInput() : undefined,
+      strokeColor: props.StrokeColor ? context.idml.getColorById(props.StrokeColor)?.toColorInput() : undefined,
+      strokeWeight: ensureNumber(props.StrokeWeight),
+      underline: props.Underline ? ensureBoolean(props.Underline) : undefined,
+      strikeThrough: props.StrikeThru ? ensureBoolean(props.StrikeThru) : undefined,
+      autoLeading: ensureNumber(props.AutoLeading),
+      leading: ensureNumber(props.Leading),
+      align: alignMap.getInternal(props.Justification),
+      capitalization: capitalizationMap.getInternal(props.Capitalization)
+    }).filter(([_, value]) => value !== undefined)) as ParagraphStyleInput;
 
     const appliedParagraphStyle = props.AppliedParagraphStyle;
     if (!appliedParagraphStyle) {
       throw new Error('ParagraphStyleRange element must have an AppliedParagraphStyle attribute');
     }
-    const characterStyleRanges = Array.from(element.getElementsByTagName('CharacterStyleRange')).map((characterStyleRangeElement) => Story.parseCharacterStyleRange(characterStyleRangeElement));
+    const characterStyleRanges = Array.from(element.getElementsByTagName('CharacterStyleRange')).map((characterStyleRangeElement) => Story.parseCharacterStyleRange(characterStyleRangeElement, context));
 
     return {
       appliedParagraphStyle,
+      localParagraphStyleInput,
       features: characterStyleRanges,
       sourceElement: element,
     };
@@ -288,7 +340,7 @@ export class Story {
 
     const paragraphStyleRangeElements = Array.from(element.getElementsByTagName('ParagraphStyleRange'));
 
-    const paragraphs = paragraphStyleRangeElements.map((paragraphStyleRangeElement) => Story.parseParagraphStyleRange(paragraphStyleRangeElement));
+    const paragraphs = paragraphStyleRangeElements.map((paragraphStyleRangeElement) => Story.parseParagraphStyleRange(paragraphStyleRangeElement, context));
 
     return new Story(id, paragraphs, { userText, title, storyPreference, inCopyExportOption }, context);
   }

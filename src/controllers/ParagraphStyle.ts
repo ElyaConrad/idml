@@ -7,6 +7,7 @@ import { IDMLStylesContext } from './Styles.js';
 export type ParagraphStyleInput = {
   appliedFont?: string;
   fontSize?: number;
+  autoLeading?: number;
   leading?: number;
   align?: Align;
   fillColor?: ColorInput;
@@ -51,6 +52,7 @@ export class ParagraphStyle {
 
   public appliedFont?: string;
   public fontSize?: number;
+  public autoLeading?: number;
   public leading?: number;
   public align?: Align;
   public fillColorId?: string;
@@ -88,6 +90,7 @@ export class ParagraphStyle {
 
       appliedFont?: string;
       fontSize?: number;
+      autoLeading?: number;
       leading?: number;
       align?: Align;
       fillColorId?: string;
@@ -164,6 +167,7 @@ export class ParagraphStyle {
 
         // AppliedFont: this.appliedFont,
         PointSize: this.fontSize,
+        AutoLeading: this.autoLeading,
         Leading: this.leading,
         Justification: alignMap.getExternal(this.align),
         FillColor: this.fillColorId,
@@ -211,9 +215,10 @@ export class ParagraphStyle {
     return baseElement;
   }
   toParagraphStyleInput() {
-    return {
+    return Object.fromEntries(Object.entries({
       appliedFont: this.appliedFont,
       fontSize: this.fontSize,
+      autoLeading: this.autoLeading,
       leading: this.leading,
       align: this.align,
       fillColor: this.fillColorId ? this.context.idml.getColorById(this.fillColorId)?.toColorInput() : undefined,
@@ -225,7 +230,7 @@ export class ParagraphStyle {
       fontStyle: this.fontStyle,
       underline: this.underline,
       strikeThrough: this.strikeThrough,
-    };
+    }).filter(([_, value]) => value !== undefined)) as ParagraphStyleInput;
   }
   equals(input: ParagraphStyleInput) {
     const appliedFontEquals = this.appliedFont === input.appliedFont;
@@ -265,6 +270,7 @@ export class ParagraphStyle {
 
     const appliedFont = props.AppliedFont;
     const fontSize = ensureNumber(props.PointSize);
+    const autoLeading = ensureNumber(props.AutoLeading);
     const leading = ensureNumber(props.Leading);
     const align = alignMap.getInternal(props.Justification);
     const fillColorId = props.FillColor;
@@ -299,6 +305,7 @@ export class ParagraphStyle {
         emitCss,
         appliedFont,
         fontSize,
+        autoLeading,
         leading,
         align,
         fillColorId,

@@ -23,6 +23,7 @@ import { extractFontTable } from './idml.js';
 import { determineFontType } from './idml.js';
 import { base64ToArrayBuffer, createArrayBuffer } from './util/arrayBuffer.js';
 import { ParagraphInput, Story } from './controllers/Story.js';
+import { Gradient } from './controllers/Gradient.js';
 export { type ColorInput } from './types/index.js';
 export { RectangleSprite } from './controllers/sprites/Rectangle.js';
 export { GroupSprite } from './controllers/sprites/Group.js';
@@ -142,8 +143,19 @@ export class IDML extends EventTarget {
       return [...allColors, ...graphicInstance.colors];
     }, [] as Color[]);
   }
+  getGradients() {
+    return this.graphics.reduce((allColors, graphicInstance) => {
+      return [...allColors, ...graphicInstance.gradients];
+    }, [] as Gradient[]);
+  }
   getColorById(id: string) {
     return this.getColors().find((color) => color.id === id);
+  }
+  getGradientById(id: string) {
+    return this.getGradients().find((gradient) => gradient.id === id);
+  }
+  getFillById(id: string) {
+    return this.getColorById(id) ?? this.getGradientById(id);
   }
   assumeColor(color: ColorInput | string) {
     if (typeof color === 'string') {

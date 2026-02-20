@@ -21,7 +21,7 @@ export class Gradient {
   private angle?: number;
   private transform: TransformMatrix;
   constructor(
-    private id: string,
+    public id: string,
     private type: GradientType,
     private colorStops: GradientColorStop[],
     options: {
@@ -34,6 +34,25 @@ export class Gradient {
     this.length = options.length;
     this.angle = options.angle;
     this.transform = options.transform;
+
+    console.log('Created gradient with transform', this);
+    
+  }
+  getType() {
+    return this.type;
+  }
+  getColorStops() {
+    return this.colorStops.map(colorStop => ({
+      color: this.context.idml.getColorById(colorStop.colorId),
+      position: colorStop.position,
+      midpoint: colorStop.midpoint,
+    }));
+  }
+  getAngle() {
+    return this.angle;
+  }
+  getLength() {
+    return this.length;
   }
   serialize() {
     return serializeElement(
