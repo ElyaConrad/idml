@@ -80,7 +80,17 @@ export class Spread {
     return Array.from(element.children).filter((child) => child.tagName === tagName);
   }
   static getChildSprites(element: Element, context: IDMLSpreadPackageContext): Sprite[] {
-    return [...Spread.getDirectChildren(element, 'Group').map((groupElement) => GroupSprite.parseElement(groupElement, context)), ...Spread.getDirectChildren(element, 'Rectangle').map((rectangleElement) => RectangleSprite.parseElement(rectangleElement, context)), ...Spread.getDirectChildren(element, 'TextFrame').map((textFrameElement) => TextFrame.parseElement(textFrameElement, context)), ...Spread.getDirectChildren(element, 'Oval').map((ovalElement) => OvalSprite.parseElement(ovalElement, context)), ...Spread.getDirectChildren(element, 'Polygon').map((polygonElement) => PolygonSprite.parseElement(polygonElement, context)), ...Spread.getDirectChildren(element, 'Image').map((imageElement) => ImageSprite.parseElement(imageElement, context))];
+    return Array.from(element.children).flatMap((child): Sprite[] => {
+      switch (child.tagName) {
+        case 'Group':     return [GroupSprite.parseElement(child, context)];
+        case 'Rectangle': return [RectangleSprite.parseElement(child, context)];
+        case 'TextFrame': return [TextFrame.parseElement(child, context)];
+        case 'Oval':      return [OvalSprite.parseElement(child, context)];
+        case 'Polygon':   return [PolygonSprite.parseElement(child, context)];
+        case 'Image':     return [ImageSprite.parseElement(child, context)];
+        default:          return [];
+      }
+    });
   }
   static keepChildren(element: Element): XMLNode[] {
     const children = Array.from(element.childNodes);

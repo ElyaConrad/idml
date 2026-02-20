@@ -1,4 +1,5 @@
 import { GroupSprite, IDML, ImageSprite, OvalSprite, PathCommand, PolygonSprite, RectangleSprite, Spread, Sprite, TextFrame, TransformMatrix } from './idml';
+import { CornerOption, CornerOptions } from './controllers/sprites/Rectangle';
 import { transform, applyToPoint, identity, Matrix, inverse } from 'transformation-matrix';
 import { ParagraphOutput } from './controllers/Story';
 import { FileTypeResult } from 'file-type';
@@ -170,6 +171,58 @@ function generateSurfaceStyle(fill: Color | Gradient | undefined, stroke: Color 
   };
 }
 
+// Bezier approximation constant for a quarter circle
+const KAPPA = 0.5523;
+
+function buildRectPathFromCornerOptions(x: number, y: number, w: number, h: number, corners: CornerOptions): PathCommand[][] {
+  const { topLeft: tl, topRight: tr, bottomRight: br, bottomLeft: bl } = corners;
+  const commands: PathCommand[] = [];
+
+  function addCornerSegment(startX: number, startY: number, cornerX: number, cornerY: number, endX: number, endY: number, opt: CornerOption) {
+    if (opt.radius <= 0 || opt.type === 'none') {
+      if (startX !== cornerX || startY !== cornerY) {
+        commands.push({ type: 'line', x: cornerX, y: cornerY });
+      }
+      return;
+    }
+    if (opt.type === 'rounded') {
+      commands.push({
+        type: 'cubicBezier',
+        x1: startX + (cornerX - startX) * KAPPA,
+        y1: startY + (cornerY - startY) * KAPPA,
+        x2: endX + (cornerX - endX) * KAPPA,
+        y2: endY + (cornerY - endY) * KAPPA,
+        x: endX,
+        y: endY,
+      });
+    } else if (opt.type === 'bevel') {
+      commands.push({ type: 'line', x: endX, y: endY });
+    } else {
+      if (startX !== cornerX || startY !== cornerY) {
+        commands.push({ type: 'line', x: cornerX, y: cornerY });
+      }
+    }
+  }
+
+  const tlR = tl.type !== 'none' ? tl.radius : 0;
+  const trR = tr.type !== 'none' ? tr.radius : 0;
+  const brR = br.type !== 'none' ? br.radius : 0;
+  const blR = bl.type !== 'none' ? bl.radius : 0;
+
+  commands.push({ type: 'move', x: x + tlR, y });
+  commands.push({ type: 'line', x: x + w - trR, y });
+  addCornerSegment(x + w - trR, y,   x + w, y,     x + w, y + trR,   tr);
+  commands.push({ type: 'line', x: x + w, y: y + h - brR });
+  addCornerSegment(x + w, y + h - brR, x + w, y + h, x + w - brR, y + h, br);
+  commands.push({ type: 'line', x: x + blR, y: y + h });
+  addCornerSegment(x + blR, y + h, x, y + h,   x, y + h - blR, bl);
+  commands.push({ type: 'line', x, y: y + tlR });
+  addCornerSegment(x, y + tlR,   x, y,       x + tlR, y,       tl);
+  commands.push({ type: 'close' });
+
+  return [commands];
+}
+
 async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGElement> {
   // The transform of a sprite is originated in the coordinate system of its parent page (at 0,0) so we have to inverse the page matrix first, then apply the sprite transform, then re-apply the page matrix to get the correct world transform
   const bakedTransform = transform(inverse(pageMatrix), itemTransform2Matrix(sprite.itemTransform), pageMatrix);
@@ -183,32 +236,54 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
 
     const style = generateSurfaceStyle(fill, stroke, strokeWeight ?? 1, opacity ?? 100);
 
+    // Determine effective paths: baked bezier curves take priority, then live corner options
+    const bakedPaths = rectangleSprite.getPath();
+    const hasBakedCurves = bakedPaths.some((cmds) => cmds.some((cmd) => cmd.type === 'cubicBezier'));
+    const cornerOptions = rectangleSprite.getCornerOptions();
+    const hasLiveCorners = !hasBakedCurves && cornerOptions !== undefined &&
+      Object.values(cornerOptions).some((c) => c.type !== 'none' && c.radius > 0);
+
+    const effectivePaths = hasBakedCurves
+      ? bakedPaths
+      : hasLiveCorners
+        ? buildRectPathFromCornerOptions(bbox.x, bbox.y, bbox.width, bbox.height, cornerOptions!)
+        : null;
+
     // This is the mask case in which a sprite has children
     if (rectangleSprite.getSprites().length > 0) {
       const subSprites = rectangleSprite.getSprites();
-      const maskElement: MaskElement = {
-        type: 'mask',
-        children: await Promise.all(subSprites.map((child) => resolveSprite(child, pageMatrix))),
-        mask: [
-          {
+      const maskShapeTransform = transform(inverse(pageMatrix), identity(), pageMatrix);
+      const maskShape = effectivePaths
+        ? ({
+            type: 'path',
+            paths: effectivePaths,
+            transform: maskShapeTransform,
+            style: { fill: { type: 'color', red: 0, green: 0, blue: 0, alpha: 1 }, stroke: null, strokeWidth: 0, opacity: 100 },
+          } as PathElement)
+        : ({
             type: 'rectangle',
             x: bbox.x,
             y: bbox.y,
             width: bbox.width,
             height: bbox.height,
-            transform: transform(inverse(pageMatrix), identity(), pageMatrix),
-            style: {
-              fill: { type: 'color', red: 0, green: 0, blue: 0, alpha: 1 },
-              stroke: null,
-              strokeWidth: 0,
-              opacity: 100,
-            },
-          },
-        ],
+            transform: maskShapeTransform,
+            style: { fill: { type: 'color', red: 0, green: 0, blue: 0, alpha: 1 }, stroke: null, strokeWidth: 0, opacity: 100 },
+          } as RectangleElement);
+      const maskElement: MaskElement = {
+        type: 'mask',
+        children: await Promise.all(subSprites.map((child) => resolveSprite(child, pageMatrix))),
+        mask: [maskShape],
         transform: bakedTransform,
         style,
       };
       return maskElement;
+    } else if (effectivePaths) {
+      return {
+        type: 'path',
+        paths: effectivePaths,
+        transform: bakedTransform,
+        style,
+      };
     } else {
       return {
         type: 'rectangle',

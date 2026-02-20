@@ -30,6 +30,7 @@ export { GroupSprite } from './controllers/sprites/Group.js';
 export { TextFrame } from './controllers/sprites/TextFrame.js';
 export { OvalSprite } from './controllers/sprites/Oval.js';
 export { PolygonSprite, type PathCommand } from './controllers/sprites/Polygon.js';
+export { type PathCommandMove, type PathCommandLine, type PathCommandCubicBezier, type PathCommandClose } from './controllers/sprites/GeometricSprite.js';
 export { ImageSprite } from './controllers/sprites/Image.js';
 export { Sprite } from './controllers/sprites/Sprite.js';
 export { Spread } from './controllers/Spread.js';

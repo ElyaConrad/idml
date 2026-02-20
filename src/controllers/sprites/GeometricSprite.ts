@@ -87,6 +87,45 @@ export class GeometricSprite extends Sprite {
       height: Math.max(...yValues) - Math.min(...yValues),
     };
   }
+
+  private static isLineSegment(start: PathPoint, end: PathPoint): boolean {
+    return (
+      start.rightDirection[0] === start.anchor[0] &&
+      start.rightDirection[1] === start.anchor[1] &&
+      end.leftDirection[0] === end.anchor[0] &&
+      end.leftDirection[1] === end.anchor[1]
+    );
+  }
+
+  getPath(): PathCommand[][] {
+    return this.getPaths().map(({ pathPoints, open }) => {
+      const commands: PathCommand[] = [];
+      if (pathPoints.length === 0) return commands;
+
+      commands.push({ type: 'move', x: pathPoints[0].anchor[0], y: pathPoints[0].anchor[1] });
+
+      for (let i = 1; i < pathPoints.length; i++) {
+        const prev = pathPoints[i - 1];
+        const cur = pathPoints[i];
+        if (GeometricSprite.isLineSegment(prev, cur)) {
+          commands.push({ type: 'line', x: cur.anchor[0], y: cur.anchor[1] });
+        } else {
+          commands.push({ type: 'cubicBezier', x1: prev.rightDirection[0], y1: prev.rightDirection[1], x2: cur.leftDirection[0], y2: cur.leftDirection[1], x: cur.anchor[0], y: cur.anchor[1] });
+        }
+      }
+
+      if (!open && pathPoints.length > 0) {
+        const last = pathPoints[pathPoints.length - 1];
+        const first = pathPoints[0];
+        if (!GeometricSprite.isLineSegment(last, first)) {
+          commands.push({ type: 'cubicBezier', x1: last.rightDirection[0], y1: last.rightDirection[1], x2: first.leftDirection[0], y2: first.leftDirection[1], x: first.anchor[0], y: first.anchor[1] });
+        }
+        commands.push({ type: 'close' });
+      }
+
+      return commands;
+    });
+  }
   static parsePathGeometry(element: Element, allowNoPathGeometry = false) {
     const pathGeometryElement = element.querySelector('Properties > PathGeometry');
     if (!pathGeometryElement) {

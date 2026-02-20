@@ -2,11 +2,43 @@ import { Spread } from '../Spread.js';
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
 import { GeometricSprite, GeometricSpriteOpts } from './GeometricSprite.js';
 import { Sprite } from './Sprite.js';
+import { ensureNumber, flattenIDMLProperties, getIDMLElementProperties } from '../../helpers.js';
+import { KeyMap } from '../../util/keyMap.js';
+
+export type CornerType = 'none' | 'rounded' | 'inverseRounded' | 'inset' | 'bevel';
+
+export type CornerOption = {
+  type: CornerType;
+  radius: number;
+};
+
+export type CornerOptions = {
+  topLeft: CornerOption;
+  topRight: CornerOption;
+  bottomRight: CornerOption;
+  bottomLeft: CornerOption;
+};
+
+const cornerTypeMap = new KeyMap({
+  None: 'none',
+  RoundedCorner: 'rounded',
+  InverseRoundedCorner: 'inverseRounded',
+  InsetCorner: 'inset',
+  BevelCorner: 'bevel',
+} as const);
 
 export class RectangleSprite extends GeometricSprite {
-  constructor(id: string, private sprites: Sprite[], opts: GeometricSpriteOpts, context: IDMLSpreadPackageContext) {
+  private cornerOptions?: CornerOptions;
+
+  constructor(id: string, private sprites: Sprite[], opts: GeometricSpriteOpts & { cornerOptions?: CornerOptions }, context: IDMLSpreadPackageContext) {
     super(id, 'Rectangle', opts, context);
+    this.cornerOptions = opts.cornerOptions;
   }
+
+  getCornerOptions() {
+    return this.cornerOptions;
+  }
+
   getBBox() {
     return this.getGeometricBounds();
   }
@@ -40,12 +72,29 @@ export class RectangleSprite extends GeometricSprite {
 
     const sprites = Spread.getChildSprites(element, context);
 
+    // Parse corner options — per-corner attributes take precedence over global CornerOption/CornerRadius
+    const props = flattenIDMLProperties(getIDMLElementProperties(element, ['Properties'], [])) as { [k: string]: string | undefined };
+
+    const parseCorner = (optionKey: string, radiusKey: string): CornerOption => {
+      const type = cornerTypeMap.getInternal(props[optionKey] ?? props['CornerOption'] ?? 'None') ?? 'none';
+      const radius = ensureNumber(props[radiusKey] ?? props['CornerRadius']) ?? 0;
+      return { type, radius };
+    };
+
+    const cornerOptions: CornerOptions = {
+      topLeft: parseCorner('TopLeftCornerOption', 'TopLeftCornerRadius'),
+      topRight: parseCorner('TopRightCornerOption', 'TopRightCornerRadius'),
+      bottomRight: parseCorner('BottomRightCornerOption', 'BottomRightCornerRadius'),
+      bottomLeft: parseCorner('BottomLeftCornerOption', 'BottomLeftCornerRadius'),
+    };
+
     return new RectangleSprite(
       id,
       sprites,
       {
         ...opts,
         pathGeometry,
+        cornerOptions,
       },
       context
     );

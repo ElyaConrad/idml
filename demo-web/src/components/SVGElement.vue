@@ -180,7 +180,7 @@ function composeParagraphStyle(paragraph: ParagraphOutput) {
   }
   return {
     ...styleObj,
-    'alignment-baseline': 'hanging' as any,
+    'dominant-baseline': 'hanging' as any,
   };
 }
 function composeSpanStyle(feature: ParagraphOutput['features'][number]) {
