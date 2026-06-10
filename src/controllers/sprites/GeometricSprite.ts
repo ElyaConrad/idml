@@ -147,7 +147,7 @@ export class GeometricSprite extends Sprite {
     const paths = Array.from(geometryPathTypeElements).map((geometryPathTypeElement) => {
       const open = ensureBoolean(geometryPathTypeElement.getAttribute('PathOpen'));
       const geometryPathType = geometryPathTypeMap.getInternal(geometryPathTypeElement.getAttribute('GeometryPathType'));
-      const pathPointArrayElement = pathGeometryElement.querySelector('PathPointArray');
+      const pathPointArrayElement = geometryPathTypeElement.querySelector('PathPointArray');
       if (!pathPointArrayElement) {
         throw new Error('PathPointArray element not found');
       }

@@ -210,11 +210,11 @@ export class Spread {
       if (sprite instanceof GroupSprite) {
         return [...all, ...sprite.getAllSprites(), sprite];
       } else if (sprite instanceof PolygonSprite) {
-        return [...all, ...sprite.getSprites(), sprite];
+        return [...all, ...Spread.getChildSprittes(sprite.getSprites()), sprite];
       } else if (sprite instanceof RectangleSprite) {
-        return [...all, ...sprite.getSprites(), sprite];
+        return [...all, ...Spread.getChildSprittes(sprite.getSprites()), sprite];
       } else if (sprite instanceof OvalSprite) {
-        return [...all, ...sprite.getSprites(), sprite];
+        return [...all, ...Spread.getChildSprittes(sprite.getSprites()), sprite];
       } else {
         return [...all, sprite];
       }

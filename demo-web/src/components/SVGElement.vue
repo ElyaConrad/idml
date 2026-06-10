@@ -77,11 +77,12 @@ const gradient = computed(() => {
 })
 
 const elementStyle = computed(() => {
+  const hasNoFillAndNoStroke = false;isSurfaceShape(props.element) && !props.element.style.fill && !props.element.style.stroke;
   return {
     transform: transformMatrixToCSSFunctionCall(props.element.transform),
     fill: isSurfaceShape(props.element) ? props.element.style.fill ? props.element.style.fill.type === 'color' ? `rgba(${props.element.style.fill.red}, ${props.element.style.fill.green}, ${props.element.style.fill.blue}, ${props.element.style.fill.alpha})` : `url(#${gradientId})` : 'none' : undefined,
-    stroke: isSurfaceShape(props.element) ? props.element.style.stroke ? props.element.style.stroke.type === 'color' ? `rgba(${props.element.style.stroke.red}, ${props.element.style.stroke.green}, ${props.element.style.stroke.blue}, ${props.element.style.stroke.alpha})` : undefined : 'none' : undefined,
-    strokeWidth: isSurfaceShape(props.element) ? props.element.style.strokeWidth : undefined,
+    stroke: isSurfaceShape(props.element) ? props.element.style.stroke ? props.element.style.stroke.type === 'color' ? `rgba(${props.element.style.stroke.red}, ${props.element.style.stroke.green}, ${props.element.style.stroke.blue}, ${props.element.style.stroke.alpha})` : undefined : hasNoFillAndNoStroke ? 'rgba(0, 0, 0, 1)' : 'none' : undefined,
+    strokeWidth: isSurfaceShape(props.element) ? hasNoFillAndNoStroke ? 1 : props.element.style.strokeWidth : undefined,
     opacity: isSurfaceShape(props.element) ? props.element.style.opacity / 100 : undefined,
   };
 });

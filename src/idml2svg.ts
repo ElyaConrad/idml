@@ -230,11 +230,15 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
     const rectangleSprite = sprite as RectangleSprite;
     const bbox = rectangleSprite.getBBox();
     const fill = rectangleSprite.getFillColor() ?? rectangleSprite.getFillGradient();
-    const stroke = rectangleSprite.getStrokeColor() ?? rectangleSprite.getStrokeGradient() ?? rectangleSprite.getDefaulStrokeColor();
-    const strokeWeight = rectangleSprite.getStrokeWeight();
-    const opacity = rectangleSprite.getOpacity();
+    const stroke = rectangleSprite.isStrokeNone() ? undefined : (rectangleSprite.getStrokeColor() ?? rectangleSprite.getStrokeGradient() ?? rectangleSprite.context.idml.getColors()[0]);
+    const strokeWeight = rectangleSprite.getStrokeWeight() ?? 1;
+    const opacity = rectangleSprite.getOpacity() ?? 100;
 
-    const style = generateSurfaceStyle(fill, stroke, strokeWeight ?? 1, opacity ?? 100);
+    if (rectangleSprite.getId() === 'u16e') {
+      console.log('[u16e]', fill, stroke, strokeWeight)
+    }
+
+    const style = generateSurfaceStyle(fill, stroke, strokeWeight, opacity);
 
     // Determine effective paths: baked bezier curves take priority, then live corner options
     const bakedPaths = rectangleSprite.getPath();
@@ -248,6 +252,10 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
       : hasLiveCorners
         ? buildRectPathFromCornerOptions(bbox.x, bbox.y, bbox.width, bbox.height, cornerOptions!)
         : null;
+
+    if (rectangleSprite.getId() === 'u16e') {
+      console.log('[u16e]', style)
+    }
 
     // This is the mask case in which a sprite has children
     if (rectangleSprite.getSprites().length > 0) {
@@ -332,7 +340,7 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
     const bbox = textFrameSprite.getBBox();
 
     const fill = textFrameSprite.getFillColor() ?? textFrameSprite.getFillGradient();
-    const stroke = textFrameSprite.getStrokeColor() ?? textFrameSprite.getStrokeGradient() ?? textFrameSprite.getDefaulStrokeColor();
+    const stroke = textFrameSprite.isStrokeNone() ? undefined : (textFrameSprite.getStrokeColor() ?? textFrameSprite.getStrokeGradient());
     const strokeWeight = textFrameSprite.getStrokeWeight();
     const opacity = textFrameSprite.getOpacity();
 
@@ -399,7 +407,7 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
     const groupSprite = sprite as GroupSprite;
 
     const fill = groupSprite.getFillColor() ?? groupSprite.getFillGradient();
-    const stroke = groupSprite.getStrokeColor() ?? groupSprite.getStrokeGradient() ?? groupSprite.getDefaulStrokeColor();
+    const stroke = groupSprite.isStrokeNone() ? undefined : (groupSprite.getStrokeColor() ?? groupSprite.getStrokeGradient());
     const strokeWeight = groupSprite.getStrokeWeight();
     const opacity = groupSprite.getOpacity();
 
@@ -417,11 +425,11 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
     const subSprites = ovalSprite.getSprites();
 
     const fill = ovalSprite.getFillColor() ?? ovalSprite.getFillGradient();
-    const stroke = ovalSprite.getStrokeColor() ?? ovalSprite.getStrokeGradient() ?? ovalSprite.getDefaulStrokeColor();
-    const strokeWeight = ovalSprite.getStrokeWeight();
-    const opacity = ovalSprite.getOpacity();
+    const stroke = ovalSprite.isStrokeNone() ? undefined : (ovalSprite.getStrokeColor() ?? ovalSprite.getStrokeGradient() ?? ovalSprite.context.idml.getColors()[0]);
+    const strokeWeight = ovalSprite.getStrokeWeight() ?? 1;
+    const opacity = ovalSprite.getOpacity() ?? 100;
 
-    const style = generateSurfaceStyle(fill, stroke, strokeWeight ?? 1, opacity ?? 100);
+    const style = generateSurfaceStyle(fill, stroke, strokeWeight, opacity);
 
     if (subSprites.length > 0) {
       const maskElement: MaskElement = {
@@ -465,14 +473,12 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
     const subSprites = polygonSprite.getSprites();
     const fill = polygonSprite.getFillColor() ?? polygonSprite.getFillGradient();
     const gradientAngle = polygonSprite.getGradientFillAngle();
-    const stroke = polygonSprite.getStrokeColor() ?? polygonSprite.getStrokeGradient() ?? polygonSprite.getDefaulStrokeColor();
-    const strokeWeight = polygonSprite.getStrokeWeight();
-    const opacity = polygonSprite.getOpacity();
+    const stroke = polygonSprite.isStrokeNone() ? undefined : (polygonSprite.getStrokeColor() ?? polygonSprite.getStrokeGradient() ?? polygonSprite.context.idml.getColors()[0]);
+    const strokeWeight = polygonSprite.getStrokeWeight() ?? 1;
+    const opacity = polygonSprite.getOpacity() ?? 100;
 
-
-
-    const style = generateSurfaceStyle(fill, stroke, strokeWeight ?? 1, opacity ?? 100, gradientAngle);
-    console.log('POLYGON', polygonSprite, style, gradientAngle);
+    const style = generateSurfaceStyle(fill, stroke, strokeWeight, opacity, gradientAngle);
+    // console.log('POLYGON', polygonSprite, style, gradientAngle);
     
     if (subSprites.length > 0) {
       const maskElement: MaskElement = {

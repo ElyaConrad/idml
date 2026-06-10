@@ -159,12 +159,17 @@ export abstract class Sprite {
 
     this.transparencySetting = opts.transparencySetting;
   }
+  getId() {
+    return this.id;
+  }
   // abstract serialize(): ElementNode;
   abstract getGeometricBounds(): GeometricBounds;
   // Return the parent spread
   get parentSpread() {
     const parentSpread = this.context.idml.getSpreads().find((spread) => spread.getAllSprites().includes(this));
     if (!parentSpread) {
+      console.log('parentSpread', this);
+      
       throw new Error('Parent spread not found');
     }
     return parentSpread;
@@ -177,6 +182,9 @@ export abstract class Sprite {
   }
   getGradientFillAngle() {
     return this.gradientFillAngle;
+  }
+  isStrokeNone() {
+    return this.strokeColorId !== undefined && this.strokeColorId.endsWith('/None');
   }
   getStrokeColor() {
     return this.strokeColorId ? this.context.idml.getColorById(this.strokeColorId) : undefined;
