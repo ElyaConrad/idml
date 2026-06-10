@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@bluepic/core": "^0.1.430",
     "@types/downloadjs": "^1.4.6",
     "@vicons/ionicons5": "^0.12.0",
     "bytes": "^3.1.2",

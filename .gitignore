@@ -4,3 +4,4 @@ compare
 compare_old
 dist
 package-lock.json
+.npmrc

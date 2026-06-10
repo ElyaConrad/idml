@@ -6,6 +6,7 @@ import { FileTypeResult } from 'file-type';
 import { Color } from './main';
 import { Gradient } from './controllers/Gradient';
 import { ColorDescriptor, GradientDescriptor } from './util/fill';
+import { itemTransform2Matrix } from './util/layout';
 
 
 export type BasicSurfaceStyle = {
@@ -110,21 +111,6 @@ export type SVGDocument = {
   };
   elements: SVGElement[];
 };
-
-function itemTransform2Matrix(itemTransform?: TransformMatrix) {
-  if (!itemTransform) {
-    return identity();
-  }
-  const [a, b, c, d, e, f] = itemTransform;
-  return transform({
-    a: a,
-    b: b,
-    c: c,
-    d: d,
-    e: e,
-    f: f,
-  });
-}
 
 (window as any).transform = transform;
 (window as any).applyToPoint = applyToPoint;

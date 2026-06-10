@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import SVG2IDML from './views/SVG2IDML.vue';
 import FlatSVG from './views/FlatSVG.vue';
 import IDML from './views/IDML.vue';
+import IDMLBluepic from './views/IDMLBluepic.vue';
 
 const routes = [
   {
@@ -22,6 +23,11 @@ const routes = [
     path: '/idml',
     name: 'IDML',
     component: IDML,
+  },
+  {
+    path: '/idml-bluepic',
+    name: 'IDMLBluepic',
+    component: IDMLBluepic,
   },
 ];
 
