@@ -16,6 +16,7 @@ export type BasicSurfaceStyle = {
 };
 
 export type RectangleElement = {
+  id: string;
   type: 'rectangle';
   x: number;
   y: number;
@@ -28,6 +29,7 @@ export type RectangleElement = {
   style: BasicSurfaceStyle;
 };
 export type OvalElement = {
+  id: string;
   type: 'oval';
   x: number;
   y: number;
@@ -40,6 +42,7 @@ export type OvalElement = {
   style: BasicSurfaceStyle;
 };
 export type PathElement = {
+  id: string;
   type: 'path';
   paths: PathCommand[][];
   transform: Matrix;
@@ -49,6 +52,7 @@ export type PathElement = {
   style: BasicSurfaceStyle;
 };
 export type ImageElement = {
+  id: string;
   type: 'image';
   x: number;
   y: number;
@@ -62,6 +66,7 @@ export type ImageElement = {
   };
 };
 export type TextElement = {
+  id: string;
   type: 'text';
   x: number;
   y: number;
@@ -74,6 +79,7 @@ export type TextElement = {
   };
 };
 export type MaskElement = {
+  id: string;
   type: 'mask';
   children: (RectangleElement | OvalElement | PathElement | ImageElement | TextElement | MaskElement | GroupElement)[];
   mask: (RectangleElement | OvalElement | PathElement | ImageElement | TextElement | MaskElement | GroupElement)[];
@@ -84,6 +90,7 @@ export type MaskElement = {
   style: BasicSurfaceStyle;
 };
 export type GroupElement = {
+  id: string;
   type: 'group';
   children: (RectangleElement | OvalElement | PathElement | ImageElement | TextElement | MaskElement | GroupElement)[];
   transform: Matrix;
@@ -229,10 +236,10 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
   if (sprite.type === 'Rectangle') {
     const rectangleSprite = sprite as RectangleSprite;
     const bbox = rectangleSprite.getBBox();
-    const fill = rectangleSprite.getFillColor() ?? rectangleSprite.getFillGradient();
-    const stroke = rectangleSprite.isStrokeNone() ? undefined : (rectangleSprite.getStrokeColor() ?? rectangleSprite.getStrokeGradient() ?? rectangleSprite.context.idml.getColors()[0]);
-    const strokeWeight = rectangleSprite.getStrokeWeight() ?? 1;
-    const opacity = rectangleSprite.getOpacity() ?? 100;
+    const fill = rectangleSprite.getEffectiveFill();
+    const stroke = rectangleSprite.getEffectiveStroke();
+    const strokeWeight = rectangleSprite.getEffectiveStrokeWeight();
+    const opacity = rectangleSprite.getOpacity();
 
     if (rectangleSprite.getId() === 'u16e') {
       console.log('[u16e]', fill, stroke, strokeWeight)
@@ -278,6 +285,7 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
             style: { fill: { type: 'color', red: 0, green: 0, blue: 0, alpha: 1 }, stroke: null, strokeWidth: 0, opacity: 100 },
           } as RectangleElement);
       const maskElement: MaskElement = {
+        id: rectangleSprite.getId(),
         type: 'mask',
         children: await Promise.all(subSprites.map((child) => resolveSprite(child, pageMatrix))),
         mask: [maskShape],
@@ -287,6 +295,7 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
       return maskElement;
     } else if (effectivePaths) {
       return {
+        id: rectangleSprite.getId(),
         type: 'path',
         paths: effectivePaths,
         transform: bakedTransform,
@@ -294,6 +303,7 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
       };
     } else {
       return {
+        id: rectangleSprite.getId(),
         type: 'rectangle',
         x: bbox.x,
         y: bbox.y,
@@ -314,6 +324,7 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
     console.log('IMAGE', imageSprite);
 
     return {
+      id: imageSprite.getId(),
       type: 'image',
       x: bbox.x,
       y: bbox.y,
@@ -339,12 +350,12 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
     const textFrameSprite = sprite as TextFrame;
     const bbox = textFrameSprite.getBBox();
 
-    const fill = textFrameSprite.getFillColor() ?? textFrameSprite.getFillGradient();
-    const stroke = textFrameSprite.isStrokeNone() ? undefined : (textFrameSprite.getStrokeColor() ?? textFrameSprite.getStrokeGradient());
-    const strokeWeight = textFrameSprite.getStrokeWeight();
+    const fill = textFrameSprite.getEffectiveFill();
+    const stroke = textFrameSprite.getEffectiveStroke();
+    const strokeWeight = textFrameSprite.getEffectiveStrokeWeight();
     const opacity = textFrameSprite.getOpacity();
 
-    const hasBackgroundRect = fill || stroke || strokeWeight !== undefined;
+    const hasBackgroundRect = Boolean(fill || stroke);
 
     const paragraphs = textFrameSprite
       .getStory()
@@ -360,13 +371,15 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
       });
 
     if (hasBackgroundRect) {
-      const style = generateSurfaceStyle(fill, stroke, strokeWeight ?? 0, opacity ?? 100);
+      const style = generateSurfaceStyle(fill, stroke, strokeWeight, opacity);
 
       return {
+        id: textFrameSprite.getId(),
         type: 'group',
         transform: bakedTransform,
         children: [
           {
+            id: `${textFrameSprite.getId()}::background`,
             type: 'rectangle',
             x: bbox.x,
             y: bbox.y,
@@ -376,6 +389,7 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
             style,
           },
           {
+            id: `${textFrameSprite.getId()}::text`,
             type: 'text',
             x: bbox.x,
             y: bbox.y,
@@ -394,6 +408,7 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
       };
     } else {
       return {
+        id: textFrameSprite.getId(),
         type: 'text',
         x: bbox.x,
         y: bbox.y,
@@ -406,14 +421,15 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
   } else if (sprite.type === 'Group') {
     const groupSprite = sprite as GroupSprite;
 
-    const fill = groupSprite.getFillColor() ?? groupSprite.getFillGradient();
-    const stroke = groupSprite.isStrokeNone() ? undefined : (groupSprite.getStrokeColor() ?? groupSprite.getStrokeGradient());
-    const strokeWeight = groupSprite.getStrokeWeight();
+    const fill = groupSprite.getEffectiveFill();
+    const stroke = groupSprite.getEffectiveStroke();
+    const strokeWeight = groupSprite.getEffectiveStrokeWeight();
     const opacity = groupSprite.getOpacity();
 
-    const style = generateSurfaceStyle(fill, stroke, strokeWeight ?? 1, opacity ?? 100);
+    const style = generateSurfaceStyle(fill, stroke, strokeWeight, opacity);
 
     return {
+      id: groupSprite.getId(),
       type: 'group',
       children: await Promise.all(groupSprite.getSprites().map((child) => resolveSprite(child, pageMatrix))),
       transform: bakedTransform,
@@ -424,19 +440,21 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
     const ellipse = ovalSprite.getEllipse();
     const subSprites = ovalSprite.getSprites();
 
-    const fill = ovalSprite.getFillColor() ?? ovalSprite.getFillGradient();
-    const stroke = ovalSprite.isStrokeNone() ? undefined : (ovalSprite.getStrokeColor() ?? ovalSprite.getStrokeGradient() ?? ovalSprite.context.idml.getColors()[0]);
-    const strokeWeight = ovalSprite.getStrokeWeight() ?? 1;
-    const opacity = ovalSprite.getOpacity() ?? 100;
+    const fill = ovalSprite.getEffectiveFill();
+    const stroke = ovalSprite.getEffectiveStroke();
+    const strokeWeight = ovalSprite.getEffectiveStrokeWeight();
+    const opacity = ovalSprite.getOpacity();
 
     const style = generateSurfaceStyle(fill, stroke, strokeWeight, opacity);
 
     if (subSprites.length > 0) {
       const maskElement: MaskElement = {
         type: 'mask',
+        id: ovalSprite.getId(),
         children: await Promise.all(subSprites.map((child) => resolveSprite(child, pageMatrix))),
         mask: [
           {
+            id: `${ovalSprite.getId()}::mask`,
             type: 'oval',
             x: ellipse.x,
             y: ellipse.y,
@@ -457,6 +475,7 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
       return maskElement;
     } else {
       return {
+        id: ovalSprite.getId(),
         type: 'oval',
         x: ellipse.x,
         y: ellipse.y,
@@ -471,11 +490,11 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
 
     const paths = polygonSprite.getPath();
     const subSprites = polygonSprite.getSprites();
-    const fill = polygonSprite.getFillColor() ?? polygonSprite.getFillGradient();
+    const fill = polygonSprite.getEffectiveFill();
     const gradientAngle = polygonSprite.getGradientFillAngle();
-    const stroke = polygonSprite.isStrokeNone() ? undefined : (polygonSprite.getStrokeColor() ?? polygonSprite.getStrokeGradient() ?? polygonSprite.context.idml.getColors()[0]);
-    const strokeWeight = polygonSprite.getStrokeWeight() ?? 1;
-    const opacity = polygonSprite.getOpacity() ?? 100;
+    const stroke = polygonSprite.getEffectiveStroke();
+    const strokeWeight = polygonSprite.getEffectiveStrokeWeight();
+    const opacity = polygonSprite.getOpacity();
 
     const style = generateSurfaceStyle(fill, stroke, strokeWeight, opacity, gradientAngle);
     // console.log('POLYGON', polygonSprite, style, gradientAngle);
@@ -483,10 +502,12 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
     if (subSprites.length > 0) {
       const maskElement: MaskElement = {
         type: 'mask',
+        id: polygonSprite.getId(),
         children: await Promise.all(subSprites.map((child) => resolveSprite(child, pageMatrix))),
         mask: [
           {
             type: 'path',
+            id: `${polygonSprite.getId()}::mask`,
             paths: paths,
             transform: transform(inverse(pageMatrix), identity(), pageMatrix),
             style: {
@@ -503,6 +524,7 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
       return maskElement;
     } else {
       return {
+        id: polygonSprite.getId(),
         type: 'path',
         paths: paths,
         transform: bakedTransform,
@@ -532,6 +554,7 @@ async function collectSpread(spread: Spread): Promise<SpreadDocument> {
 
   const pages: GroupElement[] = spread.pages.map((page) => {
     return {
+      id: page.id,
       type: 'group',
       transform: itemTransform2Matrix(page.itemTransform),
       children: [],

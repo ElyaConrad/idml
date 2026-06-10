@@ -25,7 +25,7 @@
       <SVGElement :element="subElement" />
     </template>
   </g>
-  <g v-else-if="element.type === 'mask'" :style="{stroke: elementStyle.stroke, strokeWidth: elementStyle.strokeWidth}" v-bind="{ ...dataAttrs }" :data-element-type="element.type">
+  <g v-else-if="element.type === 'mask'" :style="{stroke: elementStyle.stroke, strokeWidth: elementStyle.strokeWidth}" v-bind="{ ...dataAttrs }">
     <defs>
       <clipPath :id="`mask-${maskId}`">
         <template v-for="maskingElement in element.mask">
@@ -89,9 +89,16 @@ const elementStyle = computed(() => {
 
 const dataAttrs = computed(() => {
   if ('data' in props.element) {
-    return Object.fromEntries(Object.entries(props.element.data!).map(([key, value]) => [`data-${key}`, value]));
+    return {
+      ...Object.fromEntries(Object.entries(props.element.data!).map(([key, value]) => [`data-${key}`, value])),
+      'data-type': props.element.type,
+      'data-id': props.element.id,
+    };
   }
-  return {};
+  return {
+    'data-type': props.element.type,
+    'data-id': props.element.id,
+  };
 });
 
 function arrayBufferToDataURL(buffer: ArrayBuffer, mimeType: string): string {

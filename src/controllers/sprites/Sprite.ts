@@ -8,6 +8,9 @@ import { RectangleSprite } from './Rectangle.js';
 import { OvalSprite } from './Oval.js';
 import { PolygonSprite } from './Polygon.js';
 import { GroupSprite } from './Group.js';
+import { Color } from '../Color.js';
+import { Gradient } from '../Gradient.js';
+import { MergedObjectStyle, NONE_OBJECT_STYLE } from '../ObjectStyle.js';
 
 export type SpriteWithChildren = RectangleSprite | OvalSprite | PolygonSprite | GroupSprite;
 
@@ -197,6 +200,59 @@ export abstract class Sprite {
   }
   getStrokeWeight() {
     return this.strokeWeight;
+  }
+  /** The applied object style as a relation (Layer 1), resolved via the registry. */
+  getAppliedObjectStyle() {
+    return this.context.idml.getObjectStyleById(this.appliedObjectStyleId);
+  }
+  /**
+   * Layer 2 — the effective surface style for this item: the applied object
+   * style's resolved cascade, with this item's own local attributes overlaid
+   * on top (local always wins). Every field is concrete, so consumers never
+   * need to invent defaults like `?? 1` or `getColors()[0]`.
+   *
+   * Computed on demand (not cached) because sprites are mutable via the
+   * setStrokeColor / setStrokeWeight / setFillColor setters.
+   */
+  getMergedStyle(): MergedObjectStyle {
+    const base = this.getAppliedObjectStyle()?.getResolved() ?? NONE_OBJECT_STYLE;
+    return {
+      fillColorId: this.fillColorId ?? base.fillColorId,
+      fillTint: base.fillTint,
+      strokeColorId: this.strokeColorId ?? base.strokeColorId,
+      strokeWeight: this.strokeWeight ?? base.strokeWeight,
+      strokeTint: base.strokeTint,
+      gradientFillAngle: this.gradientFillAngle ?? base.gradientFillAngle,
+      gradientStrokeAngle: this.gradientStrokeAngle ?? base.gradientStrokeAngle,
+    };
+  }
+  private static isNonePaint(colorId?: string) {
+    return !colorId || colorId.endsWith('/None');
+  }
+  private resolvePaint(colorId: string): Color | Gradient | undefined {
+    if (Sprite.isNonePaint(colorId)) {
+      return undefined;
+    }
+    return this.context.idml.getColorById(colorId) ?? this.context.idml.getGradientById(colorId);
+  }
+  /** Effective fill (color or gradient), or undefined for a `[None]` fill. */
+  getEffectiveFill(): Color | Gradient | undefined {
+    return this.resolvePaint(this.getMergedStyle().fillColorId);
+  }
+  /**
+   * Effective stroke (color or gradient), or undefined when the stroke is
+   * `[None]` OR the effective weight is 0 (no visible stroke either way).
+   */
+  getEffectiveStroke(): Color | Gradient | undefined {
+    const merged = this.getMergedStyle();
+    if (merged.strokeWeight <= 0) {
+      return undefined;
+    }
+    return this.resolvePaint(merged.strokeColorId);
+  }
+  /** Effective stroke weight in points (always concrete; 0 means no stroke). */
+  getEffectiveStrokeWeight(): number {
+    return this.getMergedStyle().strokeWeight;
   }
   setFillColor(color: ColorInput) {
     this.fillColorId = this.context.idml.assumeColor(color).id;

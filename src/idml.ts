@@ -240,6 +240,22 @@ export class IDML extends EventTarget {
   getCharacterStyleById(id: string) {
     return this.getCharacterStyles().find((style) => style.id === id);
   }
+  getObjectStyles() {
+    return this.styles
+      .map((style) => {
+        return style.objectStyles;
+      })
+      .flat();
+  }
+  getObjectStyleById(id?: string) {
+    if (!id) {
+      return undefined;
+    }
+    // BasedOn references and applied-style ids may omit the "ObjectStyle/" prefix
+    // (e.g. "$ID/[None]" vs the Self id "ObjectStyle/$ID/[None]"). Normalize both.
+    const normalized = id.startsWith('ObjectStyle/') ? id : `ObjectStyle/${id}`;
+    return this.getObjectStyles().find((style) => style.id === id || style.id === normalized);
+  }
   assumeParagraphStyle(paragraphStyle: ParagraphStyleInput | string) {
     if (typeof paragraphStyle === 'string') {
       const existingParagraphStyle = this.getParagraphStyleById(paragraphStyle);

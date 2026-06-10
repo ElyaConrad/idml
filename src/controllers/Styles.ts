@@ -2,6 +2,7 @@ import { IDMLDocumentContext } from '../idml.js';
 import { ElementNode, makeElementNode, nodeToNode, parseXML, XMLDocumentExport } from 'flat-svg';
 import { CharacterStyle, CharacterStyleInput } from './CharacterStyle.js';
 import { ParagraphStyle, ParagraphStyleInput } from './ParagraphStyle.js';
+import { ObjectStyle } from './ObjectStyle.js';
 import { SuperController } from './SuperController.js';
 import _ from 'lodash';
 import { v4 as uuidv4 } from 'uuid';
@@ -11,9 +12,13 @@ export type IDMLStylesContext = IDMLDocumentContext & {
 };
 
 export class IDMLStylesController extends SuperController {
+  // NOTE: ObjectStyle is intentionally NOT listed here. Object styles are
+  // parsed into a read-only model below, but serialization passes the original
+  // RootObjectStyleGroup through untouched, so the faithful structure is preserved.
   static elementsImplemented = ['RootParagraphStyleGroup', 'RootCharacterStyleGroup'];
   characterStyles: CharacterStyle[];
   paragraphStyles: ParagraphStyle[];
+  objectStyles: ObjectStyle[];
   private context: IDMLStylesContext;
   constructor(public src: string, raw: string, topContext: IDMLDocumentContext) {
     super();
@@ -29,6 +34,37 @@ export class IDMLStylesController extends SuperController {
 
     const paragraphStyleElements = Array.from(doc.getElementsByTagName('ParagraphStyle'));
     this.paragraphStyles = paragraphStyleElements.map((element) => ParagraphStyle.parseElement(element, this.context));
+
+    const objectStyleElements = Array.from(doc.getElementsByTagName('ObjectStyle'));
+    this.objectStyles = objectStyleElements.map((element) => ObjectStyle.parseElement(element, this.context));
+  }
+  /**
+   * Create a new object style by cloning an existing one's full DOM node (so
+   * the new style inherits a complete, valid structure — all the nested
+   * children InDesign expects). The clone is inserted into the live
+   * RootObjectStyleGroup, so it round-trips through the normal passthrough.
+   * Defaults to cloning `[None]`.
+   */
+  createObjectStyle(opts: { name?: string; basedOnId?: string; cloneFromId?: string } = {}) {
+    const template = this.objectStyles.find((style) => style.id === (opts.cloneFromId ?? 'ObjectStyle/$ID/[None]')) ?? this.objectStyles[0];
+    const templateElement = template?.getSourceElement();
+    const rootGroup = Array.from(this.context.stylesRoot.getElementsByTagName('RootObjectStyleGroup'))[0];
+    if (!templateElement || !rootGroup) {
+      throw new Error('Cannot create object style: no template object style or RootObjectStyleGroup found');
+    }
+
+    const id = `ObjectStyle/${this.context.idml.getUniqueID()}`;
+    const clone = templateElement.cloneNode(true) as Element;
+    clone.setAttribute('Self', id);
+    clone.setAttribute('Name', opts.name ?? `Object Style ${this.objectStyles.length + 1}`);
+    rootGroup.appendChild(clone);
+
+    const objectStyle = ObjectStyle.parseElement(clone, this.context);
+    if (opts.basedOnId !== undefined) {
+      objectStyle.setBasedOnId(opts.basedOnId);
+    }
+    this.objectStyles.push(objectStyle);
+    return objectStyle;
   }
   createParagraphStyle(paragraphStyle: ParagraphStyleInput) {
     const id = `ParagraphStyle/${this.context.idml.getUniqueID()}`;
