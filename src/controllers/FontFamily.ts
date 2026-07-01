@@ -26,6 +26,14 @@ export class FontFamily {
   getAvailableFontStyles() {
     return this.fonts.map((font) => font.fontStyleName);
   }
+  getFonts() {
+    return this.fonts;
+  }
+  /** Resolve a concrete font by its IDML FontStyleName (exact, then normalized). */
+  getFontByStyleName(styleName: string) {
+    const key = styleName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return this.fonts.find((font) => font.fontStyleName === styleName) ?? this.fonts.find((font) => font.fontStyleName.toLowerCase().replace(/[^a-z0-9]/g, '') === key);
+  }
   addFontStyle(fullName: string, styleName: string, postScriptName: string, status: FontStatus, type: string) {
     const name = fullName;
     const id = `${this.id}Fontn${name}`;

@@ -6,6 +6,7 @@ export * from './idml.js';
 export * from './svg2idml.js';
 export * from './idml2svg.js';
 export * from './idml2serial.js';
+export * from './metadata.js';
 
 export * from './controllers/Story.js';
 export * from './controllers/Color.js';

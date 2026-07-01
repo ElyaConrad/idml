@@ -30,8 +30,25 @@ import { DecomposedTransform } from './util/layout';
 
 // ---- asset collection (for the import wizard) ------------------------------
 
-/** A font weight/style combination encountered in a serial. */
-export type FontVariant = { weight: number; italic: boolean };
+/**
+ * A font weight/style combination encountered in a serial. When the document's
+ * XMP metadata resolves it, the variant also carries the original PostScript
+ * name, on-disk file name (`fontFileName`, e.g. "DINBd_.ttf") and font type —
+ * letting a consumer match the exact binary shipped in a package's `Document
+ * fonts/` folder instead of guessing from the family name.
+ */
+export type FontVariant = {
+  weight: number;
+  italic: boolean;
+  /** Raw IDML FontStyle name, e.g. "Bold", "Bold Cond Italic". */
+  styleName?: string;
+  /** PostScript name from `Resources/Fonts.xml`, e.g. "DIN-Bold". */
+  postScriptName?: string;
+  /** Original on-disk file name from the XMP metadata, e.g. "DINBd_.ttf". */
+  fontFileName?: string;
+  /** e.g. "TrueType", "OpenTypeCFF". */
+  fontType?: string;
+};
 /** A font family + the distinct weight/italic combinations used. */
 export type RequiredFont = { family: string; variants: FontVariant[] };
 /** A linked image with no embedded source — the user must supply it. */
@@ -45,16 +62,17 @@ export type SerialAssets = { fonts: RequiredFont[]; missingImages: MissingImage[
 export type ConvertedSerial = { serial: Template.Serial; assets: SerialAssets };
 
 class AssetCollector {
-  private fonts = new Map<string, Map<string, FontVariant>>(); // family -> "w|i" -> variant
+  private fonts = new Map<string, Map<string, FontVariant>>(); // family -> styleName|"w|i" -> variant
   readonly missingImages: MissingImage[] = [];
   readonly imagesToUpload: ImageToUpload[] = [];
 
-  addFont(family: string, weight: number, italic: boolean) {
+  addFont(family: string, variant: FontVariant) {
     if (!family) return;
-    const key = `${weight}|${italic}`;
+    // Dedup by the concrete style (distinct binaries) when known, else weight/italic.
+    const key = variant.styleName ?? `${variant.weight}|${variant.italic}`;
     let variants = this.fonts.get(family);
     if (!variants) this.fonts.set(family, (variants = new Map()));
-    if (!variants.has(key)) variants.set(key, { weight, italic });
+    if (!variants.has(key)) variants.set(key, variant);
   }
   /**
    * Record an image used at serial element `elementId` (the element that holds
@@ -326,6 +344,8 @@ type EffectiveTextStyle = {
   fontSize: number;
   fontWeight: number;
   fontStyle: string;
+  /** Raw IDML FontStyle name (e.g. "Bold"), used to resolve the exact font binary. */
+  styleName?: string;
   letterSpacing: number;
   lineHeight: number;
   color: string;
@@ -376,6 +396,7 @@ function effectiveTextStyle(paragraph: ParagraphOutput, feature: ParagraphOutput
     fontSize,
     fontWeight: weightFromFontStyle(fontStyle),
     fontStyle: italicFromFontStyle(fontStyle),
+    styleName: fontStyle,
     // Bluepic letterSpacing is a RATIO: core applies (value - 1) * fontSize as
     // extra px, so 1 = normal (0 would mean -1em = catastrophic). IDML tracking
     // is in 1/1000 em, i.e. extra-em = tracking/1000.
@@ -408,7 +429,19 @@ function buildTextElement(frame: TextFrame, box: Box, transform: DecomposedTrans
     let paragraphText = '';
     for (const feature of paragraph.features) {
       const style = effectiveTextStyle(paragraph, feature, defaultFont);
-      collector.addFont(style.fontFamily, style.fontWeight, style.fontStyle === 'italic');
+      // Resolve the concrete binary: family + IDML style -> Fonts.xml font (for
+      // its PostScript name) -> XMP metadata (for the original file name).
+      const idml = frame.context.idml;
+      const font = idml.getFont(style.fontFamily, style.styleName);
+      const documentFont = idml.resolveFontFile({ family: style.fontFamily, styleName: style.styleName, postScriptName: font?.postScriptName });
+      collector.addFont(style.fontFamily, {
+        weight: style.fontWeight,
+        italic: style.fontStyle === 'italic',
+        styleName: style.styleName,
+        postScriptName: font?.postScriptName ?? documentFont?.fontName,
+        fontFileName: documentFont?.fontFileName,
+        fontType: documentFont?.fontType ?? font?.type,
+      });
       const text = feature.content ?? '';
       paragraphText += text;
       runs.push({ text, style });

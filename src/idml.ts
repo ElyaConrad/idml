@@ -22,6 +22,7 @@ import { FontFamily } from './controllers/FontFamily.js';
 import { extractFontTable } from './idml.js';
 import { determineFontType } from './idml.js';
 import { base64ToArrayBuffer, createArrayBuffer } from './util/arrayBuffer.js';
+import { DocumentFontResource, normalizeFontKey, parseDocumentFonts } from './metadata.js';
 import { ParagraphInput, Story } from './controllers/Story.js';
 import { Gradient } from './controllers/Gradient.js';
 export { type ColorInput } from './types/index.js';
@@ -67,6 +68,8 @@ export class IDML extends EventTarget {
   spreadPackages: SpreadPackage[] = [];
   backingStories: BackingStory[] = [];
   storyPackages: StoryPackage[] = [];
+  /** Font descriptors from the XMP metadata packet (incl. original file names). */
+  documentFonts: DocumentFontResource[] = [];
 
   swatchCreatorId = 'elya-idml';
   swatchGroupReference = 'elya-idml';
@@ -311,6 +314,55 @@ export class IDML extends EventTarget {
   getFontFamily(name: string) {
     return this.getFontFamilies().find((fontFamily) => fontFamily.name === name);
   }
+  /** All XMP font descriptors (incl. original file names) declared by the document. */
+  getDocumentFonts() {
+    return this.documentFonts;
+  }
+  /** Look up an XMP font descriptor by PostScript name (exact, then normalized). */
+  getDocumentFontByPostScriptName(postScriptName: string) {
+    const key = normalizeFontKey(postScriptName);
+    return this.documentFonts.find((font) => font.fontName === postScriptName) ?? this.documentFonts.find((font) => normalizeFontKey(font.fontName) === key);
+  }
+  /** Resolve a concrete `Resources/Fonts.xml` font by family + IDML FontStyleName. */
+  getFont(family: string, styleName?: string) {
+    const fontFamily = this.getFontFamily(family);
+    if (!fontFamily) return undefined;
+    if (styleName) return fontFamily.getFontByStyleName(styleName) ?? fontFamily.getFonts()[0];
+    return fontFamily.getFonts()[0];
+  }
+  /**
+   * Resolve the original document-font descriptor (with `fontFileName`) for a
+   * required font. Joins on PostScript name first (`Font/@PostScriptName` ↔
+   * `stFnt:fontName`), then falls back to family + face (`stFnt:fontFamily` +
+   * `stFnt:fontFace`). Best-effort — returns `undefined` if nothing matches.
+   */
+  resolveFontFile(query: { family?: string; styleName?: string; postScriptName?: string }): DocumentFontResource | undefined {
+    const { family, styleName, postScriptName } = query;
+
+    // 1) Authoritative join: PostScript name -> stFnt:fontName.
+    if (postScriptName) {
+      const byPostScript = this.getDocumentFontByPostScriptName(postScriptName);
+      if (byPostScript?.fontFileName) return byPostScript;
+    }
+
+    // 2) Family (+ face) join.
+    if (family) {
+      const familyKey = normalizeFontKey(family);
+      const faceKey = styleName ? normalizeFontKey(styleName) : undefined;
+      const candidates = this.documentFonts.filter((font) => font.fontFamily && normalizeFontKey(font.fontFamily) === familyKey);
+      if (faceKey) {
+        const byFace = candidates.find((font) => font.fontFace && normalizeFontKey(font.fontFace) === faceKey && font.fontFileName) ?? candidates.find((font) => font.fontFace && normalizeFontKey(font.fontFace).includes(faceKey) && font.fontFileName);
+        if (byFace) return byFace;
+      }
+      // Single-face family: the only candidate is unambiguous.
+      const withFile = candidates.filter((font) => font.fontFileName);
+      if (withFile.length === 1) return withFile[0];
+    }
+
+    // 3) Last resort: any PostScript match, even without a file name.
+    if (postScriptName) return this.getDocumentFontByPostScriptName(postScriptName);
+    return undefined;
+  }
   addFont(fontFile: ArrayBuffer) {
     const fontController = this.fonts[0];
     const fontTable = extractFontTable(fontFile);
@@ -333,6 +385,17 @@ export class IDML extends EventTarget {
     }
 
     this.designmap = parseXML(await designmapEntry.text());
+
+    // Document XMP metadata: font descriptors carry the original on-disk file
+    // names, the reliable link to a package's `Document fonts/` binaries.
+    const metadataEntry = entries['META-INF/metadata.xml'];
+    if (metadataEntry) {
+      try {
+        this.documentFonts = parseDocumentFonts(parseXML(await metadataEntry.text()));
+      } catch {
+        /* metadata packet is optional / best-effort */
+      }
+    }
 
     // Create controllers for each graphic declarations
     for (const graphicLinkElement of Array.from(this.designmap.getElementsByTagName('idPkg:Graphic'))) {
