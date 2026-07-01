@@ -47,6 +47,8 @@ export type SurfaceInput = {
   fill?: Paint;
   stroke?: Paint;
   strokeWidth?: number;
+  strokeAlignment?: 'inside' | 'center' | 'outside';
+  radius?: [number, number, number, number];
   opacity?: number; // 0..1
 };
 
@@ -204,7 +206,9 @@ export type TextInput = {
   fontStyle: string;
   lineHeight: number;
   letterSpacing: number;
-  textAlign: number; // 0 left, 1 center, 2 right, 3 justify
+  textAlign: number; // 0..1 fraction (also the last-line position when justifyText)
+  justifyText: boolean; // stretch interior lines to fill the width
+  verticalAlign: number; // 0 top, 0.5 center, 1 bottom (vertical anchor within the frame)
   autoLinebreaks: boolean;
   fill: Paint;
   stroke?: Paint;
@@ -225,15 +229,19 @@ export function makeText(id: string, input: TextInput, transform: DecomposedTran
       richText: obj(input.richText),
       autoLinebreaks: bool(input.autoLinebreaks),
       autoLinebreaksAllowBreakChars: bool(false),
-      bounding: str('font'),
+      // 'fontSize' bounding makes the line advance = fontSize * lineHeight, so it
+      // matches InDesign's leading exactly ('font' inflates it by the font's
+      // bounding box). lineHeight is the relative percentage (120 = 120%).
+      bounding: str('fontSize'),
       uppercase: bool(false),
-      // pos[0] (the horizontal anchor) must equal textAlign: textAlign only
-      // aligns lines WITHIN the text block, while pos[0] positions that block
-      // inside the frame (core: offsetX = (maxWidth - blockWidth) * pos[0]).
-      // x is then the anchor point (= frame.x + width * pos[0]).
-      pos: numArray([input.textAlign, 0]),
+      // pos[0]/pos[1] are the horizontal/vertical anchors: they position the text
+      // block within the frame (core: offset = (max - block) * pos), and x/y are the
+      // anchor points (= frame.x/y + size * pos). pos[0] mirrors textAlign so the
+      // block hugs the same edge its lines align to; pos[1] is the vertical
+      // justification (0 top / 0.5 center / 1 bottom).
+      pos: numArray([input.textAlign, input.verticalAlign]),
       x: num(input.box.x + input.box.width * input.textAlign),
-      y: num(input.box.y),
+      y: num(input.box.y + input.box.height * input.verticalAlign),
       width: num(input.box.width),
       height: num(input.box.height),
       fontFamily: str(input.fontFamily),
@@ -244,6 +252,7 @@ export function makeText(id: string, input: TextInput, transform: DecomposedTran
       letterSpacing: num(input.letterSpacing),
       fontStretch: str('normal'),
       textAlign: num(input.textAlign),
+      justifyText: bool(input.justifyText),
       rotateLine: num(0),
       rotateChar: num(0),
       lineSkewX: num(0),
@@ -296,18 +305,34 @@ export function makeGroup(id: string, children: Template.Element[], transform: D
   };
 }
 
-export function makeMask(id: string, content: Template.Element[], maskShapes: Template.Element[], transform: DecomposedTransform, opacity = 1): Template.Elements.Mask {
+export function makeMask(id: string, content: Template.Element[], maskShapes: Template.Element[], transform: DecomposedTransform, opacity = 1, surface?: SurfaceInput, surfaceRegion: 'bbox' | 'shape' = 'bbox'): Template.Elements.Mask {
+  const properties: Template.Elements.Mask['properties'] = {
+    'v-transform-origin': ORIGIN_0,
+    visible: bool(true),
+    opacity: num(opacity),
+    invert: bool(false),
+    colorMasking: bool(false),
+  };
+  // Emit the surface (fill/stroke drawn behind/on top of the masked content) only
+  // when requested, so plain clipping masks stay minimal. `surfaceRegion: 'shape'`
+  // paints on the clip-shape path itself (radius ignored — corners come from the
+  // shape); 'bbox' paints a rounded rectangle over the clipped combined bbox.
+  if (surface || surfaceRegion !== 'bbox') {
+    // Stroke MUST be `none` (not transparent) when absent — core skips stroke on `!== 'none'`.
+    properties.fill = surface?.fill != null ? paint(surface.fill) : str('none');
+    properties.stroke = surface?.stroke != null ? paint(surface.stroke) : str('none');
+    properties.strokeWidth = num(surface?.strokeWidth ?? 0);
+    properties.strokeDasharray = numArray([0]);
+    properties.strokeDashoffset = num(0);
+    properties.strokeAlignment = str(surface?.strokeAlignment ?? 'center');
+    properties.radius = numArray(surface?.radius ?? [0, 0, 0, 0]);
+    properties.surfaceRegion = str(surfaceRegion);
+  }
   return {
     name: 'mask',
     id,
     locked: false,
-    properties: {
-      'v-transform-origin': ORIGIN_0,
-      visible: bool(true),
-      opacity: num(opacity),
-      invert: bool(false),
-      colorMasking: bool(false),
-    },
+    properties,
     transform: serialTransform(transform),
     filter: defaultFilter(),
     slots: { default: content, mask: maskShapes },

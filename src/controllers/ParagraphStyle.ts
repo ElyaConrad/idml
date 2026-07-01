@@ -24,15 +24,18 @@ export type ParagraphStyleInput = {
 export type Align = 'left' | 'right' | 'center' | 'justify' | 'justifyLeft' | 'justifyRight' | 'justifyCenter' | 'justifyAll';
 export type Capitalization = 'normal' | 'smallCaps' | 'allCaps';
 
+// IDML `Justification` enum -> internal Align. Bluepic core has no true
+// justification (textAlign is a positional 0..1 fraction), so the *Justified
+// variants map to the positional fraction of their last-line behavior
+// (justifyLeft->0, justifyCenter->0.5, justifyRight->1, justifyAll->0).
 export const alignMap = new KeyMap({
   LeftAlign: 'left',
-  RightALign: 'right',
+  RightAlign: 'right',
   CenterAlign: 'center',
-  Justify: 'justify',
-  JustifyLeft: 'justifyLeft',
-  JustifyRight: 'justifyRight',
-  JustifyCenter: 'justifyCenter',
-  JustifyAll: 'justifyAll',
+  LeftJustified: 'justifyLeft',
+  RightJustified: 'justifyRight',
+  CenterJustified: 'justifyCenter',
+  FullyJustified: 'justifyAll',
 } as const);
 
 export const capitalizationMap = new KeyMap({
@@ -272,14 +275,17 @@ export class ParagraphStyle {
     const fontSize = ensureNumber(props.PointSize);
     const autoLeading = ensureNumber(props.AutoLeading);
     const leading = ensureNumber(props.Leading);
-    const align = alignMap.getInternal(props.Justification);
+    // Guard on presence — KeyMap.getInternal returns its first value for
+    // undefined, which would fabricate a 'left' alignment on styles that don't
+    // set Justification (they should inherit it via the BasedOn chain instead).
+    const align = props.Justification !== undefined ? alignMap.getInternal(props.Justification) : undefined;
     const fillColorId = props.FillColor;
     const tint = ensureNumber(props.Tint);
     const strokeColorId = props.StrokeColor;
     const strokeWeight = ensureNumber(props.StrokeWeight);
     const strokeTint = ensureNumber(props.StrokeTint);
     const skew = ensureNumber(props.Skew);
-    const capitalization = capitalizationMap.getInternal(props.Capitalization);
+    const capitalization = props.Capitalization !== undefined ? capitalizationMap.getInternal(props.Capitalization) : undefined;
     const fontStyle = props.FontStyle;
     const tracking = ensureNumber(props.Tracking);
     const baselineShift = ensureNumber(props.BaselineShift);

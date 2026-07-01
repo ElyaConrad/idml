@@ -27,13 +27,30 @@
       <section class="pane">
         <h3>Bluepic Serial preview ({{ serials.length }})</h3>
         <div class="serial-list">
-          <div
-            v-for="(serial, i) in serials"
-            :key="`serial-${i}`"
-            class="serial-frame"
-            :style="{ width: '420px', aspectRatio: `${serial.width} / ${serial.height}` }"
-          >
-            <SerialWrapper :serial="serial as any" :load-fonts="true" />
+          <div v-for="(bundle, i) in serials" :key="`serial-${i}`" class="serial-block">
+            <div class="serial-frame" :style="{ width: '420px', aspectRatio: `${bundle.serial.width} / ${bundle.serial.height}` }">
+              <SerialWrapper :serial="bundle.serial as any" :load-fonts="true" />
+            </div>
+            <div class="assets">
+              <div v-if="bundle.assets.fonts.length">
+                <strong>Fonts:</strong>
+                <span v-for="(f, fi) in bundle.assets.fonts" :key="fi" class="asset-chip">
+                  {{ f.family }} ({{ f.variants.map((v: any) => `${v.weight}${v.italic ? 'i' : ''}`).join(', ') }})
+                </span>
+              </div>
+              <div v-if="bundle.assets.missingImages.length">
+                <strong>Missing images:</strong>
+                <span v-for="(m, mi) in bundle.assets.missingImages" :key="mi" class="asset-chip warn">
+                  #{{ m.elementId }} → {{ m.linkURI ? decodeURIComponent(m.linkURI.split('/').pop()) : m.imageId }}
+                </span>
+              </div>
+              <div v-if="bundle.assets.imagesToUpload.length">
+                <strong>Images to upload:</strong>
+                <span v-for="(u, ui) in bundle.assets.imagesToUpload" :key="ui" class="asset-chip ok">
+                  #{{ u.elementId }} → {{ u.linkURI ? decodeURIComponent(u.linkURI.split('/').pop()) : u.imageId }} ({{ Math.round(u.data.byteLength / 1024) }} KB)
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -70,8 +87,6 @@ function handleChange(data: { file: Required<UploadFileInfo>; fileList: Required
 
 // Dev affordance: ?src=/4-pages.idml auto-loads an IDML served by the dev server.
 onMounted(async () => {
-  // TEMP: feed the re-linked image in for the unknown (linked) image sprite.
-  (window as any).__imageOverrides = { u1e2: '/COVER%20V2_sRGB.png' };
   const src = new URLSearchParams(location.search).get('src');
   if (!src) return;
   status.value = `Fetching ${src}…`;
@@ -89,8 +104,10 @@ watch(idmlContents, () => {
       status.value = 'Building Bluepic Serial(s)…';
       serials.value = await convertIDML2Serial(idml.value!);
       status.value = `Done — ${spreads.value.length} spread(s), ${serials.value.length} serial(s).`;
-      (window as any).__serials = serials.value;
-      console.log('serials', serials.value);
+      (window as any).__bundles = serials.value;
+      (window as any).__serials = serials.value.map((b: any) => b.serial);
+      console.log('bundles', serials.value);
+      console.log('assets', serials.value.map((b: any) => b.assets));
     } catch (err) {
       console.error(err);
       status.value = `Error: ${(err as Error).message}`;
@@ -152,6 +169,30 @@ watch(idmlContents, () => {
         border: 1px solid #ccc;
         background: #f9f9f9;
         width: 100%;
+      }
+
+      .assets {
+        font-size: 11px;
+        color: #555;
+        margin: 6px 0 4px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        .asset-chip {
+          display: inline-block;
+          background: #eef1f4;
+          border-radius: 4px;
+          padding: 1px 6px;
+          margin: 0 4px 2px 0;
+          &.warn {
+            background: #ffe9e0;
+            color: #a4502a;
+          }
+          &.ok {
+            background: #e3f3e8;
+            color: #2c6b42;
+          }
+        }
       }
 
       .serial-frame {

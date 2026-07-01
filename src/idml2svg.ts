@@ -326,7 +326,9 @@ async function resolveSprite(sprite: Sprite, pageMatrix: Matrix): Promise<SVGEle
       })(),
       contents: await (async () => {
         try {
-          return await imageSprite.getContents();
+          // Vector placed graphics (PDF/EPS/WMF) have no usable raster → undefined
+          // makes SVGElement fall back to the gray placeholder.
+          return imageSprite.getRasterContents();
         } catch (e) {
           return undefined;
         }

@@ -5,3 +5,4 @@ compare_old
 dist
 package-lock.json
 .npmrc
+demo-web/public/regressiontests

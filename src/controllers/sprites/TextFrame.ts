@@ -43,6 +43,17 @@ export class TextFrame extends GeometricSprite {
   getStory() {
     return this.context.idml.getStoryById(this.parentStoryId);
   }
+  /**
+   * The frame's vertical text alignment as a 0..1 fraction (0 top, 0.5 center,
+   * 1 bottom), from TextFramePreference `VerticalJustification`. Defaults to top.
+   * `JustifyAlign` (distribute lines) has no core equivalent → treated as top.
+   */
+  getVerticalAlign(): number {
+    const vj = this.textFramePreference?.sourceElement.getAttribute('VerticalJustification');
+    if (vj === 'CenterAlign') return 0.5;
+    if (vj === 'BottomAlign') return 1;
+    return 0;
+  }
 
   serialize() {
     const baseElement = this.serializeGeometricSprite();

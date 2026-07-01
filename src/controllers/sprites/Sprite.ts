@@ -50,6 +50,7 @@ export type SpriteOpts = {
   horizontalLayoutConstraints?: HorizontalLayoutConstraints;
   verticalLayoutConstraints?: VerticalLayoutConstraints;
   fillColorId?: string;
+  fillTint?: number;
   gradientStart?: [number, number];
   gradientFillLength?: number;
   gradientFillAngle?: number;
@@ -58,7 +59,9 @@ export type SpriteOpts = {
   gradientStrokeAngle?: number;
 
   strokeColorId?: string;
+  strokeTint?: number;
   strokeWeight?: number;
+  strokeAlignment?: string; // raw IDML enum; mapped at getEffectiveStrokeAlignment
 
   frameFittingOption?: FrameFittingOption;
   objectExportOption?: ObjectExportOption;
@@ -75,6 +78,14 @@ export type VerticalLayoutConstraints = [LayoutDimension, LayoutDimension, Layou
 const layoutDimensionMap = new KeyMap({
   FixedDimension: 'fixedDimension',
   FlexibleDimension: 'flexibleDimension',
+} as const);
+
+/** Bluepic stroke alignment (matches @bluepic/types StrokeAlignment). */
+export type StrokeAlignment = 'inside' | 'center' | 'outside';
+const strokeAlignmentMap = new KeyMap({
+  CenterAlignment: 'center',
+  InsideAlignment: 'inside',
+  OutsideAlignment: 'outside',
 } as const);
 
 const dropShadowSettingModeMap = new KeyMap({
@@ -117,6 +128,7 @@ export abstract class Sprite {
   private horizontalLayoutConstraints?: HorizontalLayoutConstraints;
   private verticalLayoutConstraints?: VerticalLayoutConstraints;
   private fillColorId?: string;
+  private fillTint?: number;
   private gradientStart?: [number, number];
   private gradientFillLength?: number;
   private gradientFillAngle?: number;
@@ -125,7 +137,9 @@ export abstract class Sprite {
   private gradientStrokeAngle?: number;
 
   private strokeColorId?: string;
+  private strokeTint?: number;
   private strokeWeight?: number;
+  private strokeAlignment?: string; // raw IDML enum
 
   private frameFittingOption?: FrameFittingOption;
   private objectExportOption?: ObjectExportOption;
@@ -145,6 +159,7 @@ export abstract class Sprite {
     this.horizontalLayoutConstraints = opts.horizontalLayoutConstraints;
     this.verticalLayoutConstraints = opts.verticalLayoutConstraints;
     this.fillColorId = opts.fillColorId;
+    this.fillTint = opts.fillTint;
     this.gradientStart = opts.gradientStart;
     this.gradientFillLength = opts.gradientFillLength;
     this.gradientFillAngle = opts.gradientFillAngle;
@@ -158,7 +173,9 @@ export abstract class Sprite {
     this.inCopyExportOption = opts.inCopyExportOption;
 
     this.strokeColorId = opts.strokeColorId;
+    this.strokeTint = opts.strokeTint;
     this.strokeWeight = opts.strokeWeight;
+    this.strokeAlignment = opts.strokeAlignment;
 
     this.transparencySetting = opts.transparencySetting;
   }
@@ -218,10 +235,11 @@ export abstract class Sprite {
     const base = this.getAppliedObjectStyle()?.getResolved() ?? NONE_OBJECT_STYLE;
     return {
       fillColorId: this.fillColorId ?? base.fillColorId,
-      fillTint: base.fillTint,
+      fillTint: this.fillTint ?? base.fillTint,
       strokeColorId: this.strokeColorId ?? base.strokeColorId,
       strokeWeight: this.strokeWeight ?? base.strokeWeight,
-      strokeTint: base.strokeTint,
+      strokeTint: this.strokeTint ?? base.strokeTint,
+      strokeAlignment: this.strokeAlignment ?? base.strokeAlignment,
       gradientFillAngle: this.gradientFillAngle ?? base.gradientFillAngle,
       gradientStrokeAngle: this.gradientStrokeAngle ?? base.gradientStrokeAngle,
     };
@@ -253,6 +271,28 @@ export abstract class Sprite {
   /** Effective stroke weight in points (always concrete; 0 means no stroke). */
   getEffectiveStrokeWeight(): number {
     return this.getMergedStyle().strokeWeight;
+  }
+  /**
+   * Effective fill tint as a 0..100 percentage (100 = full color). IDML stores
+   * `-1` / unset to mean "no tint"; both normalize to 100 here so consumers can
+   * multiply unconditionally.
+   */
+  getEffectiveFillTint(): number {
+    const t = this.getMergedStyle().fillTint;
+    return t < 0 ? 100 : t;
+  }
+  /** Effective stroke tint as a 0..100 percentage (100 = full color). */
+  getEffectiveStrokeTint(): number {
+    const t = this.getMergedStyle().strokeTint;
+    return t < 0 ? 100 : t;
+  }
+  /**
+   * Effective stroke alignment as the Bluepic value. Resolved through the full
+   * cascade (local StrokeAlignment over the applied object style's, down to the
+   * `[None]` default of CenterAlignment), then mapped to 'inside'|'center'|'outside'.
+   */
+  getEffectiveStrokeAlignment(): StrokeAlignment {
+    return strokeAlignmentMap.getInternal(this.getMergedStyle().strokeAlignment) as StrokeAlignment;
   }
   setFillColor(color: ColorInput) {
     this.fillColorId = this.context.idml.assumeColor(color).id;
@@ -352,11 +392,16 @@ export abstract class Sprite {
     ]);
   }
   // Basic serialization of sprite
+  /** The XML tag to serialize as. Defaults to `type`; overridden by placed
+   * graphics (PDF/EPS/WMF) parsed as ImageSprite to round-trip their real tag. */
+  protected serializeTagName(): string {
+    return this.type;
+  }
   serializeSprite() {
     console.log('SERIALIZE SPRITE', this.id, this.itemTransform);
 
     return serializeElement(
-      this.type,
+      this.serializeTagName(),
       {
         Name: this.name,
         AppliedObjectStyle: this.appliedObjectStyleId,
@@ -402,6 +447,7 @@ export abstract class Sprite {
     const horizontalLayoutConstraints = props.HorizontalLayoutConstraints ? (ensureEnumArray(props.HorizontalLayoutConstraints).map((v) => layoutDimensionMap.getInternal(v)) as HorizontalLayoutConstraints) : undefined;
     const verticalLayoutConstraints = props.VerticalLayoutConstraints ? (ensureEnumArray(props.VerticalLayoutConstraints).map((v) => layoutDimensionMap.getInternal(v)) as VerticalLayoutConstraints) : undefined;
     const fillColorId = props.FillColor;
+    const fillTint = ensureNumber(props.FillTint);
     const gradientStart = ensureArray(props.GradientStart) as [number, number];
     const gradientFillLength = ensureNumber(props.GradientFillLength);
     const gradientFillAngle = ensureNumber(props.GradientFillAngle);
@@ -410,6 +456,8 @@ export abstract class Sprite {
     const gradientStrokeAngle = ensureNumber(props.GradientStrokeAngle);
 
     const strokeColorId = props.StrokeColor;
+    const strokeTint = ensureNumber(props.StrokeTint);
+    const strokeAlignment = props.StrokeAlignment; // raw IDML enum, merged & mapped later
     const strokeWeight = ensureNumber(props.StrokeWeight);
 
     if (element.getAttribute('Self') === 'u16e') {
@@ -461,6 +509,7 @@ export abstract class Sprite {
       horizontalLayoutConstraints,
       verticalLayoutConstraints,
       fillColorId,
+      fillTint,
       gradientStart,
       gradientFillLength,
       gradientFillAngle,
@@ -472,7 +521,9 @@ export abstract class Sprite {
       textWrapPreference,
       inCopyExportOption,
       strokeColorId,
+      strokeTint,
       strokeWeight,
+      strokeAlignment,
       transparencySetting,
     };
   }

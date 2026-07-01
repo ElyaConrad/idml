@@ -304,8 +304,11 @@ export class Story {
       strikeThrough: props.StrikeThru ? ensureBoolean(props.StrikeThru) : undefined,
       autoLeading: ensureNumber(props.AutoLeading),
       leading: ensureNumber(props.Leading),
-      align: alignMap.getInternal(props.Justification),
-      capitalization: capitalizationMap.getInternal(props.Capitalization)
+      // Only map when the attribute is actually present — KeyMap.getInternal
+      // falls back to its first value for undefined, which would wrongly force a
+      // 'left'/first-value LOCAL override and clobber the applied style's value.
+      align: props.Justification !== undefined ? alignMap.getInternal(props.Justification) : undefined,
+      capitalization: props.Capitalization !== undefined ? capitalizationMap.getInternal(props.Capitalization) : undefined,
     }).filter(([_, value]) => value !== undefined)) as ParagraphStyleInput;
 
     const appliedParagraphStyle = props.AppliedParagraphStyle;

@@ -87,7 +87,12 @@ export class Spread {
         case 'TextFrame': return [TextFrame.parseElement(child, context)];
         case 'Oval':      return [OvalSprite.parseElement(child, context)];
         case 'Polygon':   return [PolygonSprite.parseElement(child, context)];
-        case 'Image':     return [ImageSprite.parseElement(child, context)];
+        // Placed graphics share the Image structure (GraphicBounds/Contents/Link).
+        // PDF/EPS/WMF are vector — modelled as ImageSprite but flagged non-raster.
+        case 'Image':
+        case 'PDF':
+        case 'EPS':
+        case 'WMF':       return [ImageSprite.parseElement(child, context)];
         default:          return [];
       }
     });

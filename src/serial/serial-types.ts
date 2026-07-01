@@ -71,17 +71,22 @@ export namespace Elements {
   export type Text = Common & {
     name: 'text';
     properties: {
-      'v-transform-origin'?: Value; 'v-show'?: Value; visible: Value; textMode: Value; text: Value; richText: Value; autoLinebreaks: Value; autoLinebreaksAllowBreakChars: Value; bounding: Value; uppercase: Value; pos: Value; x: Value; y: Value; width: Value; height: Value; fontFamily: Value; fontSize: Value; fontWeight: Value; fontStyle: Value; lineHeight: Value; letterSpacing: Value; fontStretch: Value; textAlign: Value; rotateLine: Value; rotateChar: Value; lineSkewX: Value; lineSkewY: Value; fill: Value; stroke: Value; strokeWidth: Value; strokeDasharray: Value; strokeDashoffset: Value; strokeAlignment: Value; opacity: Value; type: Value; features: Value; textOnPathInnerGlyphAnchor: Value; textOnPathBaseline: Value; textOnPathDelta: Value; textOnPathOffset: Value;
+      'v-transform-origin'?: Value; 'v-show'?: Value; visible: Value; textMode: Value; text: Value; richText: Value; autoLinebreaks: Value; autoLinebreaksAllowBreakChars: Value; bounding: Value; uppercase: Value; pos: Value; x: Value; y: Value; width: Value; height: Value; fontFamily: Value; fontSize: Value; fontWeight: Value; fontStyle: Value; lineHeight: Value; letterSpacing: Value; fontStretch: Value; textAlign: Value; justifyText: Value; rotateLine: Value; rotateChar: Value; lineSkewX: Value; lineSkewY: Value; fill: Value; stroke: Value; strokeWidth: Value; strokeDasharray: Value; strokeDashoffset: Value; strokeAlignment: Value; opacity: Value; type: Value; features: Value; textOnPathInnerGlyphAnchor: Value; textOnPathBaseline: Value; textOnPathDelta: Value; textOnPathOffset: Value;
     };
   };
+  // Optional group/mask surface (fill/stroke/radius on the element itself);
+  // `surfaceRegion` = 'bbox' (rounded combined bbox, uses radius) | 'shape'
+  // (mask's own clip-shape path, radius ignored). All optional — core defaults
+  // fill/stroke to 'none' and surfaceRegion to 'bbox' when absent.
+  type Surface = { fill?: Value; stroke?: Value; strokeWidth?: Value; strokeDasharray?: Value; strokeDashoffset?: Value; strokeAlignment?: Value; radius?: Value; surfaceRegion?: Value };
   export type Group = Common & {
     name: 'group';
-    properties: { 'v-transform-origin'?: Value; 'v-show'?: Value; visible: Value; opacity: Value; layout: Value; layoutAxis: Value; layoutAxisDirection: Value; layoutGap: Value; layoutPos: Value; layoutX: Value; layoutY: Value; layoutCrossAxisAlign: Value };
+    properties: { 'v-transform-origin'?: Value; 'v-show'?: Value; visible: Value; opacity: Value; layout: Value; layoutAxis: Value; layoutAxisDirection: Value; layoutGap: Value; layoutPos: Value; layoutX: Value; layoutY: Value; layoutCrossAxisAlign: Value } & Surface;
     slots: { default: Element[]; mask?: Element[] };
   };
   export type Mask = Common & {
     name: 'mask';
-    properties: { 'v-transform-origin'?: Value; 'v-show'?: Value; visible: Value; opacity: Value; invert: Value; colorMasking: Value };
+    properties: { 'v-transform-origin'?: Value; 'v-show'?: Value; visible: Value; opacity: Value; invert: Value; colorMasking: Value } & Surface;
     slots: { default: Element[]; mask: Element[] };
   };
 }

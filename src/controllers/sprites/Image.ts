@@ -17,11 +17,39 @@ export type GraphicBounds = {
 export class ImageSprite extends GeometricSprite {
   private contents?: ArrayBuffer;
   private graphicBounds?: GraphicBounds;
-  constructor(id: string, contents: ArrayBuffer | undefined, graphicBounds: GraphicBounds | undefined, opts: GeometricSpriteOpts, context: IDMLSpreadPackageContext) {
+  public linkURI?: string;
+  // The source IDML tag: 'Image' (raster) or a placed vector graphic
+  // ('PDF' | 'EPS' | 'WMF'). All are modelled as ImageSprite (same GraphicBounds
+  // / Contents / Link structure) but only 'Image' has usable raster bytes.
+  private graphicType: string;
+  constructor(id: string, contents: ArrayBuffer | undefined, graphicBounds: GraphicBounds | undefined, opts: GeometricSpriteOpts, context: IDMLSpreadPackageContext, linkURI?: string, graphicType: string = 'Image') {
     super(id, 'Image', opts, context);
 
     this.contents = contents;
     this.graphicBounds = graphicBounds;
+    this.linkURI = linkURI;
+    this.graphicType = graphicType;
+  }
+  /** The original linked resource URI (e.g. `file:/…/cover.png`), if any. */
+  getLinkURI() {
+    return this.linkURI;
+  }
+  /** The source IDML tag ('Image' | 'PDF' | 'EPS' | 'WMF'). */
+  getGraphicType() {
+    return this.graphicType;
+  }
+  /** True for placed vector graphics (PDF/EPS/WMF) whose embedded bytes are not
+   * a browser-renderable raster — they must be supplied via their link instead. */
+  isVectorGraphic() {
+    return this.graphicType !== 'Image';
+  }
+  /** Embedded bytes only when they are a usable raster (a real `<Image>`).
+   * Vector graphics return undefined so they fall back to their link + placeholder. */
+  getRasterContents(): ArrayBuffer | undefined {
+    return this.isVectorGraphic() ? undefined : this.contents;
+  }
+  protected serializeTagName(): string {
+    return this.graphicType;
   }
   async getImageType() {
     if (!this.contents) throw new Error('No contents');
@@ -134,6 +162,10 @@ export class ImageSprite extends GeometricSprite {
     const graphicBoundsElement = propertiesElement ? Spread.getDirectChildren(propertiesElement, 'GraphicBounds')[0] : undefined;
     const graphicBounds = graphicBoundsElement ? ImageSprite.parseGraphicBounds(graphicBoundsElement) : undefined;
 
+    // The original linked file (e.g. `file:/…/cover.png`), from the <Link> element.
+    const linkElement = Array.from(element.getElementsByTagName('Link'))[0] as Element | undefined;
+    const linkURI = linkElement?.getAttribute('LinkResourceURI') ?? undefined;
+
     return new ImageSprite(
       id,
       contents,
@@ -142,7 +174,9 @@ export class ImageSprite extends GeometricSprite {
         ...opts,
         pathGeometry,
       },
-      context
+      context,
+      linkURI,
+      element.tagName // 'Image' | 'PDF' | 'EPS' | 'WMF'
     );
   }
 }

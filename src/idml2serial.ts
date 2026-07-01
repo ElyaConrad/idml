@@ -28,6 +28,55 @@ import { DecomposedTransform } from './util/layout';
  * image-element-vs-mask and plaintext-vs-richtext.
  */
 
+// ---- asset collection (for the import wizard) ------------------------------
+
+/** A font weight/style combination encountered in a serial. */
+export type FontVariant = { weight: number; italic: boolean };
+/** A font family + the distinct weight/italic combinations used. */
+export type RequiredFont = { family: string; variants: FontVariant[] };
+/** A linked image with no embedded source — the user must supply it. */
+export type MissingImage = { elementId: string; imageId: string; linkURI?: string };
+/** An embedded image whose bytes the wizard can upload, then swap the data URL
+ * on `elementId` for the returned cloud URL. */
+export type ImageToUpload = { elementId: string; imageId: string; data: ArrayBuffer; linkURI?: string };
+/** Assets a single serial involves. */
+export type SerialAssets = { fonts: RequiredFont[]; missingImages: MissingImage[]; imagesToUpload: ImageToUpload[] };
+/** A produced serial plus its assets. */
+export type ConvertedSerial = { serial: Template.Serial; assets: SerialAssets };
+
+class AssetCollector {
+  private fonts = new Map<string, Map<string, FontVariant>>(); // family -> "w|i" -> variant
+  readonly missingImages: MissingImage[] = [];
+  readonly imagesToUpload: ImageToUpload[] = [];
+
+  addFont(family: string, weight: number, italic: boolean) {
+    if (!family) return;
+    const key = `${weight}|${italic}`;
+    let variants = this.fonts.get(family);
+    if (!variants) this.fonts.set(family, (variants = new Map()));
+    if (!variants.has(key)) variants.set(key, { weight, italic });
+  }
+  /**
+   * Record an image used at serial element `elementId` (the element that holds
+   * the `image.src`). Embedded -> imagesToUpload (with bytes); linked with no
+   * source -> missingImages.
+   */
+  addImage(elementId: string, image: ImageSprite) {
+    // Only real raster bytes can be uploaded; vector placed graphics (PDF/EPS/WMF)
+    // have no usable raster, so they go to missingImages with their link URI.
+    const contents = image.getRasterContents();
+    if (contents) this.imagesToUpload.push({ elementId, imageId: image.getId(), data: contents, linkURI: image.getLinkURI() });
+    else this.missingImages.push({ elementId, imageId: image.getId(), linkURI: image.getLinkURI() });
+  }
+  result(): SerialAssets {
+    return {
+      fonts: [...this.fonts.entries()].map(([family, variants]) => ({ family, variants: [...variants.values()] })),
+      missingImages: this.missingImages,
+      imagesToUpload: this.imagesToUpload,
+    };
+  }
+}
+
 // ---- color -----------------------------------------------------------------
 
 function channelHex(n: number): string {
@@ -37,9 +86,17 @@ function channelHex(n: number): string {
 function rgbToHex(red: number, green: number, blue: number, alpha = 255): string {
   return `#${channelHex(red)}${channelHex(green)}${channelHex(blue)}${channelHex(alpha)}`;
 }
-function colorToHex(color: Color): string {
+/**
+ * Apply an IDML tint (0..100 percentage; 100 = full color) to an RGB channel by
+ * mixing toward paper-white, matching InDesign's on-screen tint: a 10% Black
+ * becomes a light grey, 0% becomes white.
+ */
+function applyTintChannel(channel: number, tint: number): number {
+  return 255 - (255 - channel) * (tint / 100);
+}
+function colorToHex(color: Color, tint = 100): string {
   const { red, green, blue } = color.getRBG();
-  return rgbToHex(red, green, blue);
+  return rgbToHex(applyTintChannel(red, tint), applyTintChannel(green, tint), applyTintChannel(blue, tint));
 }
 function colorInputToHex(ci: ColorInput | undefined): string | undefined {
   if (!ci) return undefined;
@@ -49,13 +106,13 @@ function colorInputToHex(ci: ColorInput | undefined): string | undefined {
   const b = 255 * (1 - ci.yellow / 100) * (1 - ci.black / 100);
   return rgbToHex(r, g, b);
 }
-function gradientToSerial(gradient: Gradient, fillAngleDeg: number): Template.Elements.Gradient {
+function gradientToSerial(gradient: Gradient, fillAngleDeg: number, tint = 100): Template.Elements.Gradient {
   // Bluepic ColorStop.position is a 0..100 percentage (core renders `${position}%`).
   // IDML stop Location is already 0..100 — do NOT divide.
   const stops = gradient
     .getColorStops()
     .filter((s) => s.color)
-    .map((s) => ({ color: colorToHex(s.color!), position: s.position }));
+    .map((s) => ({ color: colorToHex(s.color!, tint), position: s.position }));
   if (gradient.getType() === 'radial') {
     return { type: 'radial', x1: 0.5, y1: 0.5, radius1: 0, x2: 0.5, y2: 0.5, radius2: 0.5, stops };
   }
@@ -64,15 +121,16 @@ function gradientToSerial(gradient: Gradient, fillAngleDeg: number): Template.El
   // CSS `${angle}deg` whose direction is (sinφ, -cosφ), so φ = 90 - θ.
   return { type: 'linear', angle: 90 - fillAngleDeg, stops };
 }
-function paintFrom(value: Color | Gradient | undefined, gradientAngleDeg = 0): Paint {
+function paintFrom(value: Color | Gradient | undefined, gradientAngleDeg = 0, tint = 100): Paint {
   if (!value) return null;
-  return value instanceof Color ? colorToHex(value) : gradientToSerial(value, gradientAngleDeg);
+  return value instanceof Color ? colorToHex(value, tint) : gradientToSerial(value, gradientAngleDeg, tint);
 }
 function surfaceOf(sprite: Sprite): SurfaceInput {
   return {
-    fill: paintFrom(sprite.getEffectiveFill(), sprite.getGradientFillAngle() ?? 0),
-    stroke: paintFrom(sprite.getEffectiveStroke()),
+    fill: paintFrom(sprite.getEffectiveFill(), sprite.getGradientFillAngle() ?? 0, sprite.getEffectiveFillTint()),
+    stroke: paintFrom(sprite.getEffectiveStroke(), 0, sprite.getEffectiveStrokeTint()),
     strokeWidth: sprite.getEffectiveStrokeWeight(),
+    strokeAlignment: sprite.getEffectiveStrokeAlignment(),
     opacity: sprite.getOpacity() / 100,
   };
 }
@@ -112,12 +170,8 @@ const PLACEHOLDER_SVG = `<svg viewBox="0 0 120 120" fill="none" xmlns="http://ww
 const PLACEHOLDER_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(PLACEHOLDER_SVG)}`;
 
 async function imageDataUrl(image: ImageSprite): Promise<string | undefined> {
-  // TEMP test hook: inject a src for a specific image sprite id (e.g. a re-linked
-  // image that IDML couldn't embed). Set globalThis.__imageOverrides = { 'u18f': '<url|dataurl>' }.
-  const override = (globalThis as { __imageOverrides?: Record<string, string> }).__imageOverrides?.[image.getId()];
-  if (override) return override;
-  const contents = image.getContents();
-  if (!contents) return PLACEHOLDER_IMAGE; // linked image with no embedded source
+  const contents = image.getRasterContents();
+  if (!contents) return PLACEHOLDER_IMAGE; // linked/vector image with no usable raster source
   let mime = 'image/png';
   try {
     const type = await image.getImageType();
@@ -132,11 +186,12 @@ function findImageChild(sprite: RectangleSprite | OvalSprite | PolygonSprite): I
   return sprite.getSprites().find((s): s is ImageSprite => s.type === 'Image');
 }
 
-async function fullImageElement(image: ImageSprite, transform: DecomposedTransform): Promise<Template.Element | null> {
+async function fullImageElement(image: ImageSprite, transform: DecomposedTransform, collector: AssetCollector): Promise<Template.Element | null> {
   const box = image.getBBox();
   if (!box) return null;
   const src = await imageDataUrl(image);
   if (!src) return null;
+  collector.addImage(image.getId(), image); // this element holds the image.src
   const value: SerialImageValue = { src, crop: null, cropMode: 'cover', innerAlign: 'center', mirrorX: false, mirrorY: false, innerRotate: 0 };
   return makeImage(image.getId(), box, [0, 0, 0, 0], value, transform, {});
 }
@@ -187,7 +242,7 @@ async function frameImageValue(frame: RectangleSprite | OvalSprite | PolygonSpri
  * Bluepic image element with per-corner radius + a source-pixel crop. Falls
  * back to a mask for rotated images / non-rounded corners (handled by caller).
  */
-async function imageFrameAsImage(frame: RectangleSprite, image: ImageSprite, pageMatrix: Matrix, transform: DecomposedTransform): Promise<Template.Element | null> {
+async function imageFrameAsImage(frame: RectangleSprite, image: ImageSprite, pageMatrix: Matrix, transform: DecomposedTransform, collector: AssetCollector): Promise<Template.Element | null> {
   const imagePlacement = decomposeMatrix(bakeSpriteMatrix(image, pageMatrix));
   // Only the simple, representable case; otherwise let the caller use a mask.
   if (Math.abs(imagePlacement.rotate) > 0.5 || Math.abs(imagePlacement.skewX) > 0.5) return null;
@@ -195,6 +250,7 @@ async function imageFrameAsImage(frame: RectangleSprite, image: ImageSprite, pag
 
   const value = await frameImageValue(frame, image, pageMatrix);
   if (!value) return null;
+  collector.addImage(frame.getId(), image); // the frame IS the image element here
   const fb = frame.getBBox();
   return makeImage(frame.getId(), fb, cornerRadii(frame.getCornerOptions(), fb), value, transform, surfaceOf(frame));
 }
@@ -206,8 +262,8 @@ async function imageFrameAsImage(frame: RectangleSprite, image: ImageSprite, pag
  * The image's itemTransform is relative to the frame (nested), so its placement
  * is decompose(imageBaked) directly.
  */
-async function imageFrameAsMask(frame: RectangleSprite | OvalSprite | PolygonSprite, image: ImageSprite, pageMatrix: Matrix, transform: DecomposedTransform): Promise<Template.Element | null> {
-  const imageEl = await fullImageElement(image, decomposeMatrix(bakeSpriteMatrix(image, pageMatrix)));
+async function imageFrameAsMask(frame: RectangleSprite | OvalSprite | PolygonSprite, image: ImageSprite, pageMatrix: Matrix, transform: DecomposedTransform, collector: AssetCollector): Promise<Template.Element | null> {
+  const imageEl = await fullImageElement(image, decomposeMatrix(bakeSpriteMatrix(image, pageMatrix)), collector);
   if (!imageEl) return null;
   const shape = frameOutlineShape(frame);
   if (!shape) return null;
@@ -216,19 +272,51 @@ async function imageFrameAsMask(frame: RectangleSprite | OvalSprite | PolygonSpr
 
 const MASK_FILL: SurfaceInput = { fill: '#ffffffff', opacity: 1 };
 
-/** The frame's clip shape, in frame-local coords with identity transform. */
-function frameOutlineShape(frame: RectangleSprite | OvalSprite | PolygonSprite): Template.Element | null {
-  const id = `${frame.getId()}-maskshape`;
+/**
+ * The frame's outline as a Bluepic element in frame-local coords (identity
+ * transform), painted with `surface` and tagged `${id}-${suffix}`. Shared by
+ * both the white mask-clip shape and the frame's own filled background.
+ */
+function frameShape(frame: RectangleSprite | OvalSprite | PolygonSprite, suffix: string, surface: SurfaceInput): Template.Element {
+  const id = `${frame.getId()}-${suffix}`;
   if (frame.type === 'Rectangle') {
     const rect = frame as RectangleSprite;
     const box = rect.getBBox();
-    return makeRectangle(id, box, cornerRadii(rect.getCornerOptions(), box), IDENTITY_DECOMP, MASK_FILL);
+    return makeRectangle(id, box, cornerRadii(rect.getCornerOptions(), box), IDENTITY_DECOMP, surface);
   }
   if (frame.type === 'Oval') {
     const e = (frame as OvalSprite).getEllipse();
-    return makeCircle(id, { x: e.x - e.radiusX, y: e.y - e.radiusY, width: e.radiusX * 2, height: e.radiusY * 2 }, IDENTITY_DECOMP, MASK_FILL);
+    return makeCircle(id, { x: e.x - e.radiusX, y: e.y - e.radiusY, width: e.radiusX * 2, height: e.radiusY * 2 }, IDENTITY_DECOMP, surface);
   }
-  return makePath(id, pathFeatures((frame as PolygonSprite).getPath()), IDENTITY_DECOMP, MASK_FILL);
+  return makePath(id, pathFeatures((frame as PolygonSprite).getPath()), IDENTITY_DECOMP, surface);
+}
+
+/** The frame's clip shape, in frame-local coords with identity transform. */
+function frameOutlineShape(frame: RectangleSprite | OvalSprite | PolygonSprite): Template.Element {
+  return frameShape(frame, 'maskshape', MASK_FILL);
+}
+
+/**
+ * General frame-with-content: a Rectangle/Oval/Polygon frame that contains
+ * nested sprites (a group, polygons, another frame) — the non-image counterpart
+ * to imageFrameAsMask. Mirrors idml2svg's "sprite has children => mask".
+ *
+ * The frame outline is the mask's single clip shape, and the frame's own
+ * fill/stroke are painted by the mask itself onto that same clip-shape path
+ * (`surfaceRegion: 'shape'`): the fill sits behind the clipped content, the
+ * stroke on top and unclipped (so a center stroke shows at full width, like
+ * InDesign) — no separate `-bg` element, and the frame path is authored once.
+ *
+ * Children are recursed via spriteToElement (same as the Group case), so their
+ * transforms are baked relative to the frame — the mask element carries the
+ * frame transform. reverseZOrder() flips the child order afterwards.
+ */
+async function frameWithContentAsMask(frame: RectangleSprite | OvalSprite | PolygonSprite, pageMatrix: Matrix, transform: DecomposedTransform, collector: AssetCollector): Promise<Template.Element | null> {
+  const children = (await Promise.all(frame.getSprites().map((child) => spriteToElement(child, pageMatrix, collector)))).filter((c): c is Template.Element => c !== null);
+  if (children.length === 0) return null;
+
+  const surface = surfaceOf(frame);
+  return makeMask(frame.getId(), children, [frameOutlineShape(frame)], transform, frame.getOpacity() / 100, surface, 'shape');
 }
 
 // ---- text ------------------------------------------------------------------
@@ -245,6 +333,10 @@ type EffectiveTextStyle = {
 
 // Bluepic textAlign is a 0..1 fraction: offset = (maxLineWidth - lineWidth) * textAlign.
 const ALIGN_TO_FRACTION: Record<string, number> = { left: 0, justifyLeft: 0, justify: 0, justifyAll: 0, center: 0.5, justifyCenter: 0.5, right: 1, justifyRight: 1 };
+// The IDML *Justified alignments — core's `justifyText` stretches interior lines;
+// the last / single-word line falls back to `textAlign` (the fraction above, which
+// encodes each variant's last-line position: justifyLeft→0, Center→0.5, Right→1).
+const JUSTIFY_ALIGNS = new Set(['justify', 'justifyLeft', 'justifyRight', 'justifyCenter', 'justifyAll']);
 
 function weightFromFontStyle(fontStyle?: string): number {
   const s = (fontStyle ?? '').toLowerCase();
@@ -293,7 +385,7 @@ function effectiveTextStyle(paragraph: ParagraphOutput, feature: ParagraphOutput
   };
 }
 
-function buildTextElement(frame: TextFrame, box: Box, transform: DecomposedTransform): Template.Elements.Text | null {
+function buildTextElement(frame: TextFrame, box: Box, transform: DecomposedTransform, collector: AssetCollector): Template.Elements.Text | null {
   const paragraphs = frame.getStory()?.getParagraphs() ?? [];
   if (paragraphs.length === 0) return null;
 
@@ -305,12 +397,18 @@ function buildTextElement(frame: TextFrame, box: Box, transform: DecomposedTrans
   const runs: Run[] = [];
   const paragraphTexts: string[] = [];
   let firstAlign = 0;
+  let firstJustify = false;
   paragraphs.forEach((paragraph, pIndex) => {
     // Local paragraph alignment OVERRIDES the applied style's alignment.
-    if (pIndex === 0) firstAlign = ALIGN_TO_FRACTION[(paragraph.localParagraphStyle?.align ?? paragraph.appliedParagraphStyle?.align ?? 'left') as string] ?? 0;
+    if (pIndex === 0) {
+      const align = (paragraph.localParagraphStyle?.align ?? paragraph.appliedParagraphStyle?.align ?? 'left') as string;
+      firstAlign = ALIGN_TO_FRACTION[align] ?? 0;
+      firstJustify = JUSTIFY_ALIGNS.has(align);
+    }
     let paragraphText = '';
     for (const feature of paragraph.features) {
       const style = effectiveTextStyle(paragraph, feature, defaultFont);
+      collector.addFont(style.fontFamily, style.fontWeight, style.fontStyle === 'italic');
       const text = feature.content ?? '';
       paragraphText += text;
       runs.push({ text, style });
@@ -349,9 +447,11 @@ function buildTextElement(frame: TextFrame, box: Box, transform: DecomposedTrans
       fontSize: base.fontSize,
       fontWeight: base.fontWeight,
       fontStyle: base.fontStyle,
-      lineHeight: base.lineHeight,
+      lineHeight: base.lineHeight * 100, // relative %, e.g. 120
       letterSpacing: base.letterSpacing,
       textAlign: firstAlign,
+      justifyText: firstJustify,
+      verticalAlign: frame.getVerticalAlign(),
       autoLinebreaks: true,
       fill: base.color,
     },
@@ -364,26 +464,26 @@ function buildTextElement(frame: TextFrame, box: Box, transform: DecomposedTrans
  * does, emit a background rectangle under the text — mirroring idml2svg. The
  * cyan-filled "square" in 4-pages.idml is actually a filled, empty text frame.
  */
-function textFrameElement(frame: TextFrame, transform: DecomposedTransform): Template.Element | null {
+function textFrameElement(frame: TextFrame, transform: DecomposedTransform, collector: AssetCollector): Template.Element | null {
   const box = frame.getBBox();
   const surface = surfaceOf(frame);
   const hasBackground = Boolean(surface.fill || surface.stroke);
 
   if (!hasBackground) {
-    return buildTextElement(frame, box, transform);
+    return buildTextElement(frame, box, transform, collector);
   }
 
   // Children in natural IDML paint order (background behind, text in front);
   // reverseZOrder() flips the whole tree to Bluepic's first-on-top convention.
   const background = makeRectangle(`${frame.getId()}-bg`, box, [0, 0, 0, 0], IDENTITY_DECOMP, { fill: surface.fill, stroke: surface.stroke, strokeWidth: surface.strokeWidth, opacity: 1 });
-  const text = buildTextElement(frame, box, IDENTITY_DECOMP);
+  const text = buildTextElement(frame, box, IDENTITY_DECOMP, collector);
   const children: Template.Element[] = text ? [background, text] : [background];
   return makeGroup(frame.getId(), children, transform, surface.opacity ?? 1);
 }
 
 // ---- dispatch --------------------------------------------------------------
 
-async function spriteToElement(sprite: Sprite, pageMatrix: Matrix): Promise<Template.Element | null> {
+async function spriteToElement(sprite: Sprite, pageMatrix: Matrix, collector: AssetCollector): Promise<Template.Element | null> {
   // A sprite's transform is its baked matrix RELATIVE TO ITS PARENT container
   // (a page group for top-level sprites, the parent sprite-group for nested
   // children). IDML group-child itemTransforms are already relative to the
@@ -396,9 +496,19 @@ async function spriteToElement(sprite: Sprite, pageMatrix: Matrix): Promise<Temp
       const rect = sprite as RectangleSprite;
       const image = findImageChild(rect);
       if (image) {
-        const el = (await imageFrameAsImage(rect, image, pageMatrix, transform)) ?? (await imageFrameAsMask(rect, image, pageMatrix, transform));
+        const el = (await imageFrameAsImage(rect, image, pageMatrix, transform, collector)) ?? (await imageFrameAsMask(rect, image, pageMatrix, transform, collector));
         if (el) return el; // else: linked image (no contents) -> render frame as placeholder
+      } else if (rect.getSprites().length > 0) {
+        // Non-image nested content (a group, polygons, another frame): the frame
+        // clips its children, like idml2svg's mask case.
+        const el = await frameWithContentAsMask(rect, pageMatrix, transform, collector);
+        if (el) return el;
       }
+      // A compound baked path (>1 subpath, e.g. a rectangle with a cut-out hole)
+      // can't be expressed as a bbox rect — emit the real path. Bluepic's path uses
+      // nonzero fill-rule, and IDML holes wind opposite, so the hole renders.
+      const rectPaths = rect.getPath();
+      if (rectPaths.length > 1) return makePath(sprite.getId(), pathFeatures(rectPaths), transform, surfaceOf(rect));
       const box = rect.getBBox();
       return makeRectangle(sprite.getId(), box, cornerRadii(rect.getCornerOptions(), box), transform, surfaceOf(rect));
     }
@@ -406,9 +516,15 @@ async function spriteToElement(sprite: Sprite, pageMatrix: Matrix): Promise<Temp
       const oval = sprite as OvalSprite;
       const image = findImageChild(oval);
       if (image) {
-        const el = await imageFrameAsMask(oval, image, pageMatrix, transform);
+        const el = await imageFrameAsMask(oval, image, pageMatrix, transform, collector);
+        if (el) return el;
+      } else if (oval.getSprites().length > 0) {
+        const el = await frameWithContentAsMask(oval, pageMatrix, transform, collector);
         if (el) return el;
       }
+      // Compound baked path (hole) — same as Rectangle.
+      const ovalPaths = oval.getPath();
+      if (ovalPaths.length > 1) return makePath(sprite.getId(), pathFeatures(ovalPaths), transform, surfaceOf(oval));
       const e = oval.getEllipse();
       return makeCircle(sprite.getId(), { x: e.x - e.radiusX, y: e.y - e.radiusY, width: e.radiusX * 2, height: e.radiusY * 2 }, transform, surfaceOf(oval));
     }
@@ -416,20 +532,23 @@ async function spriteToElement(sprite: Sprite, pageMatrix: Matrix): Promise<Temp
       const poly = sprite as PolygonSprite;
       const image = findImageChild(poly);
       if (image) {
-        const el = await imageFrameAsMask(poly, image, pageMatrix, transform);
+        const el = await imageFrameAsMask(poly, image, pageMatrix, transform, collector);
+        if (el) return el;
+      } else if (poly.getSprites().length > 0) {
+        const el = await frameWithContentAsMask(poly, pageMatrix, transform, collector);
         if (el) return el;
       }
       return makePath(sprite.getId(), pathFeatures(poly.getPath()), transform, surfaceOf(poly));
     }
     case 'TextFrame':
-      return textFrameElement(sprite as TextFrame, transform);
+      return textFrameElement(sprite as TextFrame, transform, collector);
     case 'Group': {
       const group = sprite as GroupSprite;
-      const children = (await Promise.all(group.getSprites().map((child) => spriteToElement(child, pageMatrix)))).filter((c): c is Template.Element => c !== null);
+      const children = (await Promise.all(group.getSprites().map((child) => spriteToElement(child, pageMatrix, collector)))).filter((c): c is Template.Element => c !== null);
       return makeGroup(sprite.getId(), children, transform, group.getOpacity() / 100);
     }
     case 'Image':
-      return fullImageElement(sprite as ImageSprite, transform);
+      return fullImageElement(sprite as ImageSprite, transform, collector);
     default:
       return null;
   }
@@ -459,12 +578,13 @@ function spreadViewBox(spread: Spread): { x: number; y: number; width: number; h
  * multi-page spread becomes a single Serial whose canvas is the combined page
  * bounds, so facing/stacked pages and all their sprites live together.
  */
-export async function convertIDML2Serial(idml: IDML): Promise<Template.Serial[]> {
-  const serials: Template.Serial[] = [];
+export async function convertIDML2Serial(idml: IDML): Promise<ConvertedSerial[]> {
+  const results: ConvertedSerial[] = [];
   for (const spreadPackage of idml.spreadPackages) {
     const spread = spreadPackage.getSpread();
     const viewBox = spreadViewBox(spread);
     const viewBoxShift = translate(-viewBox.x, -viewBox.y); // spread coords -> canvas-local
+    const collector = new AssetCollector();
 
     // One Bluepic group per IDML page (mirrors idml2svg's per-page nesting), so
     // every sprite transform is simply its baked matrix relative to its parent.
@@ -475,14 +595,14 @@ export async function convertIDML2Serial(idml: IDML): Promise<Template.Serial[]>
       const pageChildren: Template.Element[] = [];
       for (const sprite of spread.getSprites()) {
         if (sprite.getParentPage().id !== page.id) continue;
-        const element = await spriteToElement(sprite, pageMatrix);
+        const element = await spriteToElement(sprite, pageMatrix, collector);
         if (element) pageChildren.push(element);
       }
       context.push(makeGroup(`page-${page.id}`, pageChildren, pageGroupTransform));
     }
-    serials.push(emptySerial(viewBox.width, viewBox.height, reverseZOrder(context)));
+    results.push({ serial: emptySerial(viewBox.width, viewBox.height, reverseZOrder(context)), assets: collector.result() });
   }
-  return serials;
+  return results;
 }
 
 /**

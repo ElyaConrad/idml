@@ -18,6 +18,7 @@ export type MergedObjectStyle = {
   strokeColorId: string;
   strokeWeight: number;
   strokeTint: number;
+  strokeAlignment: string; // raw IDML enum (CenterAlignment|InsideAlignment|OutsideAlignment)
   gradientFillAngle?: number;
   gradientStrokeAngle?: number;
 };
@@ -33,6 +34,7 @@ export const NONE_OBJECT_STYLE: MergedObjectStyle = {
   strokeColorId: 'Swatch/None',
   strokeWeight: 0,
   strokeTint: -1,
+  strokeAlignment: 'CenterAlignment', // InDesign's default stroke alignment
   gradientFillAngle: undefined,
   gradientStrokeAngle: undefined,
 };
@@ -58,6 +60,7 @@ export class ObjectStyle {
   public strokeColorId?: string;
   public strokeWeight?: number;
   public strokeTint?: number;
+  public strokeAlignment?: string;
   public gradientFillAngle?: number;
   public gradientStrokeAngle?: number;
   public appliedParagraphStyleId?: string;
@@ -85,6 +88,7 @@ export class ObjectStyle {
       strokeColorId?: string;
       strokeWeight?: number;
       strokeTint?: number;
+      strokeAlignment?: string;
       gradientFillAngle?: number;
       gradientStrokeAngle?: number;
       appliedParagraphStyleId?: string;
@@ -99,6 +103,7 @@ export class ObjectStyle {
     this.strokeColorId = opts.strokeColorId;
     this.strokeWeight = opts.strokeWeight;
     this.strokeTint = opts.strokeTint;
+    this.strokeAlignment = opts.strokeAlignment;
     this.gradientFillAngle = opts.gradientFillAngle;
     this.gradientStrokeAngle = opts.gradientStrokeAngle;
     this.appliedParagraphStyleId = opts.appliedParagraphStyleId;
@@ -154,6 +159,7 @@ export class ObjectStyle {
       strokeColorId: pick((s) => s.strokeColorId) ?? NONE_OBJECT_STYLE.strokeColorId,
       strokeWeight: pick((s) => s.strokeWeight) ?? NONE_OBJECT_STYLE.strokeWeight,
       strokeTint: pick((s) => s.strokeTint) ?? NONE_OBJECT_STYLE.strokeTint,
+      strokeAlignment: pick((s) => s.strokeAlignment) ?? NONE_OBJECT_STYLE.strokeAlignment,
       gradientFillAngle: pick((s) => s.gradientFillAngle),
       gradientStrokeAngle: pick((s) => s.gradientStrokeAngle),
     };
@@ -201,6 +207,10 @@ export class ObjectStyle {
   setStrokeTint(tint?: number) {
     this.strokeTint = tint;
     this.patchAttribute('StrokeTint', tint);
+  }
+  setStrokeAlignment(alignment?: string) {
+    this.strokeAlignment = alignment;
+    this.patchAttribute('StrokeAlignment', alignment);
   }
   setGradientFillAngle(angle?: number) {
     this.gradientFillAngle = angle;
@@ -260,6 +270,7 @@ export class ObjectStyle {
         StrokeColor: this.strokeColorId,
         StrokeWeight: this.strokeWeight,
         StrokeTint: this.strokeTint,
+        StrokeAlignment: this.strokeAlignment,
         GradientFillAngle: this.gradientFillAngle,
         GradientStrokeAngle: this.gradientStrokeAngle,
         AppliedParagraphStyle: this.appliedParagraphStyleId,
@@ -287,6 +298,7 @@ export class ObjectStyle {
         strokeColorId: props.StrokeColor,
         strokeWeight: ensureNumber(props.StrokeWeight),
         strokeTint: ensureNumber(props.StrokeTint),
+        strokeAlignment: props.StrokeAlignment,
         gradientFillAngle: ensureNumber(props.GradientFillAngle),
         gradientStrokeAngle: ensureNumber(props.GradientStrokeAngle),
         appliedParagraphStyleId: props.AppliedParagraphStyle,
