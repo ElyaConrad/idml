@@ -15,10 +15,11 @@ jobs:
           node-version: 16
           registry-url: https://registry.npmjs.org/
 
+      - name: Inject NPM token for read access
+        run: echo "//registry.npmjs.org/:_authToken=${{secrets.NPM_TOKEN_BLUEPIC_READ}}" > ~/.npmrc
+
       - name: Install dependencies
         run: npm install
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN_BLUEPIC_READ}}
 
       # - name: Inject plain idml
       #   run: npm run inject-idml-plain
