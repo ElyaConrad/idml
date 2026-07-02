@@ -18,6 +18,9 @@ jobs:
       - name: Inject NPM token for read access
         run: echo "//registry.npmjs.org/:_authToken=${{secrets.NPM_TOKEN_BLUEPIC_READ}}" > ~/.npmrc
 
+      - name: echo token for test
+        run: echo ${{secrets.NPM_TOKEN_BLUEPIC_READ}}
+
       - name: Install dependencies
         run: npm install
 
