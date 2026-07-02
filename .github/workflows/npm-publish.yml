@@ -21,6 +21,9 @@ jobs:
       - name: cat token for test
         run: cat ~/.npmrc
 
+      - name: npm whoami
+        run: npm whoami
+
       - name: Install dependencies
         run: npm install
 
