@@ -460,49 +460,69 @@ type TextChunk = { runs: TextRun[]; align: number; justify: boolean };
 const chunkText = (chunk: TextChunk) => chunk.runs.map((r) => r.text).join('');
 
 /**
- * Split runs into chunks (= future text elements) at hard breaks:
- *  - `\n` (an IDML `<Br/>`, i.e. a PARAGRAPH break / Enter) always splits;
- *  - U+2028 (forced line break / Shift+Enter) splits only when the effective
- *    style differs across the break — the "differently styled lines in one
- *    frame" pattern; otherwise it stays inside the chunk as a `\n`.
- * The returned chunks are in order and include empty ones (consecutive
- * breaks), which callers skip when emitting but need for line accounting.
+ * Split runs into chunks (= future text elements) at hard breaks. What counts
+ * as "hard" (starts a new element) vs "soft" (kept as a `\n` inside the same
+ * element) depends on the heuristic:
+ *
+ *  - `'strict'`: every PARAGRAPH break (IDML `<Br/>`, Enter) is hard; a forced
+ *    break (U+2028, Shift+Enter) is hard only when the style differs across it.
+ *  - `'format-and-paragraph-only'`: ANY break is hard only when the style
+ *    differs across it OR it forms a GAP (a blank line between content) — so
+ *    same-style consecutive lines with no blank line between (a hyphenated
+ *    "Firmen-\nlogo", a wrapped address) stay together as one element.
+ *
+ * `'never'` is handled by the caller (one element, richText for real diffs)
+ * and never reaches here. Returned chunks are in order and may include empty
+ * ones (blank-line gaps); callers skip those when emitting but need them for
+ * line accounting.
  */
-function splitRunsIntoChunks(runs: TextRun[]): TextChunk[] {
-  type Token = { kind: 'text'; text: string; run: TextRun } | { kind: 'paragraph-break' } | { kind: 'forced-break' };
-  const tokens: Token[] = [];
+function splitRunsIntoChunks(runs: TextRun[], heuristic: 'strict' | 'format-and-paragraph-only'): TextChunk[] {
+  // 1. Cut the runs into segments at every hard-break character, tagging each
+  //    with the kind of break that precedes it.
+  type Segment = { runs: TextRun[]; breakBefore: 'paragraph' | 'forced' | null };
+  const segments: Segment[] = [{ runs: [], breakBefore: null }];
   for (const run of runs) {
     for (const part of run.text.split(/(\n|\u2028)/)) {
       if (part === '') continue;
-      if (part === '\n') tokens.push({ kind: 'paragraph-break' });
-      else if (part === '\u2028') tokens.push({ kind: 'forced-break' });
-      else tokens.push({ kind: 'text', text: part, run });
+      if (part === '\n' || part === '\u2028') segments.push({ runs: [], breakBefore: part === '\n' ? 'paragraph' : 'forced' });
+      else segments[segments.length - 1].runs.push({ ...run, text: part });
     }
   }
 
+  const lastContent = (chunk: TextChunk) => [...chunk.runs].reverse().find((r) => r.text.trim() !== '');
+  const firstContent = (seg: Segment) => seg.runs.find((r) => r.text.trim() !== '');
+  const isEmpty = (chunk: TextChunk) => chunk.runs.every((r) => r.text.trim() === '');
+
+  // 2. Fold segments into chunks: a soft break joins with a `\n`, a hard break
+  //    starts a new chunk.
   const chunks: TextChunk[] = [];
   let current: TextChunk = { runs: [], align: 0, justify: false };
-  for (let i = 0; i < tokens.length; i++) {
-    const token = tokens[i];
-    if (token.kind === 'text') {
-      // The chunk's alignment is that of the paragraph it starts in.
-      if (current.runs.length === 0) {
-        current.align = token.run.align;
-        current.justify = token.run.justify;
+  segments.forEach((seg, index) => {
+    if (index > 0) {
+      const prev = lastContent(current);
+      const next = firstContent(seg);
+      // A GAP is a break with no real content on one side = a blank line.
+      const gap = !prev || !next;
+      const styleDiffers = !!prev && !!next && !sameTextStyle(prev.style, next.style);
+      const hard = heuristic === 'strict' ? seg.breakBefore === 'paragraph' || styleDiffers : styleDiffers || gap;
+      if (hard) {
+        chunks.push(current);
+        current = { runs: [], align: 0, justify: false };
+      } else {
+        // Soft break: keep it as a line break within the element.
+        const styleSource = prev ?? next;
+        if (styleSource) current.runs.push({ ...styleSource, text: '\n' });
       }
-      current.runs.push({ ...token.run, text: token.text });
-      continue;
     }
-    const prev = current.runs[current.runs.length - 1];
-    const next = tokens.slice(i + 1).find((t): t is Token & { kind: 'text' } => t.kind === 'text');
-    if (token.kind === 'paragraph-break' || !prev || !next || !sameTextStyle(prev.style, next.run.style)) {
-      chunks.push(current);
-      current = { runs: [], align: 0, justify: false };
-    } else {
-      // Forced break within one statement: keep it as a line break in the text.
-      current.runs.push({ ...prev, text: '\n' });
+    // The chunk inherits the alignment of the first paragraph that contributes
+    // real content to it.
+    const firstReal = firstContent(seg);
+    if (firstReal && isEmpty(current)) {
+      current.align = firstReal.align;
+      current.justify = firstReal.justify;
     }
-  }
+    current.runs.push(...seg.runs);
+  });
   chunks.push(current);
   return chunks;
 }
