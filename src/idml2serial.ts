@@ -296,7 +296,9 @@ const MASK_FILL: SurfaceInput = { fill: '#ffffffff', opacity: 1 };
  * both the white mask-clip shape and the frame's own filled background.
  */
 function frameShape(frame: RectangleSprite | OvalSprite | PolygonSprite, suffix: string, surface: SurfaceInput): Template.Element {
-  const id = `${frame.getId()}-${suffix}`;
+  // Underscore (not '-'): serial element ids must be valid JS identifiers —
+  // bluepic-core turns them into `new Function` parameter names for scoping.
+  const id = `${frame.getId()}_${suffix}`;
   if (frame.type === 'Rectangle') {
     const rect = frame as RectangleSprite;
     const box = rect.getBBox();
@@ -508,10 +510,10 @@ function textFrameElement(frame: TextFrame, transform: DecomposedTransform, coll
 
   // Children in natural IDML paint order (background behind, text in front);
   // reverseZOrder() flips the whole tree to Bluepic's first-on-top convention.
-  const background = makeRectangle(`${frame.getId()}-bg`, box, [0, 0, 0, 0], IDENTITY_DECOMP, { fill: surface.fill, stroke: surface.stroke, strokeWidth: surface.strokeWidth, opacity: 1 });
+  const background = makeRectangle(`${frame.getId()}_bg`, box, [0, 0, 0, 0], IDENTITY_DECOMP, { fill: surface.fill, stroke: surface.stroke, strokeWidth: surface.strokeWidth, opacity: 1 });
   // The wrapping group keeps the frame id; the text child is suffixed so the two
-  // don't collide (a serial requires globally-unique element ids).
-  const text = buildTextElement(frame, box, IDENTITY_DECOMP, collector, `${frame.getId()}-text`);
+  // don't collide (a serial requires globally-unique, identifier-safe element ids).
+  const text = buildTextElement(frame, box, IDENTITY_DECOMP, collector, `${frame.getId()}_text`);
   const children: Template.Element[] = text ? [background, text] : [background];
   return makeGroup(frame.getId(), children, transform, surface.opacity ?? 1);
 }
@@ -633,7 +635,7 @@ export async function convertIDML2Serial(idml: IDML): Promise<ConvertedSerial[]>
         const element = await spriteToElement(sprite, pageMatrix, collector);
         if (element) pageChildren.push(element);
       }
-      context.push(makeGroup(`page-${page.id}`, pageChildren, pageGroupTransform));
+      context.push(makeGroup(`page_${page.id}`, pageChildren, pageGroupTransform));
     }
     const assets = collector.result();
     const ordered = reverseZOrder(context);
@@ -653,13 +655,26 @@ export async function convertIDML2Serial(idml: IDML): Promise<ConvertedSerial[]>
  * protected element keeps the id and the other occurrence is renamed, so asset
  * `elementId` references stay valid.
  */
+/**
+ * Coerce an id into a valid JS identifier. bluepic-core builds the element
+ * scope by using ids as `new Function` parameter names, so a non-identifier id
+ * (containing '-', '.', spaces, or leading digits) throws "Arg string
+ * terminates parameters early" at evaluation time. IDML `Self` ids are normally
+ * identifier-safe already; this guards generated and any exotic ids.
+ */
+function sanitizeElementId(id: string): string {
+  let safe = id.replace(/[^A-Za-z0-9_$]/g, '_');
+  if (!/^[A-Za-z_$]/.test(safe)) safe = `_${safe}`;
+  return safe;
+}
+
 function ensureUniqueIds(elements: Template.Element[], protectedIds: ReadonlySet<string>): void {
   const holders = new Map<string, Template.Element>();
   let counter = 0;
   const freshId = (base: string): string => {
     let candidate: string;
     do {
-      candidate = `${base}-${++counter}`;
+      candidate = `${base}_${++counter}`;
     } while (holders.has(candidate));
     return candidate;
   };
@@ -670,6 +685,7 @@ function ensureUniqueIds(elements: Template.Element[], protectedIds: ReadonlySet
   };
   const walk = (list: Template.Element[]) => {
     for (const el of list) {
+      el.id = sanitizeElementId(el.id);
       const existing = holders.get(el.id);
       if (!existing) {
         holders.set(el.id, el);
