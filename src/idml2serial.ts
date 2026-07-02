@@ -17,7 +17,7 @@ import { ColorInput } from './types/index';
 import { PathCommand } from './idml';
 import { bakeSpriteMatrix, decomposeMatrix, itemTransform2Matrix } from './util/layout';
 import { arrayBufferToBase64 } from './util/arrayBuffer';
-import { makeRectangle, makeCircle, makePath, makeImage, makeText, makeGroup, makeMask, emptySerial, Paint, SurfaceInput, Box, PathFeature, RichTextRun, SerialImageValue } from './serial/builders';
+import { makeRectangle, makeCircle, makePath, makeImage, makeText, makeGroup, makeMask, emptySerial, shiftElementTranslate, Paint, SurfaceInput, Box, PathFeature, RichTextRun, SerialImageValue } from './serial/builders';
 import { DecomposedTransform } from './util/layout';
 
 /**
@@ -610,6 +610,12 @@ function spreadViewBox(spread: Spread): { x: number; y: number; width: number; h
   return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
 }
 
+/** No rotation/scale/skew — the matrix only moves things. */
+function isTranslationOnly(m: Matrix): boolean {
+  const eps = 1e-6;
+  return Math.abs(m.a - 1) < eps && Math.abs(m.b) < eps && Math.abs(m.c) < eps && Math.abs(m.d - 1) < eps;
+}
+
 /**
  * One Serial per IDML spread (matching idml2svg's per-spread documents). A
  * multi-page spread becomes a single Serial whose canvas is the combined page
@@ -625,17 +631,31 @@ export async function convertIDML2Serial(idml: IDML): Promise<ConvertedSerial[]>
 
     // One Bluepic group per IDML page (mirrors idml2svg's per-page nesting), so
     // every sprite transform is simply its baked matrix relative to its parent.
-    const context: Template.Element[] = [];
+    // Pages without any real elements are dropped entirely.
+    type BuiltPage = { id: string; matrix: Matrix; children: Template.Element[] };
+    const builtPages: BuiltPage[] = [];
     for (const page of spread.pages) {
       const pageMatrix = itemTransform2Matrix(page.itemTransform);
-      const pageGroupTransform = decomposeMatrix(compose(viewBoxShift, pageMatrix));
       const pageChildren: Template.Element[] = [];
       for (const sprite of spread.getSprites()) {
         if (sprite.getParentPage().id !== page.id) continue;
         const element = await spriteToElement(sprite, pageMatrix, collector);
         if (element) pageChildren.push(element);
       }
-      context.push(makeGroup(`page_${page.id}`, pageChildren, pageGroupTransform));
+      if (pageChildren.length > 0) builtPages.push({ id: page.id, matrix: compose(viewBoxShift, pageMatrix), children: pageChildren });
+    }
+
+    // A single populated page whose group transform is a pure translation (the
+    // normal case — pages are never rotated/scaled within a spread) doesn't
+    // need the synthetic page wrapper: bake the offset into each top-level
+    // child and emit them directly, so the studio doesn't open on one big group.
+    let context: Template.Element[];
+    if (builtPages.length === 1 && isTranslationOnly(builtPages[0].matrix)) {
+      const { e: dx, f: dy } = builtPages[0].matrix;
+      if (dx !== 0 || dy !== 0) for (const child of builtPages[0].children) shiftElementTranslate(child, dx, dy);
+      context = builtPages[0].children;
+    } else {
+      context = builtPages.map((p) => makeGroup(`page_${p.id}`, p.children, decomposeMatrix(p.matrix)));
     }
     const assets = collector.result();
     const ordered = reverseZOrder(context);

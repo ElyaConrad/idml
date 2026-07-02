@@ -36,6 +36,17 @@ function serialTransform(t: DecomposedTransform): Template.Transform {
   };
 }
 
+/**
+ * Add (dx, dy) to a built element's translate. Transform values are always
+ * bare-number expression sources (see serialTransform/num), so they round-trip
+ * through Number(). Used to bake a dissolved wrapper group's translation into
+ * its children.
+ */
+export function shiftElementTranslate(element: Template.Element, dx: number, dy: number): void {
+  element.transform.translateX = num(Number(element.transform.translateX.value) + dx);
+  element.transform.translateY = num(Number(element.transform.translateY.value) + dy);
+}
+
 // Absolute transform-origin at canvas (0,0) so core's compose matches our
 // decomposition (T·R·skewX·S). See decomposeMatrix / useElementTransform.
 const ORIGIN_0: V = numArray([0, 0]);
