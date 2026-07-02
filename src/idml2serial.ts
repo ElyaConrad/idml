@@ -406,7 +406,7 @@ function effectiveTextStyle(paragraph: ParagraphOutput, feature: ParagraphOutput
   };
 }
 
-function buildTextElement(frame: TextFrame, box: Box, transform: DecomposedTransform, collector: AssetCollector): Template.Elements.Text | null {
+function buildTextElement(frame: TextFrame, box: Box, transform: DecomposedTransform, collector: AssetCollector, id: string = frame.getId()): Template.Elements.Text | null {
   const paragraphs = frame.getStory()?.getParagraphs() ?? [];
   if (paragraphs.length === 0) return null;
 
@@ -470,7 +470,7 @@ function buildTextElement(frame: TextFrame, box: Box, transform: DecomposedTrans
   });
 
   return makeText(
-    frame.getId(),
+    id,
     {
       box,
       textMode: uniform ? 'plaintext' : 'richtext',
@@ -509,7 +509,9 @@ function textFrameElement(frame: TextFrame, transform: DecomposedTransform, coll
   // Children in natural IDML paint order (background behind, text in front);
   // reverseZOrder() flips the whole tree to Bluepic's first-on-top convention.
   const background = makeRectangle(`${frame.getId()}-bg`, box, [0, 0, 0, 0], IDENTITY_DECOMP, { fill: surface.fill, stroke: surface.stroke, strokeWidth: surface.strokeWidth, opacity: 1 });
-  const text = buildTextElement(frame, box, IDENTITY_DECOMP, collector);
+  // The wrapping group keeps the frame id; the text child is suffixed so the two
+  // don't collide (a serial requires globally-unique element ids).
+  const text = buildTextElement(frame, box, IDENTITY_DECOMP, collector, `${frame.getId()}-text`);
   const children: Template.Element[] = text ? [background, text] : [background];
   return makeGroup(frame.getId(), children, transform, surface.opacity ?? 1);
 }
@@ -633,9 +635,57 @@ export async function convertIDML2Serial(idml: IDML): Promise<ConvertedSerial[]>
       }
       context.push(makeGroup(`page-${page.id}`, pageChildren, pageGroupTransform));
     }
-    results.push({ serial: emptySerial(viewBox.width, viewBox.height, reverseZOrder(context)), assets: collector.result() });
+    const assets = collector.result();
+    const ordered = reverseZOrder(context);
+    // A serial requires globally-unique element ids. Guarantee it as a final
+    // step (protecting image ids, which SerialAssets reference by elementId).
+    const protectedIds = new Set([...assets.missingImages, ...assets.imagesToUpload].map((a) => a.elementId));
+    ensureUniqueIds(ordered, protectedIds);
+    results.push({ serial: emptySerial(viewBox.width, viewBox.height, ordered), assets });
   }
   return results;
+}
+
+/**
+ * Guarantee globally-unique element ids across the whole tree (incl. group/mask
+ * slots). Any element reusing an already-seen id is given a `-N` suffix. When a
+ * collision involves a protected id (an image referenced by SerialAssets), the
+ * protected element keeps the id and the other occurrence is renamed, so asset
+ * `elementId` references stay valid.
+ */
+function ensureUniqueIds(elements: Template.Element[], protectedIds: ReadonlySet<string>): void {
+  const holders = new Map<string, Template.Element>();
+  let counter = 0;
+  const freshId = (base: string): string => {
+    let candidate: string;
+    do {
+      candidate = `${base}-${++counter}`;
+    } while (holders.has(candidate));
+    return candidate;
+  };
+  const rename = (el: Template.Element, base: string) => {
+    const id = freshId(base);
+    el.id = id;
+    holders.set(id, el);
+  };
+  const walk = (list: Template.Element[]) => {
+    for (const el of list) {
+      const existing = holders.get(el.id);
+      if (!existing) {
+        holders.set(el.id, el);
+      } else if (protectedIds.has(el.id) && !protectedIds.has(existing.id)) {
+        // Keep the protected id on this element; move the earlier holder aside.
+        rename(existing, existing.id);
+        holders.set(el.id, el);
+      } else {
+        rename(el, el.id);
+      }
+      const slots = (el as { slots?: { default?: Template.Element[]; mask?: Template.Element[] } }).slots;
+      if (slots?.default) walk(slots.default);
+      if (slots?.mask) walk(slots.mask);
+    }
+  };
+  walk(elements);
 }
 
 /**
