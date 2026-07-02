@@ -68,7 +68,21 @@ export type ConvertIDML2SerialOptions = {
    * reproduces the page background InDesign paints implicitly. Default `true`.
    */
   paperBackground?: boolean;
+  /**
+   * Split a text frame into ONE text element PER STATEMENT, so each can be
+   * connected to its own input field. Splits always happen at paragraph
+   * breaks (IDML `<Br/>`, Enter); forced line breaks (U+2028, Shift+Enter)
+   * stay inside the element as `\n` unless the style changes across the break.
+   * Each element's box starts exactly where the merged frame would render
+   * that line, and together the boxes tile the original frame. Requires a
+   * canvas for text measurement (browser, or Node with the
+   * `@bluepic/core/headless` globals) — degrades to unsplit frames without
+   * one. Default `true`.
+   */
+  splitTextAtBreaks?: boolean;
 };
+/** Resolved options, threaded through the sprite walk. */
+type ConvertSettings = { splitTextAtBreaks: boolean };
 
 class AssetCollector {
   private fonts = new Map<string, Map<string, FontVariant>>(); // family -> styleName|"w|i" -> variant
@@ -340,8 +354,8 @@ function frameOutlineShape(frame: RectangleSprite | OvalSprite | PolygonSprite):
  * transforms are baked relative to the frame — the mask element carries the
  * frame transform. reverseZOrder() flips the child order afterwards.
  */
-async function frameWithContentAsMask(frame: RectangleSprite | OvalSprite | PolygonSprite, pageMatrix: Matrix, transform: DecomposedTransform, collector: AssetCollector): Promise<Template.Element | null> {
-  const children = (await Promise.all(frame.getSprites().map((child) => spriteToElement(child, pageMatrix, collector)))).filter((c): c is Template.Element => c !== null);
+async function frameWithContentAsMask(frame: RectangleSprite | OvalSprite | PolygonSprite, pageMatrix: Matrix, transform: DecomposedTransform, collector: AssetCollector, settings: ConvertSettings): Promise<Template.Element | null> {
+  const children = (await Promise.all(frame.getSprites().map((child) => spriteToElement(child, pageMatrix, collector, settings)))).filter((c): c is Template.Element => c !== null);
   if (children.length === 0) return null;
 
   const surface = surfaceOf(frame);
@@ -417,65 +431,97 @@ function effectiveTextStyle(paragraph: ParagraphOutput, feature: ParagraphOutput
   };
 }
 
-function buildTextElement(frame: TextFrame, box: Box, transform: DecomposedTransform, collector: AssetCollector, id: string = frame.getId()): Template.Elements.Text | null {
-  const paragraphs = frame.getStory()?.getParagraphs() ?? [];
-  if (paragraphs.length === 0) return null;
+// InDesign optical fitting leaves tiny per-range Tracking values (e.g. 15/1000
+// em to squeeze one line) that are visually negligible but would otherwise
+// force the whole element into richtext mode. Bluepic prefers plaintext, so
+// letterSpacing ratios within this distance count as equal — deliberate
+// letterspacing (spaced caps etc.) uses much larger tracking (>= 50/1000 em).
+const LETTER_SPACING_TOLERANCE = 0.03;
+const sameLetterSpacing = (a: number, b: number) => Math.abs(a - b) <= LETTER_SPACING_TOLERANCE;
+const sameTextStyle = (a: EffectiveTextStyle, b: EffectiveTextStyle) =>
+  a.fontFamily === b.fontFamily && a.fontSize === b.fontSize && a.fontWeight === b.fontWeight && a.fontStyle === b.fontStyle && a.color === b.color && sameLetterSpacing(a.letterSpacing, b.letterSpacing);
 
-  // The document's root default font ([No paragraph style] AppliedFont), used
-  // when a paragraph/character style defines none (it inherits via BasedOn).
-  const defaultFont = frame.context.idml.getParagraphStyleById('ParagraphStyle/$ID/[No paragraph style]')?.appliedFont ?? 'Arial';
+type TextRun = { text: string; style: EffectiveTextStyle; align: number; justify: boolean };
+/** One future text element: a paragraph (or a style-delimited piece of one). */
+type TextChunk = { runs: TextRun[]; align: number; justify: boolean };
 
-  type Run = { text: string; style: EffectiveTextStyle };
-  const runs: Run[] = [];
-  const paragraphTexts: string[] = [];
-  let firstAlign = 0;
-  let firstJustify = false;
-  paragraphs.forEach((paragraph, pIndex) => {
-    // Local paragraph alignment OVERRIDES the applied style's alignment.
-    if (pIndex === 0) {
-      const align = (paragraph.localParagraphStyle?.align ?? paragraph.appliedParagraphStyle?.align ?? 'left') as string;
-      firstAlign = ALIGN_TO_FRACTION[align] ?? 0;
-      firstJustify = JUSTIFY_ALIGNS.has(align);
+const chunkText = (chunk: TextChunk) => chunk.runs.map((r) => r.text).join('');
+
+/**
+ * Split runs into chunks (= future text elements) at hard breaks:
+ *  - `\n` (an IDML `<Br/>`, i.e. a PARAGRAPH break / Enter) always splits;
+ *  - U+2028 (forced line break / Shift+Enter) splits only when the effective
+ *    style differs across the break — the "differently styled lines in one
+ *    frame" pattern; otherwise it stays inside the chunk as a `\n`.
+ * The returned chunks are in order and include empty ones (consecutive
+ * breaks), which callers skip when emitting but need for line accounting.
+ */
+function splitRunsIntoChunks(runs: TextRun[]): TextChunk[] {
+  type Token = { kind: 'text'; text: string; run: TextRun } | { kind: 'paragraph-break' } | { kind: 'forced-break' };
+  const tokens: Token[] = [];
+  for (const run of runs) {
+    for (const part of run.text.split(/(\n|\u2028)/)) {
+      if (part === '') continue;
+      if (part === '\n') tokens.push({ kind: 'paragraph-break' });
+      else if (part === '\u2028') tokens.push({ kind: 'forced-break' });
+      else tokens.push({ kind: 'text', text: part, run });
     }
-    let paragraphText = '';
-    for (const feature of paragraph.features) {
-      const style = effectiveTextStyle(paragraph, feature, defaultFont);
-      // Resolve the concrete binary: family + IDML style -> Fonts.xml font (for
-      // its PostScript name) -> XMP metadata (for the original file name).
-      const idml = frame.context.idml;
-      const font = idml.getFont(style.fontFamily, style.styleName);
-      const documentFont = idml.resolveFontFile({ family: style.fontFamily, styleName: style.styleName, postScriptName: font?.postScriptName });
-      collector.addFont(style.fontFamily, {
-        weight: style.fontWeight,
-        italic: style.fontStyle === 'italic',
-        styleName: style.styleName,
-        postScriptName: font?.postScriptName ?? documentFont?.fontName,
-        fontFileName: documentFont?.fontFileName,
-        fontType: documentFont?.fontType ?? font?.type,
-      });
-      const text = feature.content ?? '';
-      paragraphText += text;
-      runs.push({ text, style });
+  }
+
+  const chunks: TextChunk[] = [];
+  let current: TextChunk = { runs: [], align: 0, justify: false };
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token.kind === 'text') {
+      // The chunk's alignment is that of the paragraph it starts in.
+      if (current.runs.length === 0) {
+        current.align = token.run.align;
+        current.justify = token.run.justify;
+      }
+      current.runs.push({ ...token.run, text: token.text });
+      continue;
     }
-    paragraphTexts.push(paragraphText);
-    if (pIndex < paragraphs.length - 1) runs.push({ text: '\n', style: runs[runs.length - 1]?.style ?? effectiveTextStyle(paragraph, paragraph.features[0], defaultFont) });
+    const prev = current.runs[current.runs.length - 1];
+    const next = tokens.slice(i + 1).find((t): t is Token & { kind: 'text' } => t.kind === 'text');
+    if (token.kind === 'paragraph-break' || !prev || !next || !sameTextStyle(prev.style, next.run.style)) {
+      chunks.push(current);
+      current = { runs: [], align: 0, justify: false };
+    } else {
+      // Forced break within one statement: keep it as a line break in the text.
+      current.runs.push({ ...prev, text: '\n' });
+    }
+  }
+  chunks.push(current);
+  return chunks;
+}
+
+/**
+ * Text measurement/layout comes from @bluepic/core (single source of truth
+ * with the renderer) and needs a canvas, which plain Node lacks — so it is
+ * loaded lazily on the first frame that actually wants splitting, and on
+ * failure conversion degrades gracefully to unsplit text elements.
+ */
+let textLayoutModulePromise: Promise<typeof import('@bluepic/core/text') | null> | undefined;
+function loadTextLayout() {
+  textLayoutModulePromise ??= import('@bluepic/core/text').catch((error) => {
+    console.warn('[idml2serial] @bluepic/core/text unavailable (no canvas in this environment?) — text frames will not be split at line breaks.', error);
+    return null;
   });
+  return textLayoutModulePromise;
+}
 
-  const base = runs[0]?.style;
-  if (!base) return null;
-  const sameStyle = (a: EffectiveTextStyle, b: EffectiveTextStyle) =>
-    a.fontFamily === b.fontFamily && a.fontSize === b.fontSize && a.fontWeight === b.fontWeight && a.fontStyle === b.fontStyle && a.color === b.color && a.letterSpacing === b.letterSpacing;
-  const uniform = runs.every((r) => sameStyle(r.style, base));
-
-  const plainText = paragraphTexts.join('\n');
-  if (plainText.trim() === '') return null; // empty frame -> no text element (caller still draws any background)
+/** Build one text element from runs (uniform runs collapse to plaintext). */
+function textElementFromRuns(id: string, runs: TextRun[], box: Box, align: number, justify: boolean, verticalAlign: number, lineHeightPercent: number, transform: DecomposedTransform): Template.Elements.Text {
+  const base = runs[0].style;
+  const uniform = runs.every((r) => sameTextStyle(r.style, base));
+  const plainText = runs.map((r) => r.text).join('');
   const richText: RichTextRun[] = runs.map((r) => {
     const format: Record<string, unknown> = {};
     if (r.style.fontFamily !== base.fontFamily) format.fontFamily = r.style.fontFamily;
     if (r.style.fontSize !== base.fontSize) format.fontSize = r.style.fontSize;
     if (r.style.fontWeight !== base.fontWeight) format.fontWeight = r.style.fontWeight;
     if (r.style.fontStyle !== base.fontStyle) format.fontStyle = r.style.fontStyle;
-    if (r.style.letterSpacing !== base.letterSpacing) format.letterSpacing = r.style.letterSpacing;
+    if (!sameLetterSpacing(r.style.letterSpacing, base.letterSpacing)) format.letterSpacing = r.style.letterSpacing;
     if (r.style.color !== base.color) format.color = r.style.color;
     return { text: r.text, format };
   });
@@ -491,11 +537,11 @@ function buildTextElement(frame: TextFrame, box: Box, transform: DecomposedTrans
       fontSize: base.fontSize,
       fontWeight: base.fontWeight,
       fontStyle: base.fontStyle,
-      lineHeight: base.lineHeight * 100, // relative %, e.g. 120
+      lineHeight: lineHeightPercent,
       letterSpacing: base.letterSpacing,
-      textAlign: firstAlign,
-      justifyText: firstJustify,
-      verticalAlign: frame.getVerticalAlign(),
+      textAlign: align,
+      justifyText: justify,
+      verticalAlign,
       autoLinebreaks: true,
       fill: base.color,
     },
@@ -504,32 +550,225 @@ function buildTextElement(frame: TextFrame, box: Box, transform: DecomposedTrans
 }
 
 /**
+ * Convert a text frame's story into one or more Bluepic text elements.
+ *
+ * Bluepic connects text elements to input fields, so a frame that stacks
+ * several statements (each paragraph / differently-styled line) becomes one
+ * element per statement — see {@link splitRunsIntoChunks} for the split rules.
+ *
+ * Geometry: the ORIGINAL merged frame is laid out ONCE via @bluepic/core/text
+ * (the renderer's own fitting + line stacking, so positions are exactly what
+ * bluepic-core will render). Each chunk's box then starts at its first line's
+ * y, ends where the next emitted chunk starts (the last one at the frame
+ * bottom), keeps the full frame width, and is top-anchored (verticalAlign 0)
+ * — so every line renders exactly where the merged frame would have put it,
+ * and together the boxes tile the frame's vertical extent. Line-x math is
+ * width-invariant (offset = (max - line) * align), so alignment is preserved
+ * per chunk. All chunks keep the MERGED element's lineHeight ratio — IDML
+ * per-paragraph leading is (as before) not preserved — which keeps each
+ * chunk's own rendering self-consistent with the merged layout above.
+ *
+ * With `bounding: 'fontSize'` (what makeText emits) line advances depend only
+ * on fontSize × lineHeight, NOT on font metrics — so chunk positions are
+ * exact even when the document's fonts aren't loaded at conversion time; only
+ * auto-wrap points (and therefore how many lines a chunk occupies) need real
+ * measurements.
+ *
+ * When splitting is off, unnecessary (single statement) or unavailable (no
+ * canvas), the result is a single element equal to the pre-split output —
+ * except that U+2028 is now always normalized to '\n' (core only breaks
+ * lines on '\n'; a raw U+2028 would render as a glyph, not a break).
+ */
+async function buildTextElements(frame: TextFrame, box: Box, singleElementTransform: DecomposedTransform, collector: AssetCollector, id: string, settings: ConvertSettings): Promise<Template.Elements.Text[]> {
+  const paragraphs = frame.getStory()?.getParagraphs() ?? [];
+  if (paragraphs.length === 0) return [];
+
+  // The document's root default font ([No paragraph style] AppliedFont), used
+  // when a paragraph/character style defines none (it inherits via BasedOn).
+  const defaultFont = frame.context.idml.getParagraphStyleById('ParagraphStyle/$ID/[No paragraph style]')?.appliedFont ?? 'Arial';
+
+  const runs: TextRun[] = [];
+  let firstAlign = 0;
+  let firstJustify = false;
+  paragraphs.forEach((paragraph, pIndex) => {
+    // Local paragraph alignment OVERRIDES the applied style's alignment.
+    const alignName = (paragraph.localParagraphStyle?.align ?? paragraph.appliedParagraphStyle?.align ?? 'left') as string;
+    const align = ALIGN_TO_FRACTION[alignName] ?? 0;
+    const justify = JUSTIFY_ALIGNS.has(alignName);
+    if (pIndex === 0) {
+      firstAlign = align;
+      firstJustify = justify;
+    }
+    for (const feature of paragraph.features) {
+      const style = effectiveTextStyle(paragraph, feature, defaultFont);
+      // Resolve the concrete binary: family + IDML style -> Fonts.xml font (for
+      // its PostScript name) -> XMP metadata (for the original file name).
+      const idml = frame.context.idml;
+      const font = idml.getFont(style.fontFamily, style.styleName);
+      const documentFont = idml.resolveFontFile({ family: style.fontFamily, styleName: style.styleName, postScriptName: font?.postScriptName });
+      collector.addFont(style.fontFamily, {
+        weight: style.fontWeight,
+        italic: style.fontStyle === 'italic',
+        styleName: style.styleName,
+        postScriptName: font?.postScriptName ?? documentFont?.fontName,
+        fontFileName: documentFont?.fontFileName,
+        fontType: documentFont?.fontType ?? font?.type,
+      });
+      runs.push({ text: feature.content ?? '', style, align, justify });
+    }
+    // Paragraph boundary = hard break. InDesign usually carries it as a
+    // trailing <Br/> INSIDE the last CharacterStyleRange of the range (already
+    // a '\n' in that run's content) — only add one when the paragraph's own
+    // content didn't supply it, otherwise we'd emit a double break.
+    const lastFeatureText = paragraph.features.length > 0 ? (paragraph.features[paragraph.features.length - 1].content ?? '') : '';
+    if (pIndex < paragraphs.length - 1 && !lastFeatureText.endsWith('\n')) {
+      runs.push({ text: '\n', style: runs[runs.length - 1]?.style ?? effectiveTextStyle(paragraph, paragraph.features[0], defaultFont), align, justify });
+    }
+  });
+
+  const base = runs[0]?.style;
+  if (!base) return [];
+  const verticalAlign = frame.getVerticalAlign();
+  const lineHeightPercent = base.lineHeight * 100; // relative %, e.g. 120
+
+  const fullText = runs.map((r) => r.text).join('');
+  if (fullText.trim() === '') return []; // empty frame -> no text element (caller still draws any background)
+
+  // The unsplit fallback: everything in one element, forced breaks normalized.
+  const normalizedRuns = runs.map((r) => ({ ...r, text: r.text.replace(/\u2028/g, '\n') }));
+  const singleElement = () => [textElementFromRuns(id, normalizedRuns, box, firstAlign, firstJustify, verticalAlign, lineHeightPercent, singleElementTransform)];
+
+  const chunks = splitRunsIntoChunks(runs);
+  const emittable = chunks.filter((chunk) => chunkText(chunk).trim() !== '');
+  if (!settings.splitTextAtBreaks || emittable.length <= 1) return singleElement();
+
+  const core = await loadTextLayout();
+  if (!core) return singleElement();
+
+  // Lay out the merged frame exactly as bluepic-core would render the current
+  // single-element conversion (same features, box, anchors, bounding).
+  let layout: import('@bluepic/core/text').TextLayoutResult;
+  try {
+    layout = core.layoutText({
+      features: normalizedRuns.map((r) => ({
+        text: r.text,
+        style: {
+          fontFamily: r.style.fontFamily,
+          fontSize: r.style.fontSize,
+          fontWeight: r.style.fontWeight,
+          fontStyle: r.style.fontStyle === 'italic' ? 'italic' : 'normal',
+          letterSpacing: r.style.letterSpacing,
+          color: r.style.color,
+          rotate: 0,
+          scale: 1,
+        },
+      })),
+      fontSize: base.fontSize,
+      x: box.x,
+      y: box.y,
+      maxWidth: box.width,
+      maxHeight: box.height,
+      anchor: [firstAlign, verticalAlign],
+      lineHeight: lineHeightPercent,
+      bounding: 'fontSize',
+      textAlign: firstAlign,
+      justifyText: firstJustify,
+      autoLinebreaks: true,
+      allowBreakChars: false,
+      cachingEnabled: false,
+    });
+  } catch (error) {
+    console.warn(`[idml2serial] text layout failed for frame ${frame.getId()} — emitting it unsplit.`, error);
+    return singleElement();
+  }
+
+  // The merged fit may have shrunk the text to fit the frame (uniformly — the
+  // fitter multiplies every run by one factor). Chunks must inherit that
+  // scale, otherwise a chunk with slack in its box would bounce back to the
+  // original size and render bigger than its shrunken siblings. The maximum
+  // run size is invariant under the uniform scale, so it recovers the factor.
+  const originalMaxFontSize = Math.max(...runs.map((r) => r.style.fontSize));
+  const fittedMaxFontSize = Math.max(...layout.lines.flatMap((line) => line.features.map((f) => f.style.fontSize)));
+  const fitScale = Number.isFinite(fittedMaxFontSize) && originalMaxFontSize > 0 ? fittedMaxFontSize / originalMaxFontSize : 1;
+
+  // Every '\n'-terminated piece of the merged text is one "segment"; the
+  // layout marks each segment's last wrapped line via paragraphEnd. Record
+  // where each segment starts vertically.
+  const segmentTops: number[] = [];
+  let segmentOpen = false;
+  for (const line of layout.lines) {
+    if (!segmentOpen) {
+      segmentTops.push(line.y);
+      segmentOpen = true;
+    }
+    if (line.paragraphEnd) segmentOpen = false;
+  }
+  // A chunk covers (inline '\n' count + 1) segments. Sanity: the totals must
+  // agree with the layout, otherwise fall back to the unsplit element.
+  const segmentCounts = chunks.map((chunk) => (chunkText(chunk).match(/\n/g)?.length ?? 0) + 1);
+  if (segmentCounts.reduce((a, b) => a + b, 0) !== segmentTops.length) {
+    console.warn(`[idml2serial] line/segment mismatch for frame ${frame.getId()} — emitting it unsplit.`);
+    return singleElement();
+  }
+
+  // Top y of each chunk = its first segment's first line; skip empty chunks
+  // (their vertical space folds into the preceding emitted chunk).
+  const emitted: { chunk: TextChunk; top: number }[] = [];
+  let segmentCursor = 0;
+  chunks.forEach((chunk, index) => {
+    const top = segmentTops[segmentCursor];
+    segmentCursor += segmentCounts[index];
+    if (chunkText(chunk).trim() !== '') emitted.push({ chunk, top });
+  });
+
+  const frameBottom = box.y + box.height;
+  const elements: Template.Elements.Text[] = [];
+  for (let i = 0; i < emitted.length; i++) {
+    const { chunk, top } = emitted[i];
+    const bottom = emitted[i + 1]?.top ?? Math.max(frameBottom, top);
+    if (bottom - top <= 0) {
+      console.warn(`[idml2serial] non-positive chunk height for frame ${frame.getId()} — emitting it unsplit.`);
+      return singleElement();
+    }
+    const chunkBox: Box = { x: box.x, y: top, width: box.width, height: bottom - top };
+    const chunkRuns = fitScale === 1 ? chunk.runs : chunk.runs.map((r) => ({ ...r, style: { ...r.style, fontSize: r.style.fontSize * fitScale } }));
+    // Children are positioned inside the caller's group -> identity transform.
+    elements.push(textElementFromRuns(`${id}_${i + 1}`, chunkRuns, chunkBox, chunk.align, chunk.justify, 0, lineHeightPercent, IDENTITY_DECOMP));
+  }
+  return elements;
+}
+
+/**
  * A text frame can also carry a fill/stroke (it's a graphic frame too). When it
  * does, emit a background rectangle under the text — mirroring idml2svg. The
  * cyan-filled "square" in 4-pages.idml is actually a filled, empty text frame.
  */
-function textFrameElement(frame: TextFrame, transform: DecomposedTransform, collector: AssetCollector): Template.Element | null {
+async function textFrameElement(frame: TextFrame, transform: DecomposedTransform, collector: AssetCollector, settings: ConvertSettings): Promise<Template.Element | null> {
   const box = frame.getBBox();
   const surface = surfaceOf(frame);
   const hasBackground = Boolean(surface.fill || surface.stroke);
 
+  // The text child is suffixed when a background shares the frame id (a serial
+  // requires globally-unique element ids). A SINGLE text element carries the
+  // frame transform itself when it stands alone; split elements always come
+  // back identity-transformed and get wrapped in a transform-carrying group.
+  const texts = await buildTextElements(frame, box, hasBackground ? IDENTITY_DECOMP : transform, collector, hasBackground ? `${frame.getId()}_text` : frame.getId(), settings);
+
   if (!hasBackground) {
-    return buildTextElement(frame, box, transform, collector);
+    if (texts.length === 0) return null;
+    if (texts.length === 1) return texts[0];
+    return makeGroup(frame.getId(), texts, transform, surface.opacity ?? 1);
   }
 
   // Children in natural IDML paint order (background behind, text in front);
   // reverseZOrder() flips the whole tree to Bluepic's first-on-top convention.
   const background = makeRectangle(`${frame.getId()}_bg`, box, [0, 0, 0, 0], IDENTITY_DECOMP, { fill: surface.fill, stroke: surface.stroke, strokeWidth: surface.strokeWidth, opacity: 1 });
-  // The wrapping group keeps the frame id; the text child is suffixed so the two
-  // don't collide (a serial requires globally-unique, identifier-safe element ids).
-  const text = buildTextElement(frame, box, IDENTITY_DECOMP, collector, `${frame.getId()}_text`);
-  const children: Template.Element[] = text ? [background, text] : [background];
-  return makeGroup(frame.getId(), children, transform, surface.opacity ?? 1);
+  return makeGroup(frame.getId(), [background, ...texts], transform, surface.opacity ?? 1);
 }
 
 // ---- dispatch --------------------------------------------------------------
 
-async function spriteToElement(sprite: Sprite, pageMatrix: Matrix, collector: AssetCollector): Promise<Template.Element | null> {
+async function spriteToElement(sprite: Sprite, pageMatrix: Matrix, collector: AssetCollector, settings: ConvertSettings): Promise<Template.Element | null> {
   // A sprite's transform is its baked matrix RELATIVE TO ITS PARENT container
   // (a page group for top-level sprites, the parent sprite-group for nested
   // children). IDML group-child itemTransforms are already relative to the
@@ -547,7 +786,7 @@ async function spriteToElement(sprite: Sprite, pageMatrix: Matrix, collector: As
       } else if (rect.getSprites().length > 0) {
         // Non-image nested content (a group, polygons, another frame): the frame
         // clips its children, like idml2svg's mask case.
-        const el = await frameWithContentAsMask(rect, pageMatrix, transform, collector);
+        const el = await frameWithContentAsMask(rect, pageMatrix, transform, collector, settings);
         if (el) return el;
       }
       // A compound baked path (>1 subpath, e.g. a rectangle with a cut-out hole)
@@ -565,7 +804,7 @@ async function spriteToElement(sprite: Sprite, pageMatrix: Matrix, collector: As
         const el = await imageFrameAsMask(oval, image, pageMatrix, transform, collector);
         if (el) return el;
       } else if (oval.getSprites().length > 0) {
-        const el = await frameWithContentAsMask(oval, pageMatrix, transform, collector);
+        const el = await frameWithContentAsMask(oval, pageMatrix, transform, collector, settings);
         if (el) return el;
       }
       // Compound baked path (hole) — same as Rectangle.
@@ -581,16 +820,16 @@ async function spriteToElement(sprite: Sprite, pageMatrix: Matrix, collector: As
         const el = await imageFrameAsMask(poly, image, pageMatrix, transform, collector);
         if (el) return el;
       } else if (poly.getSprites().length > 0) {
-        const el = await frameWithContentAsMask(poly, pageMatrix, transform, collector);
+        const el = await frameWithContentAsMask(poly, pageMatrix, transform, collector, settings);
         if (el) return el;
       }
       return makePath(sprite.getId(), pathFeatures(poly.getPath()), transform, surfaceOf(poly));
     }
     case 'TextFrame':
-      return textFrameElement(sprite as TextFrame, transform, collector);
+      return textFrameElement(sprite as TextFrame, transform, collector, settings);
     case 'Group': {
       const group = sprite as GroupSprite;
-      const children = (await Promise.all(group.getSprites().map((child) => spriteToElement(child, pageMatrix, collector)))).filter((c): c is Template.Element => c !== null);
+      const children = (await Promise.all(group.getSprites().map((child) => spriteToElement(child, pageMatrix, collector, settings)))).filter((c): c is Template.Element => c !== null);
       return makeGroup(sprite.getId(), children, transform, group.getOpacity() / 100);
     }
     case 'Image':
@@ -651,7 +890,8 @@ function paperBackgroundElement(page: Spread['pages'][number], fill: Paint): Tem
  * bounds, so facing/stacked pages and all their sprites live together.
  */
 export async function convertIDML2Serial(idml: IDML, options: ConvertIDML2SerialOptions = {}): Promise<ConvertedSerial[]> {
-  const { paperBackground = true } = options;
+  const { paperBackground = true, splitTextAtBreaks = true } = options;
+  const settings: ConvertSettings = { splitTextAtBreaks };
   const paper = paperBackground ? paperFill(idml) : null;
   const results: ConvertedSerial[] = [];
   for (const spreadPackage of idml.spreadPackages) {
@@ -670,7 +910,7 @@ export async function convertIDML2Serial(idml: IDML, options: ConvertIDML2Serial
       const pageChildren: Template.Element[] = [];
       for (const sprite of spread.getSprites()) {
         if (sprite.getParentPage().id !== page.id) continue;
-        const element = await spriteToElement(sprite, pageMatrix, collector);
+        const element = await spriteToElement(sprite, pageMatrix, collector, settings);
         if (element) pageChildren.push(element);
       }
       // Only populated pages survive (empty pages are dropped, no white rect for
