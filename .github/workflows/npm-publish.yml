@@ -16,10 +16,8 @@ jobs:
           registry-url: https://registry.npmjs.org/
 
       - name: Inject NPM token
-        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN_BLUEPIC_READ }}" > .npmrc
 
-      - name: cat token for test
-        run: cat ~/.npmrc
 
       - name: npm whoami
         run: npm whoami
