@@ -22,13 +22,16 @@ export class ImageSprite extends GeometricSprite {
   // ('PDF' | 'EPS' | 'WMF'). All are modelled as ImageSprite (same GraphicBounds
   // / Contents / Link structure) but only 'Image' has usable raster bytes.
   private graphicType: string;
-  constructor(id: string, contents: ArrayBuffer | undefined, graphicBounds: GraphicBounds | undefined, opts: GeometricSpriteOpts, context: IDMLSpreadPackageContext, linkURI?: string, graphicType: string = 'Image') {
+  // Intrinsic resolution from the IDML ActualPpi attribute (x/y pixels per inch).
+  private actualPpi?: { x: number; y: number };
+  constructor(id: string, contents: ArrayBuffer | undefined, graphicBounds: GraphicBounds | undefined, opts: GeometricSpriteOpts, context: IDMLSpreadPackageContext, linkURI?: string, graphicType: string = 'Image', actualPpi?: { x: number; y: number }) {
     super(id, 'Image', opts, context);
 
     this.contents = contents;
     this.graphicBounds = graphicBounds;
     this.linkURI = linkURI;
     this.graphicType = graphicType;
+    this.actualPpi = actualPpi;
   }
   /** The original linked resource URI (e.g. `file:/…/cover.png`), if any. */
   getLinkURI() {
@@ -58,34 +61,56 @@ export class ImageSprite extends GeometricSprite {
   getContents() {
     return this.contents;
   }
+  /**
+   * Natural pixel size from IDML metadata alone: GraphicBounds (points, the
+   * image's untransformed bounds) × ActualPpi / 72. This is the source of
+   * truth for linked images whose bytes are not embedded (e.g. a linked PSD),
+   * where decoding is impossible but the crop still has to map to real source
+   * pixels of the (externally converted) file.
+   */
+  getMetadataNaturalSize(): { width: number; height: number } | undefined {
+    if (!this.graphicBounds || !this.actualPpi) return undefined;
+    const width = ((this.graphicBounds.right - this.graphicBounds.left) / 72) * this.actualPpi.x;
+    const height = ((this.graphicBounds.bottom - this.graphicBounds.top) / 72) * this.actualPpi.y;
+    if (!(width > 0 && height > 0)) return undefined;
+    return { width: Math.round(width), height: Math.round(height) };
+  }
   async getNaturalSize() {
-    const type = await this.getImageType();
-    if (type === undefined) {
-      throw new Error('Could not determine image type');
-    }
-    const isNode = typeof window === 'undefined';
-    if (isNode) {
-      const sharp = await import('sharp');
-      const image = sharp.default(this.contents);
-      const metadata = await image.metadata();
-      return {
-        width: metadata.width ?? 0,
-        height: metadata.height ?? 0,
-      };
-    } else {
-      return await new Promise<{ width: number; height: number }>((resolve, reject) => {
-        const image = new Image();
-        image.addEventListener('load', () => {
-          resolve({
-            width: image.naturalWidth,
-            height: image.naturalHeight,
+    try {
+      const type = await this.getImageType();
+      if (type === undefined) {
+        throw new Error('Could not determine image type');
+      }
+      const isNode = typeof window === 'undefined';
+      if (isNode) {
+        const sharp = await import('sharp');
+        const image = sharp.default(this.contents);
+        const metadata = await image.metadata();
+        return {
+          width: metadata.width ?? 0,
+          height: metadata.height ?? 0,
+        };
+      } else {
+        return await new Promise<{ width: number; height: number }>((resolve, reject) => {
+          const image = new Image();
+          image.addEventListener('load', () => {
+            resolve({
+              width: image.naturalWidth,
+              height: image.naturalHeight,
+            });
           });
+          image.addEventListener('error', reject);
+          const blob = new Blob([this.contents!], { type: type.mime });
+          const url = URL.createObjectURL(blob);
+          image.src = url;
         });
-        image.addEventListener('error', reject);
-        const blob = new Blob([this.contents!], { type: type.mime });
-        const url = URL.createObjectURL(blob);
-        image.src = url;
-      });
+      }
+    } catch (error) {
+      // No embedded bytes or an undecodable format (linked PSD, garbage
+      // preview…) — fall back to the size the IDML metadata declares.
+      const metadataSize = this.getMetadataNaturalSize();
+      if (metadataSize) return metadataSize;
+      throw error;
     }
   }
   getBBox() {
@@ -166,6 +191,15 @@ export class ImageSprite extends GeometricSprite {
     const linkElement = Array.from(element.getElementsByTagName('Link'))[0] as Element | undefined;
     const linkURI = linkElement?.getAttribute('LinkResourceURI') ?? undefined;
 
+    // Intrinsic resolution, e.g. ActualPpi="300 300" (x y).
+    const actualPpi = (() => {
+      const raw = element.getAttribute('ActualPpi');
+      if (!raw) return undefined;
+      const [x, y] = raw.split(/\s+/).map((part) => ensureNumber(part));
+      if (x === undefined || x <= 0) return undefined;
+      return { x, y: y !== undefined && y > 0 ? y : x };
+    })();
+
     return new ImageSprite(
       id,
       contents,
@@ -176,7 +210,8 @@ export class ImageSprite extends GeometricSprite {
       },
       context,
       linkURI,
-      element.tagName // 'Image' | 'PDF' | 'EPS' | 'WMF'
+      element.tagName, // 'Image' | 'PDF' | 'EPS' | 'WMF'
+      actualPpi
     );
   }
 }
