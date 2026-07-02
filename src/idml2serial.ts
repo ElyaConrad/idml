@@ -585,8 +585,10 @@ function textElementFromRuns(id: string, runs: TextRun[], box: Box, align: numbe
  * Convert a text frame's story into one or more Bluepic text elements.
  *
  * Bluepic connects text elements to input fields, so a frame that stacks
- * several statements (each paragraph / differently-styled line) becomes one
- * element per statement — see {@link splitRunsIntoChunks} for the split rules.
+ * several statements can become one element per statement. How eagerly that
+ * happens is controlled by `settings.textSplittingHeuristic` — see
+ * {@link splitRunsIntoChunks} for the split rules and {@link
+ * ConvertIDML2SerialOptions.textSplittingHeuristic} for the modes.
  *
  * Geometry: the ORIGINAL merged frame is laid out ONCE via @bluepic/core/text
  * (the renderer's own fitting + line stacking, so positions are exactly what
@@ -670,9 +672,12 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
   const normalizedRuns = runs.map((r) => ({ ...r, text: r.text.replace(/\u2028/g, '\n') }));
   const singleElement = () => [textElementFromRuns(id, normalizedRuns, box, firstAlign, firstJustify, verticalAlign, lineHeightPercent, singleElementTransform)];
 
-  const chunks = splitRunsIntoChunks(runs);
+  // 'never' keeps the whole frame as one element (richText carries real diffs).
+  if (settings.textSplittingHeuristic === 'never') return singleElement();
+
+  const chunks = splitRunsIntoChunks(runs, settings.textSplittingHeuristic);
   const emittable = chunks.filter((chunk) => chunkText(chunk).trim() !== '');
-  if (!settings.splitTextAtBreaks || emittable.length <= 1) return singleElement();
+  if (emittable.length <= 1) return singleElement();
 
   const core = await loadTextLayout();
   if (!core) return singleElement();
@@ -922,8 +927,8 @@ function paperBackgroundElement(page: Spread['pages'][number], fill: Paint): Tem
  * bounds, so facing/stacked pages and all their sprites live together.
  */
 export async function convertIDML2Serial(idml: IDML, options: ConvertIDML2SerialOptions = {}): Promise<ConvertedSerial[]> {
-  const { paperBackground = true, splitTextAtBreaks = true } = options;
-  const settings: ConvertSettings = { splitTextAtBreaks };
+  const { paperBackground = true, textSplittingHeuristic = 'format-and-paragraph-only' } = options;
+  const settings: ConvertSettings = { textSplittingHeuristic };
   const paper = paperBackground ? paperFill(idml) : null;
   const results: ConvertedSerial[] = [];
   for (const spreadPackage of idml.spreadPackages) {
