@@ -60,6 +60,15 @@ export type ImageToUpload = { elementId: string; imageId: string; data: ArrayBuf
 export type SerialAssets = { fonts: RequiredFont[]; missingImages: MissingImage[]; imagesToUpload: ImageToUpload[] };
 /** A produced serial plus its assets. */
 export type ConvertedSerial = { serial: Template.Serial; assets: SerialAssets };
+/** Options for {@link convertIDML2Serial}. */
+export type ConvertIDML2SerialOptions = {
+  /**
+   * Emit a page-sized background rectangle filled with the document's InDesign
+   * "Paper" swatch (`Color/Paper`) behind every populated page, so the serial
+   * reproduces the page background InDesign paints implicitly. Default `true`.
+   */
+  paperBackground?: boolean;
+};
 
 class AssetCollector {
   private fonts = new Map<string, Map<string, FontVariant>>(); // family -> styleName|"w|i" -> variant
@@ -617,11 +626,33 @@ function isTranslationOnly(m: Matrix): boolean {
 }
 
 /**
+ * The document's page-background color. InDesign paints every page with its
+ * built-in "Paper" swatch (`Color/Paper` in Resources/Graphic.xml) — a real,
+ * user-editable swatch (default `0 0 0 0` CMYK = white, but a document may set a
+ * cream/tinted paper). It has no sprite, so a plain sprite walk misses it; we
+ * synthesize a background rect per page from it. Returns undefined only if the
+ * swatch is somehow absent or not a flat color (e.g. a gradient paper).
+ */
+function paperFill(idml: IDML): Paint {
+  const paper = idml.getColorById('Color/Paper');
+  return paper instanceof Color ? colorToHex(paper) : null;
+}
+
+/** A page-sized background rect (page-local coords, identity transform), painted
+ * with the document's Paper color. Sits at the bottom of the page's stack. */
+function paperBackgroundElement(page: Spread['pages'][number], fill: Paint): Template.Element {
+  const gb = page.geometricBounds;
+  return makeRectangle(`page_${page.id}_paper`, { x: gb.x, y: gb.y, width: gb.width, height: gb.height }, [0, 0, 0, 0], IDENTITY_DECOMP, { fill, opacity: 1 });
+}
+
+/**
  * One Serial per IDML spread (matching idml2svg's per-spread documents). A
  * multi-page spread becomes a single Serial whose canvas is the combined page
  * bounds, so facing/stacked pages and all their sprites live together.
  */
-export async function convertIDML2Serial(idml: IDML): Promise<ConvertedSerial[]> {
+export async function convertIDML2Serial(idml: IDML, options: ConvertIDML2SerialOptions = {}): Promise<ConvertedSerial[]> {
+  const { paperBackground = true } = options;
+  const paper = paperBackground ? paperFill(idml) : null;
   const results: ConvertedSerial[] = [];
   for (const spreadPackage of idml.spreadPackages) {
     const spread = spreadPackage.getSpread();
@@ -642,7 +673,13 @@ export async function convertIDML2Serial(idml: IDML): Promise<ConvertedSerial[]>
         const element = await spriteToElement(sprite, pageMatrix, collector);
         if (element) pageChildren.push(element);
       }
-      if (pageChildren.length > 0) builtPages.push({ id: page.id, matrix: compose(viewBoxShift, pageMatrix), children: pageChildren });
+      // Only populated pages survive (empty pages are dropped, no white rect for
+      // them). The Paper background goes first — bottom of the natural IDML
+      // back-to-front stack — so it sits behind every sprite after reverseZOrder.
+      if (pageChildren.length > 0) {
+        if (paper) pageChildren.unshift(paperBackgroundElement(page, paper));
+        builtPages.push({ id: page.id, matrix: compose(viewBoxShift, pageMatrix), children: pageChildren });
+      }
     }
 
     // A single populated page whose group transform is a pure translation (the
