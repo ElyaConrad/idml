@@ -356,22 +356,46 @@ function frameOutlineShape(frame: RectangleSprite | OvalSprite | PolygonSprite):
  * nested sprites (a group, polygons, another frame) — the non-image counterpart
  * to imageFrameAsMask. Mirrors idml2svg's "sprite has children => mask".
  *
- * The frame outline is the mask's single clip shape, and the frame's own
- * fill/stroke are painted by the mask itself onto that same clip-shape path
- * (`surfaceRegion: 'shape'`): the fill sits behind the clipped content, the
- * stroke on top and unclipped (so a center stroke shows at full width, like
- * InDesign) — no separate `-bg` element, and the frame path is authored once.
+ * The frame outline is the mask's single clip shape. The frame's own fill and
+ * stroke must cover the WHOLE frame (InDesign paints the frame regardless of
+ * its content), so they cannot ride on `surfaceRegion: 'shape'` — core computes
+ * that surface as UNION(children) ∩ mask shape, which collapses to the content
+ * silhouette whenever the content doesn't span the frame (e.g. a vector cutout
+ * smaller than its frame gets the frame fill painted on itself and a stroke
+ * around its outline). Instead:
+ *
+ * - The FILL goes on a frame-shaped `_bg` child inside the mask, behind the
+ *   content. Being a child, it also anchors the mask's clipped bbox / surface
+ *   region to the full frame, even when the fill is empty.
+ * - The STROKE (and, for rectangles, the corner radius) stays on the mask
+ *   itself, so it draws on top and unclipped (a center stroke shows at full
+ *   width, like InDesign). Rectangles use `surfaceRegion: 'bbox'` — with the
+ *   `_bg` child present the clipped bbox IS the frame rect; ovals/polygons use
+ *   'shape', which now resolves to the full frame outline for the same reason.
  *
  * Children are recursed via spriteToElement (same as the Group case), so their
  * transforms are baked relative to the frame — the mask element carries the
- * frame transform. reverseZOrder() flips the child order afterwards.
+ * frame transform. reverseZOrder() flips the child order afterwards, so the
+ * `_bg` child is prepended in natural bottom-first paint order.
  */
 async function frameWithContentAsMask(frame: RectangleSprite | OvalSprite | PolygonSprite, pageMatrix: Matrix, transform: DecomposedTransform, collector: AssetCollector, settings: ConvertSettings): Promise<Template.Element | null> {
   const children = (await Promise.all(frame.getSprites().map((child) => spriteToElement(child, pageMatrix, collector, settings)))).filter((c): c is Template.Element => c !== null);
   if (children.length === 0) return null;
 
   const surface = surfaceOf(frame);
-  return makeMask(frame.getId(), children, [frameOutlineShape(frame)], transform, frame.getOpacity() / 100, surface, 'shape');
+  const opacity = frame.getOpacity() / 100;
+  if (!surface.fill && !surface.stroke) {
+    return makeMask(frame.getId(), children, [frameOutlineShape(frame)], transform, opacity);
+  }
+
+  const background = frameShape(frame, 'bg', { fill: surface.fill, opacity: 1 });
+  const strokeSurface: SurfaceInput = { stroke: surface.stroke, strokeWidth: surface.strokeWidth, strokeAlignment: surface.strokeAlignment };
+  if (frame.type === 'Rectangle') {
+    const rect = frame as RectangleSprite;
+    strokeSurface.radius = cornerRadii(rect.getCornerOptions(), rect.getBBox());
+    return makeMask(frame.getId(), [background, ...children], [frameOutlineShape(frame)], transform, opacity, strokeSurface, 'bbox');
+  }
+  return makeMask(frame.getId(), [background, ...children], [frameOutlineShape(frame)], transform, opacity, strokeSurface, 'shape');
 }
 
 // ---- text ------------------------------------------------------------------
