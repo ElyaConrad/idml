@@ -903,10 +903,14 @@ function buildVerticalJustifyElement(
   // frame top: first baseline = frameTop + that line's actual ascent.
   const mTop = lineActualMetrics(core, base, natural.lines[0]?.text ?? '').ascent;
 
-  // advance(lineHeight) = offset + (fontSize/100)*lineHeight — calibrate offset once.
+  // BASELINE advance(lineHeight) = offset + (fontSize/100)*lineHeight — calibrate once.
+  // Must be measured baseline-to-baseline (`y + ascent`), NOT box-top to box-top: in
+  // 'actual-outer' the outer line's box is shorter, so its box-top gap differs from the
+  // (uniform) baseline gap we target. For 'fontSize' ascent is 0, so the two coincide.
   const slope = base.fontSize / 100;
   const calib = probe(150, bounding, frameTop, HUGE);
-  const advRef = calib.lines.length > 1 ? calib.lines[1].y - calib.lines[0].y : base.fontSize * 1.5;
+  const baselineOf = (l: { y: number; ascent: number }) => l.y + l.ascent;
+  const advRef = calib.lines.length > 1 ? baselineOf(calib.lines[1]) - baselineOf(calib.lines[0]) : base.fontSize * 1.5;
   const offset = advRef - slope * 150;
   // Where the first VISUAL baseline sits below the block top for this bounding mode:
   // 'actual-outer' reports it as the first line's ascent; 'fontSize' draws hanging.
