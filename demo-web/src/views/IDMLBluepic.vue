@@ -1,14 +1,38 @@
 <template>
   <div class="view view-idml-bluepic">
     <div class="toolbar">
-      <n-upload @change="handleChange">
-        <n-button type="primary">Upload IDML file</n-button>
-      </n-upload>
+      <!-- Pick the whole InDesign package FOLDER (.idml + Document fonts/ + Links/):
+           webkitdirectory is what makes the picker fold-aware. -->
+      <label>
+        <n-button type="primary" tag="span">Select IDML folder</n-button>
+        <input ref="folderInput" type="file" webkitdirectory multiple hidden @change="onInput" />
+      </label>
+      <!-- Or hand-pick the .idml plus individual asset files. -->
+      <label>
+        <n-button tag="span">Select files</n-button>
+        <input type="file" multiple hidden @change="onInput" />
+      </label>
       <span v-if="status" class="status">{{ status }}</span>
     </div>
 
+    <!-- Asset state exposed by IdmlSerialConverter -->
+    <div v-if="requiredFonts.length || missingImages.length" class="asset-bar">
+      <div class="asset-group">
+        <strong>Fonts:</strong>
+        <span v-for="(f, i) in requiredFonts" :key="`rf-${i}`" class="asset-chip" :class="isFontMissing(f.family) ? 'warn' : 'ok'">
+          {{ f.family }}{{ isFontMissing(f.family) ? ' — missing' : ' ✓' }}
+        </span>
+      </div>
+      <div v-if="missingImages.length" class="asset-group">
+        <strong>Missing images:</strong>
+        <span v-for="(m, i) in missingImages" :key="`mi-${i}`" class="asset-chip warn">
+          {{ m.linkURI ? decodeURIComponent(m.linkURI.split('/').pop() || '') : m.imageId }}
+        </span>
+      </div>
+    </div>
+
     <div class="panes">
-      <!-- Left: the existing SVG dev preview (per spread) -->
+      <!-- Left: idml2svg dev preview (same parsed IDML instance) -->
       <section class="pane">
         <h3>SVG preview (dev)</h3>
         <div class="svg-list">
@@ -23,33 +47,13 @@
         </div>
       </section>
 
-      <!-- Right: the generated Bluepic Serial(s), rendered by SerialWrapper (per page) -->
+      <!-- Right: the serials from IdmlSerialConverter, rendered by SerialWrapper -->
       <section class="pane">
         <h3>Bluepic Serial preview ({{ serials.length }})</h3>
         <div class="serial-list">
           <div v-for="(bundle, i) in serials" :key="`serial-${i}`" class="serial-block">
             <div class="serial-frame" :style="{ width: '420px', aspectRatio: `${bundle.serial.width} / ${bundle.serial.height}` }">
               <SerialWrapper :serial="bundle.serial as any" :load-fonts="true" />
-            </div>
-            <div class="assets">
-              <div v-if="bundle.assets.fonts.length">
-                <strong>Fonts:</strong>
-                <span v-for="(f, fi) in bundle.assets.fonts" :key="fi" class="asset-chip">
-                  {{ f.family }} ({{ f.variants.map((v: any) => `${v.weight}${v.italic ? 'i' : ''}`).join(', ') }})
-                </span>
-              </div>
-              <div v-if="bundle.assets.missingImages.length">
-                <strong>Missing images:</strong>
-                <span v-for="(m, mi) in bundle.assets.missingImages" :key="mi" class="asset-chip warn">
-                  #{{ m.elementId }} → {{ m.linkURI ? decodeURIComponent(m.linkURI.split('/').pop()) : m.imageId }}
-                </span>
-              </div>
-              <div v-if="bundle.assets.imagesToUpload.length">
-                <strong>Images to upload:</strong>
-                <span v-for="(u, ui) in bundle.assets.imagesToUpload" :key="ui" class="asset-chip ok">
-                  #{{ u.elementId }} → {{ u.linkURI ? decodeURIComponent(u.linkURI.split('/').pop()) : u.imageId }} ({{ Math.round(u.data.byteLength / 1024) }} KB)
-                </span>
-              </div>
             </div>
           </div>
         </div>
@@ -59,60 +63,79 @@
 </template>
 
 <script lang="ts" setup>
-import { NUpload, NButton, UploadFileInfo } from 'naive-ui';
-import { ref, watch, onMounted } from 'vue';
+import { NButton } from 'naive-ui';
+import { ref, onMounted } from 'vue';
 import SVGElement from '../components/SVGElement.vue';
-import { convertIDML2SVG, convertIDML2Serial, IDML, type SpreadDocument } from '../../../src/main';
+import { convertIDML2SVG, IdmlSerialConverter, type AssetFile, type SpreadDocument } from '../../../src/main';
 import { SerialWrapper } from '@bluepic/core';
 import '@bluepic/core/style.css';
 
-const idmlContents = ref<ArrayBuffer>();
-const idml = ref<IDML>();
 const spreads = ref<SpreadDocument[]>([]);
 const serials = ref<any[]>([]);
+const requiredFonts = ref<{ family: string }[]>([]);
+const missingFontFamilies = ref<Set<string>>(new Set());
+const missingImages = ref<{ imageId: string; linkURI?: string }[]>([]);
 const status = ref('');
+let converter: IdmlSerialConverter | null = null;
 
-function handleChange(data: { file: Required<UploadFileInfo>; fileList: Required<UploadFileInfo>[]; event?: ProgressEvent<EventTarget> | Event }) {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const arrayBuffer = e.target?.result;
-    if (arrayBuffer instanceof ArrayBuffer) {
-      idmlContents.value = arrayBuffer;
-    } else {
-      console.error('Failed to read file as ArrayBuffer');
-    }
-  };
-  reader.readAsArrayBuffer(data.file.file as any);
+const isFontMissing = (family: string) => missingFontFamilies.value.has(family);
+
+function readFile(file: File): Promise<AssetFile> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => (reader.result instanceof ArrayBuffer ? resolve({ name: file.name, bytes: reader.result }) : reject(new Error('not an ArrayBuffer')));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(file);
+  });
 }
 
-// Dev affordance: ?src=/4-pages.idml auto-loads an IDML served by the dev server.
+/** Build/convert from a set of dropped files: the .idml plus any assets. */
+async function run(files: AssetFile[]) {
+  const idmlFile = files.find((f) => f.name.toLowerCase().endsWith('.idml'));
+  if (!idmlFile) {
+    status.value = 'No .idml found in the dropped files.';
+    return;
+  }
+  const assets = files.filter((f) => f !== idmlFile);
+  try {
+    status.value = 'Parsing IDML…';
+    converter = await IdmlSerialConverter.create(idmlFile.bytes, assets);
+    requiredFonts.value = converter.requiredFonts.map((f) => ({ family: f.family }));
+    missingFontFamilies.value = new Set(converter.missingFonts.map((f) => f.family));
+    missingImages.value = converter.missingImages.map((m) => ({ imageId: m.imageId, linkURI: m.linkURI }));
+
+    status.value = 'idml2svg preview…';
+    spreads.value = await convertIDML2SVG(converter.document);
+
+    status.value = 'Injecting fonts + converting (precise)…';
+    serials.value = await converter.convert();
+
+    // Re-read missing after convert (asset set unchanged here, but keeps the UI truthful).
+    missingFontFamilies.value = new Set(converter.missingFonts.map((f) => f.family));
+    status.value = `Done — ${serials.value.length} serial(s). ${missingFontFamilies.value.size ? `${missingFontFamilies.value.size} font(s) unresolved (fallback metrics).` : 'All fonts resolved & awaited.'}`;
+    (window as any).__converter = converter;
+    (window as any).__serials = serials.value.map((b: any) => b.serial);
+  } catch (err) {
+    console.error(err);
+    status.value = `Error: ${(err as Error).message}`;
+  }
+}
+
+function onInput(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const files = Array.from(input.files ?? []);
+  if (files.length) Promise.all(files.map(readFile)).then(run);
+  input.value = ''; // allow re-selecting the same folder
+}
+
+// Dev affordance: ?src=/foo.idml auto-loads a single IDML (no side assets — shows
+// the "fonts unresolved → fallback" path). Drop a folder to see precise mode.
 onMounted(async () => {
   const src = new URLSearchParams(location.search).get('src');
   if (!src) return;
   status.value = `Fetching ${src}…`;
-  idmlContents.value = await fetch(src).then((r) => r.arrayBuffer());
-});
-
-watch(idmlContents, () => {
-  if (!idmlContents.value) return;
-  status.value = 'Parsing IDML…';
-  idml.value = new IDML(idmlContents.value);
-  (window as any).__idml = idml.value;
-  idml.value.addEventListener('ready', async () => {
-    try {
-      spreads.value = await convertIDML2SVG(idml.value!);
-      status.value = 'Building Bluepic Serial(s)…';
-      serials.value = await convertIDML2Serial(idml.value!);
-      status.value = `Done — ${spreads.value.length} spread(s), ${serials.value.length} serial(s).`;
-      (window as any).__bundles = serials.value;
-      (window as any).__serials = serials.value.map((b: any) => b.serial);
-      console.log('bundles', serials.value);
-      console.log('assets', serials.value.map((b: any) => b.assets));
-    } catch (err) {
-      console.error(err);
-      status.value = `Error: ${(err as Error).message}`;
-    }
-  });
+  const bytes = await fetch(src).then((r) => r.arrayBuffer());
+  await run([{ name: src.split('/').pop() || 'document.idml', bytes }]);
 });
 </script>
 
@@ -133,6 +156,37 @@ watch(idmlContents, () => {
     .status {
       color: #666;
       font-size: 13px;
+    }
+  }
+
+  .asset-bar {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: #555;
+    .asset-group {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+  }
+
+  .asset-chip {
+    display: inline-block;
+    background: #eef1f4;
+    border-radius: 4px;
+    padding: 1px 6px;
+    &.warn {
+      background: #ffe9e0;
+      color: #a4502a;
+    }
+    &.ok {
+      background: #e3f3e8;
+      color: #2c6b42;
     }
   }
 
@@ -169,30 +223,6 @@ watch(idmlContents, () => {
         border: 1px solid #ccc;
         background: #f9f9f9;
         width: 100%;
-      }
-
-      .assets {
-        font-size: 11px;
-        color: #555;
-        margin: 6px 0 4px;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        .asset-chip {
-          display: inline-block;
-          background: #eef1f4;
-          border-radius: 4px;
-          padding: 1px 6px;
-          margin: 0 4px 2px 0;
-          &.warn {
-            background: #ffe9e0;
-            color: #a4502a;
-          }
-          &.ok {
-            background: #e3f3e8;
-            color: #2c6b42;
-          }
-        }
       }
 
       .serial-frame {

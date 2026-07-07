@@ -2,7 +2,7 @@ import { flattenIDMLProperties, getIDMLElementProperties, serializeElement } fro
 import { Spread } from '../Spread.js';
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
 import { GeometricSprite, GeometricSpriteOpts } from './GeometricSprite.js';
-import { RectangleSprite } from './Rectangle.js';
+import { RectangleSprite, CornerOptions, parseCornerOptions } from './Rectangle.js';
 import { Sprite, SpriteOpts } from './Sprite.js';
 
 export type TextFramePreference = {
@@ -11,19 +11,23 @@ export type TextFramePreference = {
 
 export class TextFrame extends GeometricSprite {
   textFramePreference?: TextFramePreference;
+  private cornerOptions?: CornerOptions;
   constructor(
     id: string,
     private parentStoryId: string,
     opts: GeometricSpriteOpts & {
       textFramePreference?: TextFramePreference;
+      cornerOptions?: CornerOptions;
     },
     context: IDMLSpreadPackageContext
   ) {
     super(id, 'TextFrame', opts, context);
-
-    console.log('!!!!!!!!!!!!!!!!!!!!!!', id, parentStoryId);
-
     this.textFramePreference = opts.textFramePreference;
+    this.cornerOptions = opts.cornerOptions;
+  }
+  /** Per-corner options — a text frame is a rectangular graphic frame too. */
+  getCornerOptions() {
+    return this.cornerOptions;
   }
   getDefaultFillColor() {
     return this.context.idml.getColorById('Color/Black');
@@ -96,6 +100,7 @@ export class TextFrame extends GeometricSprite {
         ...opts,
         pathGeometry,
         textFramePreference,
+        cornerOptions: parseCornerOptions(element),
       },
       context
     );

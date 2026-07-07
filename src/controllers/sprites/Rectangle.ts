@@ -27,6 +27,26 @@ const cornerTypeMap = new KeyMap({
   BevelCorner: 'bevel',
 } as const);
 
+/**
+ * Per-corner options for any rectangular frame (Rectangle OR TextFrame — both
+ * carry the same `*CornerOption`/`*CornerRadius` attributes in IDML). Per-corner
+ * attributes take precedence over the global `CornerOption`/`CornerRadius`.
+ */
+export function parseCornerOptions(element: Element): CornerOptions {
+  const props = flattenIDMLProperties(getIDMLElementProperties(element, ['Properties'], [])) as { [k: string]: string | undefined };
+  const parseCorner = (optionKey: string, radiusKey: string): CornerOption => {
+    const type = cornerTypeMap.getInternal(props[optionKey] ?? props['CornerOption'] ?? 'None') ?? 'none';
+    const radius = ensureNumber(props[radiusKey] ?? props['CornerRadius']) ?? 0;
+    return { type, radius };
+  };
+  return {
+    topLeft: parseCorner('TopLeftCornerOption', 'TopLeftCornerRadius'),
+    topRight: parseCorner('TopRightCornerOption', 'TopRightCornerRadius'),
+    bottomRight: parseCorner('BottomRightCornerOption', 'BottomRightCornerRadius'),
+    bottomLeft: parseCorner('BottomLeftCornerOption', 'BottomLeftCornerRadius'),
+  };
+}
+
 export class RectangleSprite extends GeometricSprite {
   private cornerOptions?: CornerOptions;
 
@@ -72,21 +92,7 @@ export class RectangleSprite extends GeometricSprite {
 
     const sprites = Spread.getChildSprites(element, context);
 
-    // Parse corner options — per-corner attributes take precedence over global CornerOption/CornerRadius
-    const props = flattenIDMLProperties(getIDMLElementProperties(element, ['Properties'], [])) as { [k: string]: string | undefined };
-
-    const parseCorner = (optionKey: string, radiusKey: string): CornerOption => {
-      const type = cornerTypeMap.getInternal(props[optionKey] ?? props['CornerOption'] ?? 'None') ?? 'none';
-      const radius = ensureNumber(props[radiusKey] ?? props['CornerRadius']) ?? 0;
-      return { type, radius };
-    };
-
-    const cornerOptions: CornerOptions = {
-      topLeft: parseCorner('TopLeftCornerOption', 'TopLeftCornerRadius'),
-      topRight: parseCorner('TopRightCornerOption', 'TopRightCornerRadius'),
-      bottomRight: parseCorner('BottomRightCornerOption', 'BottomRightCornerRadius'),
-      bottomLeft: parseCorner('BottomLeftCornerOption', 'BottomLeftCornerRadius'),
-    };
+    const cornerOptions = parseCornerOptions(element);
 
     return new RectangleSprite(
       id,

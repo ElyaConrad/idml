@@ -410,6 +410,8 @@ type EffectiveTextStyle = {
   letterSpacing: number;
   lineHeight: number;
   color: string;
+  /** IDML `Capitalization="AllCaps"` -> renders uppercase (serial `uppercase` prop). */
+  uppercase: boolean;
 };
 
 // Bluepic textAlign is a 0..1 fraction: offset = (maxLineWidth - lineWidth) * textAlign.
@@ -449,6 +451,9 @@ function effectiveTextStyle(paragraph: ParagraphOutput, feature: ParagraphOutput
   const leading = pick('leading') as number | undefined;
   const tracking = (pick('tracking') as number | undefined) ?? 0;
   const fillColor = pick('fillColor') as ColorInput | undefined;
+  // Only AllCaps maps to the serial's boolean `uppercase`; SmallCaps has no
+  // Bluepic equivalent, so it renders as-is (not forced to full caps).
+  const capitalization = pick('capitalization') as string | undefined;
   return {
     // No explicit font in any style layer -> the document's root default
     // ([No paragraph style] AppliedFont), which is what unstyled IDML text
@@ -464,6 +469,7 @@ function effectiveTextStyle(paragraph: ParagraphOutput, feature: ParagraphOutput
     letterSpacing: 1 + tracking / 1000,
     lineHeight: leading && leading > 0 ? leading / fontSize : 1.2,
     color: colorInputToHex(fillColor) ?? '#000000ff',
+    uppercase: capitalization === 'allCaps',
   };
 }
 
@@ -474,6 +480,11 @@ function effectiveTextStyle(paragraph: ParagraphOutput, feature: ParagraphOutput
 // letterspacing (spaced caps etc.) uses much larger tracking (>= 50/1000 em).
 const LETTER_SPACING_TOLERANCE = 0.03;
 const sameLetterSpacing = (a: number, b: number) => Math.abs(a - b) <= LETTER_SPACING_TOLERANCE;
+// NB: `uppercase` is deliberately NOT compared here. The serial's `uppercase` is
+// an element-level flag with no per-run richText equivalent, so making it split
+// runs would only churn plaintext->richtext without actually rendering mixed
+// caps correctly. Element uppercase is instead derived from ALL runs (every), so
+// a uniform AllCaps frame gets it; a mixed frame renders as-is (as before).
 const sameTextStyle = (a: EffectiveTextStyle, b: EffectiveTextStyle) =>
   a.fontFamily === b.fontFamily && a.fontSize === b.fontSize && a.fontWeight === b.fontWeight && a.fontStyle === b.fontStyle && a.color === b.color && sameLetterSpacing(a.letterSpacing, b.letterSpacing);
 
@@ -571,6 +582,11 @@ function textElementFromRuns(id: string, runs: TextRun[], box: Box, align: numbe
   const base = runs[0].style;
   const uniform = runs.every((r) => sameTextStyle(r.style, base));
   const plainText = runs.map((r) => r.text).join('');
+  // `uppercase` is element-level (no per-run equivalent in the richText format).
+  // Set it only when EVERY run is AllCaps, so a mixed element never force-caps a
+  // normal run — since `uppercase` is part of sameTextStyle, uniform elements are
+  // consistently all-caps or all-not anyway; splitting keeps them apart.
+  const uppercase = runs.length > 0 && runs.every((r) => r.style.uppercase);
   const richText: RichTextRun[] = runs.map((r) => {
     const format: Record<string, unknown> = {};
     if (r.style.fontFamily !== base.fontFamily) format.fontFamily = r.style.fontFamily;
@@ -599,10 +615,44 @@ function textElementFromRuns(id: string, runs: TextRun[], box: Box, align: numbe
       justifyText: justify,
       verticalAlign,
       autoLinebreaks: true,
+      uppercase,
       fill: base.color,
     },
     transform
   );
+}
+
+/**
+ * Vertical offset (px, frame-local) to add to a TOP-aligned text frame's box so
+ * bluepic-core renders its baselines where InDesign does.
+ *
+ * InDesign's default First Baseline Offset is "Ascent": the first line's baseline
+ * sits at `frameTop + fontAscent`. bluepic-core, because {@link makeText} emits
+ * `bounding: 'fontSize'`, draws every line with canvas `textBaseline: 'hanging'`,
+ * which sits at `frameTop + 0.8*fontAscent` (the canvas hanging baseline is a
+ * fixed 0.8*ascent for every font without a BASE table, i.e. all Latin fonts;
+ * verified across Barlow/Minion/Arial/Georgia/Times). So core places EVERY line
+ * `0.2*ascent` too high; since later lines advance by leading in both systems,
+ * the whole block is a constant `0.2*ascent` too high, and shifting the box down
+ * by that amount (from the first line's font) corrects all lines at once.
+ *
+ * `fontAscent` is the canvas `fontBoundingBoxAscent` of the first run: the same
+ * metric InDesign's "Ascent" reads (measured equal for the document fonts) and
+ * the same canvas core measures against, so the correction is self-consistent
+ * with the renderer rather than an independent guess. Returns 0 when no canvas is
+ * available, leaving the box (and thus the prior, slightly-high output) unchanged.
+ *
+ * Only top alignment is corrected; center/bottom justification anchors the block
+ * differently and is left untouched for now.
+ */
+function firstBaselineAscentShift(core: typeof import('@bluepic/core/text'), style: EffectiveTextStyle): number {
+  try {
+    const metrics = core.textInfo('Mg', { fontFamily: style.fontFamily, fontWeight: style.fontWeight, fontStyle: style.fontStyle, fontSize: style.fontSize, letterSpacing: style.letterSpacing }, 'alphabetic', false);
+    const ascent = metrics?.fontBoundingBoxAscent;
+    return ascent && Number.isFinite(ascent) ? 0.2 * ascent : 0;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -689,8 +739,29 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
   const verticalAlign = frame.getVerticalAlign();
   const lineHeightPercent = base.lineHeight * 100; // relative %, e.g. 120
 
+  // Drop a trailing empty paragraph: a final line break with no content after it
+  // (often styled at the largest size) is an invisible last line for TOP-aligned
+  // text, but core would count it in the frame fit and shrink the whole block to
+  // make room \u2014 InDesign never shrinks visible text to fit it. For center/bottom
+  // that empty line legitimately shifts the visible text, so leave it there.
+  // Only trailing NEWLINES are stripped: trailing spaces stay (they can matter
+  // for a right/center-aligned last line's position and never add a phantom line).
+  if (verticalAlign === 0) {
+    const isBlankLine = (t: string) => t === '' || (/[\n\u2028\u2029]/.test(t) && t.trim() === '');
+    while (runs.length > 1 && isBlankLine(runs[runs.length - 1].text)) runs.pop();
+    const lastRun = runs[runs.length - 1];
+    if (lastRun) lastRun.text = lastRun.text.replace(/[\n\u2028\u2029]+$/, '');
+  }
+
   const fullText = runs.map((r) => r.text).join('');
   if (fullText.trim() === '') return []; // empty frame -> no text element (caller still draws any background)
+
+  // Compensate the ascent-vs-hanging first-baseline mismatch (see
+  // firstBaselineAscentShift). Loaded here, before the unsplit early returns, so
+  // the shift applies to every text path, and reused for the split layout below.
+  // `core` is null without a canvas (plain Node), which leaves the box as-is.
+  const core = await loadTextLayout();
+  if (verticalAlign === 0 && core) box = { ...box, y: box.y + firstBaselineAscentShift(core, base) };
 
   // The unsplit fallback: everything in one element, forced breaks normalized.
   const normalizedRuns = runs.map((r) => ({ ...r, text: r.text.replace(/\u2028/g, '\n') }));
@@ -703,7 +774,6 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
   const emittable = chunks.filter((chunk) => chunkText(chunk).trim() !== '');
   if (emittable.length <= 1) return singleElement();
 
-  const core = await loadTextLayout();
   if (!core) return singleElement();
 
   // Lay out the merged frame exactly as bluepic-core would render the current
@@ -712,7 +782,9 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
   try {
     layout = core.layoutText({
       features: normalizedRuns.map((r) => ({
-        text: r.text,
+        // Measure AllCaps runs as uppercase — capitals are wider, so wrapping
+        // (and thus how many lines each chunk spans) matches what core renders.
+        text: r.style.uppercase ? r.text.toUpperCase() : r.text,
         style: {
           fontFamily: r.style.fontFamily,
           fontSize: r.style.fontSize,
@@ -823,7 +895,7 @@ async function textFrameElement(frame: TextFrame, transform: DecomposedTransform
 
   // Children in natural IDML paint order (background behind, text in front);
   // reverseZOrder() flips the whole tree to Bluepic's first-on-top convention.
-  const background = makeRectangle(`${frame.getId()}_bg`, box, [0, 0, 0, 0], IDENTITY_DECOMP, { fill: surface.fill, stroke: surface.stroke, strokeWidth: surface.strokeWidth, opacity: 1 });
+  const background = makeRectangle(`${frame.getId()}_bg`, box, cornerRadii(frame.getCornerOptions(), box), IDENTITY_DECOMP, { fill: surface.fill, stroke: surface.stroke, strokeWidth: surface.strokeWidth, opacity: 1 });
   return makeGroup(frame.getId(), [background, ...texts], transform, surface.opacity ?? 1);
 }
 

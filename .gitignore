@@ -6,3 +6,13 @@ dist
 package-lock.json
 .npmrc
 demo-web/public/regressiontests
+_snapshots
+
+# Customer / test IDML packages — kept on disk for local testing, NEVER committed
+# (this is a public repo; these contain customer templates, fonts, PII images).
+/demo/idml demos/
+/demo/working_demos/
+/demo-web/public/anuga.idml
+/demo-web/public/BarlowSemiCondensed-Bold.ttf
+/demo-web/public/BarlowSemiCondensed-Regular.ttf
+/demo-web/public/MinionPro-Regular.otf

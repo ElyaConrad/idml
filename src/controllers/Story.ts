@@ -256,6 +256,7 @@ export class Story {
       strikeThrough: props.StrikeThru ? ensureBoolean(props.StrikeThru) : undefined,
       tracking: ensureNumber(props.Tracking),
       leading: ensureNumber(props.Leading),
+      capitalization: props.Capitalization !== undefined ? capitalizationMap.getInternal(props.Capitalization) : undefined,
     }).filter(([_, value]) => value !== undefined)) as CharacterStyleInput;
 
     const appliedCharacterStyle = props.AppliedCharacterStyle;

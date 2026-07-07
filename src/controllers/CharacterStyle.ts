@@ -2,6 +2,7 @@ import { ElementNode, makeElementNode, makeTextNode } from 'flat-svg';
 import { ensureArray, ensureBoolean, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, serializeElement } from '../helpers.js';
 import { ColorInput } from '../types/index.js';
 import { IDMLStylesContext } from './Styles.js';
+import type { Capitalization } from './ParagraphStyle.js';
 
 export type CharacterStyleInput = {
   appliedFont?: string;
@@ -14,6 +15,8 @@ export type CharacterStyleInput = {
   strikeThrough?: boolean;
   tracking?: number;
   leading?: number;
+  /** InDesign `Capitalization` (AllCaps / SmallCaps) applied at character level. */
+  capitalization?: Capitalization;
 };
 
 export class CharacterStyle {

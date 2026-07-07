@@ -220,6 +220,7 @@ export type TextInput = {
   textAlign: number; // 0..1 fraction (also the last-line position when justifyText)
   justifyText: boolean; // stretch interior lines to fill the width
   verticalAlign: number; // 0 top, 0.5 center, 1 bottom (vertical anchor within the frame)
+  uppercase?: boolean; // render text force-uppercased (IDML AllCaps)
   autoLinebreaks: boolean;
   fill: Paint;
   stroke?: Paint;
@@ -244,7 +245,7 @@ export function makeText(id: string, input: TextInput, transform: DecomposedTran
       // matches InDesign's leading exactly ('font' inflates it by the font's
       // bounding box). lineHeight is the relative percentage (120 = 120%).
       bounding: str('fontSize'),
-      uppercase: bool(false),
+      uppercase: bool(input.uppercase ?? false),
       // pos[0]/pos[1] are the horizontal/vertical anchors: they position the text
       // block within the frame (core: offset = (max - block) * pos), and x/y are the
       // anchor points (= frame.x/y + size * pos). pos[0] mirrors textAlign so the

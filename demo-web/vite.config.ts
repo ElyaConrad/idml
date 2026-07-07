@@ -6,7 +6,7 @@ import path from 'node:path';
 export default defineConfig({
   plugins: [vue()],
   optimizeDeps: {
-    exclude: ['idml'],
+    exclude: ['idml', '@bluepic/core'],
     esbuildOptions: {
       target: 'esnext',
       define: {
