@@ -1,5 +1,5 @@
 import { FontTable, IDMLDocumentContext } from '../idml.js';
-import { ElementNode, nodeToNode, parseXML } from 'flat-svg';
+import { ElementNode, nodeToNode, parseXML } from '../util/xml.js';
 import { Font, FontFamily, FontStatus } from './FontFamily.js';
 import { SuperController } from './SuperController.js';
 
@@ -68,7 +68,7 @@ export class IDMLFontsController extends SuperController {
   serialize() {
     const document = nodeToNode(this.context.fontsRoot) as ElementNode;
     document.children = document.children ?? [];
-    document.children = document.children.filter((child) => child.type === 'text' || child.type === 'cdata' || !IDMLFontsController.elementsImplemented.includes(child.tagName));
+    document.children = document.children.filter((child) => child.type !== 'element' || !IDMLFontsController.elementsImplemented.includes(child.tagName));
 
     for (const fontFamily of this.fontFamilies) {
       document.children.push(fontFamily.serialize());

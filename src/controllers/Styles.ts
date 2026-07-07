@@ -1,5 +1,5 @@
 import { IDMLDocumentContext } from '../idml.js';
-import { ElementNode, makeElementNode, nodeToNode, parseXML, XMLDocumentExport } from 'flat-svg';
+import { ElementNode, makeElementNode, nodeToNode, parseXML, XMLDocumentExport } from '../util/xml.js';
 import { CharacterStyle, CharacterStyleInput } from './CharacterStyle.js';
 import { ParagraphStyle, ParagraphStyleInput } from './ParagraphStyle.js';
 import { ObjectStyle } from './ObjectStyle.js';
@@ -145,7 +145,7 @@ export class IDMLStylesController extends SuperController {
   serialize() {
     const document = nodeToNode(this.context.stylesRoot) as ElementNode;
     document.children = document.children ?? [];
-    document.children = document.children.filter((child) => child.type === 'text' || child.type === 'cdata' || !IDMLStylesController.elementsImplemented.includes(child.tagName));
+    document.children = document.children.filter((child) => child.type !== 'element' || !IDMLStylesController.elementsImplemented.includes(child.tagName));
 
     const characterStyleRootGroupIds = Array.from(new Set(this.characterStyles.map((characterStyle) => characterStyle.rootCharacterStyleGroupId).filter((id) => id !== undefined)));
     if (characterStyleRootGroupIds.length === 0) {

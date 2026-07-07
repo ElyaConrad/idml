@@ -1,6 +1,6 @@
 import { createIDMLGeometricBounds, createIDMLTransform, ensureArray, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLGeometricBounds, parseIDMLTransform, serializeElement, TransformMatrix } from '../helpers.js';
 import { KeyMap } from '../util/keyMap.js';
-import { makeElementNode } from 'flat-svg';
+import { makeElementNode } from '../util/xml.js';
 import { GridDataInformation } from './GridDataInformation.js';
 import { IDMLMasterSpreadPackageContext } from './MasterSpreadPackage.js';
 import { IDMLSpreadPackageContext } from './SpreadPackage.js';

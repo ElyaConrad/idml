@@ -3,7 +3,7 @@ import _ from 'lodash';
 import { Page } from './Page.js';
 import { IDMLSpreadPackageContext } from './SpreadPackage.js';
 import { DropShadowInput, DropShadowSetting, Sprite, SpriteWithChildren, TransparencySetting } from './sprites/Sprite.js';
-import { getElementAttributes, makeElementNode, parseXML, XMLNode } from 'flat-svg';
+import { getElementAttributes, makeElementNode, parseXML, XMLNode } from '../util/xml.js';
 import { MasterSpread } from './MasterSpread.js';
 import { GridDataInformation } from './GridDataInformation.js';
 import { ColorInput, Transform } from '../types/index.js';

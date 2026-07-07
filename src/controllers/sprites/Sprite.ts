@@ -1,4 +1,4 @@
-import { makeElementNode } from 'flat-svg';
+import { makeElementNode } from '../../util/xml.js';
 import { createIDMLTransform, ensureArray, ensureBoolean, ensureEnumArray, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement, normalizeTransformForGivenOrigin, TransformMatrix } from '../../helpers.js';
 import { ColorInput, GeometricBounds, Transform } from '../../types/index.js';
 import { KeyMap } from '../../util/keyMap.js';

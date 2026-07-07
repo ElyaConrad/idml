@@ -1,6 +1,6 @@
 import { ensureBoolean, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, serializeElement } from '../helpers.js';
 import { KeyMap } from '../util/keyMap.js';
-import { makeElementNode, makeTextNode } from 'flat-svg';
+import { makeElementNode, makeTextNode } from '../util/xml.js';
 import { IDMLBackingStoryContext } from './BackingStory.js';
 import { Spread } from './Spread.js';
 import { alignMap, capitalizationMap, ParagraphStyleInput } from './ParagraphStyle.js';

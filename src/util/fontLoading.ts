@@ -69,6 +69,7 @@ async function loadNode(fonts: LoadableFont[]): Promise<Template.Font[]> {
   // measures with fallback metrics, same as before this class existed.
   let FontLibrary: { use: (family: string, paths: string[]) => unknown } | undefined;
   try {
+    // @ts-ignore -- optional headless peer; may be absent at type-check time
     ({ FontLibrary } = (await import('skia-canvas')) as unknown as { FontLibrary: typeof FontLibrary });
   } catch {
     console.warn('[idml] skia-canvas not available — precise headless font measurement is off; convert will use fallback metrics.');

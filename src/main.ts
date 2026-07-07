@@ -3,7 +3,6 @@
 // export { TextFrame } from './controllers/sprites/TextFrame.js';
 
 export * from './idml.js';
-export * from './svg2idml.js';
 export * from './idml2svg.js';
 export * from './idml2serial.js';
 export * from './metadata.js';

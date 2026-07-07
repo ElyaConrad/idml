@@ -1,4 +1,4 @@
-import { getElementAttributes, makeElementNode, makeTextNode, XMLNode } from 'flat-svg';
+import { getElementAttributes, makeElementNode, makeTextNode, XMLNode } from './util/xml.js';
 import { GeometricBounds, Transform } from './types';
 
 export type TransformMatrix = [number, number, number, number, number, number];

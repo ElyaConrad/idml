@@ -1,6 +1,6 @@
 import { IDMLDocumentContext } from '../idml.js';
 import { ColorInput } from '../types/index.js';
-import { ElementNode, nodeToNode, parseXML } from 'flat-svg';
+import { ElementNode, nodeToNode, parseXML } from '../util/xml.js';
 import { Color } from './Color.js';
 import { Gradient } from './Gradient.js';
 import { Ink } from './Ink.js';
@@ -73,7 +73,7 @@ export class IDMLGraphicController extends SuperController {
 
     const document = nodeToNode(this.context.graphicRoot) as ElementNode;
     document.children = document.children ?? [];
-    document.children = document.children.filter((child) => child.type === 'text' || child.type === 'cdata' || !IDMLGraphicController.elementsImplemented.includes(child.tagName));
+    document.children = document.children.filter((child) => child.type !== 'element' || !IDMLGraphicController.elementsImplemented.includes(child.tagName));
 
     for (const color of this.colors) {
       document.children.push(color.serialize());

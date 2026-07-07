@@ -1,4 +1,4 @@
-import { ElementNode } from 'flat-svg';
+import { ElementNode } from '../util/xml.js';
 
 export abstract class SuperController {
   abstract serialize(): ElementNode;

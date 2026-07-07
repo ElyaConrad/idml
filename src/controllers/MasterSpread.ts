@@ -1,4 +1,4 @@
-import { parseXML } from 'flat-svg';
+import { parseXML } from '../util/xml.js';
 import { createIDMLTransform, ensureBoolean, ensureNumber, ensurePropertyArray, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement, TransformMatrix } from '../helpers.js';
 import { GeometricBounds, Transform } from '../types/index.js';
 import { GridDataInformation } from './GridDataInformation.js';

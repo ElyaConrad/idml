@@ -5,7 +5,7 @@ import { IDMLStylesController } from './controllers/Styles.js';
 import { FontFamilyInput, IDMLFontsController } from './controllers/Fonts.js';
 import { IDMLPreferencesController } from './controllers/Preferences.js';
 import { downloadZip } from 'client-zip';
-import { ElementNode, makeElementNode, nodeToNode, parseDOM, XMLProcessingInstructionAID, XMLProcessingInstructionXML } from 'flat-svg';
+import { ElementNode, makeElementNode, nodeToNode, parseDOM, XMLProcessingInstructionAID, XMLProcessingInstructionXML } from './util/xml.js';
 import { MasterSpreadPackage } from './controllers/MasterSpreadPackage.js';
 import { SpreadPackage } from './controllers/SpreadPackage.js';
 import { BackingStory } from './controllers/BackingStory.js';
@@ -14,7 +14,7 @@ import { CreateMasterSpreadOptions, MasterSpread } from './controllers/MasterSpr
 import { Spread } from './controllers/Spread.js';
 import { Color } from './controllers/Color.js';
 import { ColorInput, GeometricBounds } from './types/index.js';
-import { getUniqueID, parseXML, stringifyXML, preloadJSDOM } from 'flat-svg';
+import { getUniqueID, parseXML, stringifyXML, preloadJSDOM } from './util/xml.js';
 import { IDML_PLAIN } from './assets/IDML_PLAIN.js';
 import { ParagraphStyleInput } from './controllers/ParagraphStyle.js';
 import { CharacterStyleInput } from './controllers/CharacterStyle.js';
@@ -606,7 +606,6 @@ export class IDML extends EventTarget {
   getUID() {}
 }
 
-export { simplifySVG } from 'flat-svg';
 
 export function createIDML(opts: CreateIDMLOptions) {
   return new Promise<IDML>((resolve) => {

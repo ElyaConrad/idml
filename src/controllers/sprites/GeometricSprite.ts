@@ -1,5 +1,5 @@
 import { KeyMap } from '../../util/keyMap.js';
-import { ElementNode, makeElementNode } from 'flat-svg';
+import { ElementNode, makeElementNode } from '../../util/xml.js';
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
 import { Sprite, SpriteOpts } from './Sprite.js';
 import { GeometricBounds } from '../../types/index.js';

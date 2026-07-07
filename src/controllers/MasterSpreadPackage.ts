@@ -1,5 +1,5 @@
 import { IDMLDocumentContext } from '../idml.js';
-import { domNodeToXMLNode, parseXML } from 'flat-svg';
+import { domNodeToXMLNode, parseXML } from '../util/xml.js';
 import { MasterSpread } from './MasterSpread.js';
 import { SuperController } from './SuperController.js';
 

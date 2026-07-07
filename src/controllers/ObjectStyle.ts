@@ -1,4 +1,4 @@
-import { ElementNode, makeElementNode, makeTextNode, nodeToNode } from 'flat-svg';
+import { ElementNode, makeElementNode, makeTextNode, nodeToNode } from '../util/xml.js';
 import { ensureNumber, flattenIDMLProperties, getIDMLElementProperties } from '../helpers.js';
 import { ColorInput } from '../types/index.js';
 import { IDMLStylesContext } from './Styles.js';

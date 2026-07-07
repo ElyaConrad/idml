@@ -1,5 +1,5 @@
 import { IDMLDocumentContext } from '../idml.js';
-import { ElementNode, nodeToNode, parseXML } from 'flat-svg';
+import { ElementNode, nodeToNode, parseXML } from '../util/xml.js';
 import { Story } from './Story.js';
 import { SuperController } from './SuperController.js';
 
@@ -38,7 +38,7 @@ export class StoryPackage extends SuperController {
   serialize() {
     const document = nodeToNode(this.context.storyPackageRoot) as ElementNode;
     document.children = document.children ?? [];
-    document.children = document.children.filter((child) => child.type === 'text' || child.type === 'cdata' || !StoryPackage.elementsImplemented.includes(child.tagName));
+    document.children = document.children.filter((child) => child.type !== 'element' || !StoryPackage.elementsImplemented.includes(child.tagName));
 
     for (const story of this.stories) {
       document.children.push(story.serialize('Story'));

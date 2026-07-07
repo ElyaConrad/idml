@@ -1,5 +1,5 @@
 import { createIDMLTransform, ensureNumber, flattenIDMLProperties, getIDMLElementProperties, parseIDMLTransform, serializeElement, TransformMatrix } from '../helpers.js';
-import { makeElementNode } from 'flat-svg';
+import { makeElementNode } from '../util/xml.js';
 import { KeyMap } from '../util/keyMap.js';
 import { IDMLGraphicContext } from './Graphic.js';
 import { Transform } from '../types/index.js';

@@ -1,4 +1,5 @@
-import { ElementNode, ensureNumber, makeCDataNode, makeElementNode } from 'flat-svg';
+import { ElementNode, makeCDataNode, makeElementNode } from '../../util/xml.js';
+import { ensureNumber } from '../../helpers.js';
 import { flattenIDMLProperties, getIDMLElementProperties } from '../../helpers.js';
 import { Spread } from '../Spread.js';
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
