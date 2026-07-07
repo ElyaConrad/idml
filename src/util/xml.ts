@@ -10,20 +10,30 @@
 //    that the controllers' `serialize()` methods build, stringified by
 //    `stringifyXML` for the IDML-write path.
 
-const isNode = typeof window === 'undefined';
+// Prefer the platform's NATIVE `DOMParser` only when it's a usable global — i.e.
+// a real browser. This is deliberately NOT keyed off `window`: headless setups
+// (e.g. `@bluepic/core/headless`, which installs happy-dom for text measurement)
+// define `window`/`document` but do NOT expose a global `DOMParser`, so `window`
+// alone would send us down the native path and throw "DOMParser is not defined".
+// Keying off the parser itself keeps XML parsing on linkedom in Node while
+// happy-dom + skia handle text measurement in the SAME process — something the
+// old paper-jsdom stack (double DOM) could never do.
+function hasNativeDOMParser(): boolean {
+  return typeof DOMParser !== 'undefined';
+}
 
 // Node DOMParser (linkedom), cached after preloadDOM(). Kept `any` so this file
 // carries no type dependency on linkedom (which is a Node-only, lazy import).
 let NodeDOMParser: (new () => { parseFromString(src: string, type: string): Document }) | undefined;
 
 /**
- * Prepare the XML parser. No-op in the browser (native `DOMParser` is always
- * there); in Node it lazily loads `linkedom` and caches its `DOMParser` so the
- * synchronous `parseXML`/`parseDOM` below can run. The IDML constructor awaits
- * this before parsing, so call sites stay synchronous.
+ * Prepare the XML parser. No-op when a native `DOMParser` global exists (a real
+ * browser); otherwise it lazily loads `linkedom` and caches its `DOMParser` so
+ * the synchronous `parseXML`/`parseDOM` below can run. The IDML constructor
+ * awaits this before parsing, so call sites stay synchronous.
  */
 export async function preloadDOM(): Promise<void> {
-  if (isNode && !NodeDOMParser) {
+  if (!hasNativeDOMParser() && !NodeDOMParser) {
     // @vite-ignore — Node-only; a browser build never reaches this branch and
     // must not bundle linkedom.
     NodeDOMParser = (await import(/* @vite-ignore */ 'linkedom')).DOMParser as unknown as typeof NodeDOMParser;
@@ -33,11 +43,11 @@ export async function preloadDOM(): Promise<void> {
 export const preloadJSDOM = preloadDOM;
 
 export function parseDOM(str: string, contentType = 'text/xml'): Document {
-  if (isNode) {
-    if (!NodeDOMParser) throw new Error('idml: call preloadDOM() (or await the IDML "ready" event) before parsing XML in Node.');
-    return new NodeDOMParser().parseFromString(str, contentType);
+  if (hasNativeDOMParser()) {
+    return new DOMParser().parseFromString(str, contentType as DOMParserSupportedType);
   }
-  return new DOMParser().parseFromString(str, contentType as DOMParserSupportedType);
+  if (!NodeDOMParser) throw new Error('idml: call preloadDOM() (or await the IDML "ready" event) before parsing XML in Node.');
+  return new NodeDOMParser().parseFromString(str, contentType);
 }
 
 /** Parse an XML string and return its root element. */

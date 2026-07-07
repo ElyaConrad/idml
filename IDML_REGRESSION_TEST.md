@@ -73,18 +73,23 @@ Two helper scripts live at the module root (both run with `npx tsx`):
 
 Snapshots are written under `_snapshots/` (git-ignored).
 
-## Node runtime: use node@22
+## Node runtime
 
-The module's native chain (`paper-jsdom` → `canvas`) has **no prebuilt for
-node 25 (ABI 141) and won't compile against its headers**. Run all the tooling
-here under Homebrew **node@22** (ABI 127, where `canvas` builds/loads):
+Since the **flat-svg removal (v0.1.16+)** the module has no native dependency of
+its own — XML parsing is `linkedom` (pure JS) in Node, native `DOMParser` in the
+browser. So **geometry mode runs on any Node, including the default node 25** —
+no more node@22 requirement for it.
 
-```
-export PATH="/opt/homebrew/opt/node@22/bin:$PATH"
-```
+The one remaining native dep is **`skia-canvas`, and only for _full mode_**
+(below), which needs a canvas for text measurement.
 
-`npx tsx _snapshot.mjs …` etc. then work. (This is a dev/test concern only — the
-module ships to the browser, which has its own canvas.)
+- **Geometry mode → default node 25, zero setup.**
+- **Full mode → Homebrew node@22.** `skia-canvas@3` is N-API (ABI-stable), but on
+  this machine its binary resolves cleanly under node@22; use it for full-mode
+  runs:
+  ```
+  export PATH="/opt/homebrew/opt/node@22/bin:$PATH"
+  ```
 
 ## Two run modes (this affects what a run can prove)
 
@@ -95,12 +100,20 @@ Text layout/splitting comes from `@bluepic/core/text`, which needs a canvas.
   the warning `@bluepic/core/text unavailable … text frames will not be split`.
   All non-text geometry, crops, colors, masks, z-order, fonts collection, etc.
   are fully exercised and deterministic. Good for the majority of regressions.
-- **Full mode (exercises text splitting).** Set `IDML_HEADLESS=1`, which imports
-  `@bluepic/core/headless` first to install the `happyDOM` + `SkiaCanvas`
-  globals the text module uses in Node. **Requires the peer deps
-  `happy-dom` and `skia-canvas` to be installed** (they are declared by
-  `@bluepic/core` but not present in this module's `node_modules` by default —
-  `npm i -D happy-dom skia-canvas` if a text-splitting case needs it).
+- **Full mode (exercises text splitting + real font metrics).** Set
+  `IDML_HEADLESS=1`, which imports `@bluepic/core/headless` first to install the
+  `happyDOM` + `SkiaCanvas` globals the text module uses in Node. **Requires
+  `happy-dom` and `skia-canvas`** (declared by `@bluepic/core`, not present here
+  by default). Because both are optional peers, plain `npm i` reports "up to
+  date" and skips them — install with **`--force`** under node@22:
+  ```
+  npm i --no-save --force skia-canvas@3.0.8 happy-dom@20.9.0
+  ```
+  Since the flat-svg removal, XML (linkedom, no globals) and text measurement
+  (happy-dom + skia) **coexist in one process** — the old paper-jsdom stack
+  couldn't (double DOM). idml's XML layer picks its parser by whether a native
+  `DOMParser` global exists, NOT by `window`, so happy-dom defining `window`
+  no longer forces the browser path.
 
 > ⚠️ When you compare a baseline and a candidate snapshot, **both must be
 > produced in the same mode.** A geometry-mode baseline vs. a full-mode candidate
