@@ -536,7 +536,11 @@ const sameTextStyle = (a: EffectiveTextStyle, b: EffectiveTextStyle) =>
 const LEADING_TOLERANCE = 0.5;
 const sameLeading = (a: EffectiveTextStyle, b: EffectiveTextStyle) => Math.abs(a.lineHeight * a.fontSize - b.lineHeight * b.fontSize) <= LEADING_TOLERANCE;
 
-type TextRun = { text: string; style: EffectiveTextStyle; align: number; justify: boolean };
+// `spaceBefore` = extra vertical space (pt) above this run's FIRST line, from IDML
+// paragraph spacing (SpaceAfter of the previous paragraph + SpaceBefore of this
+// one). Set only on the first run of a paragraph (never the frame's first). It
+// both forces a chunk split at that boundary and feeds the baseline grid.
+type TextRun = { text: string; style: EffectiveTextStyle; align: number; justify: boolean; spaceBefore?: number };
 /** One future text element: a paragraph (or a style-delimited piece of one). */
 type TextChunk = { runs: TextRun[]; align: number; justify: boolean };
 
@@ -589,7 +593,10 @@ function splitRunsIntoChunks(runs: TextRun[], heuristic: 'strict' | 'format-and-
       // A GAP is a break with no real content on one side = a blank line.
       const gap = !prev || !next;
       const styleDiffers = !!prev && !!next && (!sameTextStyle(prev.style, next.style) || !sameLeading(prev.style, next.style));
-      const hard = heuristic === 'strict' ? seg.breakBefore === 'paragraph' || styleDiffers : styleDiffers || gap;
+      // Paragraph spacing (SpaceBefore/After) can only be reproduced across
+      // separate elements, so a spaced boundary is always a hard break.
+      const spaced = !!next?.spaceBefore;
+      const hard = spaced || (heuristic === 'strict' ? seg.breakBefore === 'paragraph' || styleDiffers : styleDiffers || gap);
       if (hard) {
         chunks.push(current);
         current = { runs: [], align: 0, justify: false };
@@ -763,6 +770,12 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
   // when a paragraph/character style defines none (it inherits via BasedOn).
   const defaultFont = frame.context.idml.getParagraphStyleById('ParagraphStyle/$ID/[No paragraph style]')?.appliedFont ?? 'Arial';
 
+  // Paragraph spacing (local override wins over the applied style). InDesign adds
+  // SpaceAfter(prev) + SpaceBefore(this) between paragraphs, and ignores SpaceBefore
+  // on the very first paragraph of a frame.
+  const paraSpaceBefore = (p: (typeof paragraphs)[number]) => p.localParagraphStyle?.spaceBefore ?? p.appliedParagraphStyle?.spaceBefore ?? 0;
+  const paraSpaceAfter = (p: (typeof paragraphs)[number]) => p.localParagraphStyle?.spaceAfter ?? p.appliedParagraphStyle?.spaceAfter ?? 0;
+
   const runs: TextRun[] = [];
   let firstAlign = 0;
   let firstJustify = false;
@@ -775,6 +788,8 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
       firstAlign = align;
       firstJustify = justify;
     }
+    const incomingSpace = pIndex === 0 ? 0 : paraSpaceAfter(paragraphs[pIndex - 1]) + paraSpaceBefore(paragraph);
+    let firstRunOfPara = true;
     for (const feature of paragraph.features) {
       const style = effectiveTextStyle(paragraph, feature, defaultFont);
       // Resolve the concrete binary: family + IDML style -> Fonts.xml font (for
@@ -790,7 +805,8 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
         fontFileName: documentFont?.fontFileName,
         fontType: documentFont?.fontType ?? font?.type,
       });
-      runs.push({ text: feature.content ?? '', style, align, justify });
+      runs.push({ text: feature.content ?? '', style, align, justify, spaceBefore: firstRunOfPara && incomingSpace > 0 ? incomingSpace : undefined });
+      firstRunOfPara = false;
     }
     // Paragraph boundary = hard break. InDesign usually carries it as a
     // trailing <Br/> INSIDE the last CharacterStyleRange of the range (already
@@ -936,24 +952,39 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
   // versa) mis-spaces. Built by mirroring splitRunsIntoChunks' segment cut so it
   // lines up 1:1 with segmentTops. The last visible segment also inherits the
   // trimmed trailing pilcrow's leading (its ¶ sits on that line: Anuga 14->24.85).
+  // `segmentSpaceBefore` carries IDML paragraph spacing (SpaceAfter(prev) +
+  // SpaceBefore(this)) as extra room above a paragraph's first line \u2014 kept 1:1 with
+  // segmentLeadings and added into the baseline grid below.
   const runLeading = (r: TextRun) => r.style.lineHeight * r.style.fontSize;
   const segmentLeadings: number[] = [0];
+  const segmentSpaceBefore: number[] = [0];
   for (const run of runs) {
+    let spaceApplied = false;
     for (const part of run.text.split(/(\n|\u2028)/)) {
       if (part === '') continue;
-      if (part === '\n' || part === '\u2028') segmentLeadings.push(0);
-      else segmentLeadings[segmentLeadings.length - 1] = Math.max(segmentLeadings[segmentLeadings.length - 1], runLeading(run));
+      if (part === '\n' || part === '\u2028') {
+        segmentLeadings.push(0);
+        segmentSpaceBefore.push(0);
+      } else {
+        const i = segmentLeadings.length - 1;
+        segmentLeadings[i] = Math.max(segmentLeadings[i], runLeading(run));
+        if (run.spaceBefore && !spaceApplied) {
+          segmentSpaceBefore[i] = Math.max(segmentSpaceBefore[i], run.spaceBefore);
+          spaceApplied = true;
+        }
+      }
     }
   }
   segmentLeadings[segmentLeadings.length - 1] = Math.max(segmentLeadings[segmentLeadings.length - 1], trimmedTrailingLeading);
 
   // InDesign baseline grid (offset from segment 0's first line): each line advances
   // by its OWN leading; a wrapped segment's inner lines share that segment's
-  // leading, then the next segment's first line advances by its leading.
+  // leading, then the next segment's first line advances by its leading PLUS any
+  // paragraph spacing above it. All in original (pre-fitScale) units; scaled at use.
   const baselineGrid: number[] = new Array(segmentTops.length).fill(0);
   for (let s = 1; s < segmentTops.length; s++) {
     const prevWrapped = Math.max(0, (segmentLineCounts[s - 1] ?? 1) - 1);
-    baselineGrid[s] = baselineGrid[s - 1] + prevWrapped * segmentLeadings[s - 1] + segmentLeadings[s];
+    baselineGrid[s] = baselineGrid[s - 1] + prevWrapped * segmentLeadings[s - 1] + segmentLeadings[s] + segmentSpaceBefore[s];
   }
 
   // Top y of each chunk = its first segment's first line; skip empty chunks
@@ -975,7 +1006,8 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
   const firstContentStyle = (chunk: TextChunk) => chunk.runs.find((r) => r.text.trim() !== '')?.style ?? chunk.runs[0]?.style ?? base;
   const uniformSize = emitted.every((e) => firstContentStyle(e.chunk).fontSize === base.fontSize);
   const uniformLeading = segmentLeadings.every((l) => l === segmentLeadings[0]);
-  const applyGrid = verticalAlign === 0 && segmentLeadings.length === segmentTops.length && emitted.length > 0 && !(uniformSize && uniformLeading);
+  const noParagraphSpacing = segmentSpaceBefore.every((s) => s === 0);
+  const applyGrid = verticalAlign === 0 && segmentLeadings.length === segmentTops.length && emitted.length > 0 && !(uniformSize && uniformLeading && noParagraphSpacing);
   const refAscent = applyGrid ? fontAscent(core, base, base.fontSize * fitScale) : 0;
 
   const frameBottom = box.y + box.height;

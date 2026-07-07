@@ -305,6 +305,8 @@ export class Story {
       strikeThrough: props.StrikeThru ? ensureBoolean(props.StrikeThru) : undefined,
       autoLeading: ensureNumber(props.AutoLeading),
       leading: ensureNumber(props.Leading),
+      spaceBefore: ensureNumber(props.SpaceBefore),
+      spaceAfter: ensureNumber(props.SpaceAfter),
       // Only map when the attribute is actually present — KeyMap.getInternal
       // falls back to its first value for undefined, which would wrongly force a
       // 'left'/first-value LOCAL override and clobber the applied style's value.

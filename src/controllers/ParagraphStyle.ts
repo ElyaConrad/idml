@@ -9,6 +9,8 @@ export type ParagraphStyleInput = {
   fontSize?: number;
   autoLeading?: number;
   leading?: number;
+  spaceBefore?: number;
+  spaceAfter?: number;
   align?: Align;
   fillColor?: ColorInput;
   strokeColor?: ColorInput;
@@ -223,6 +225,8 @@ export class ParagraphStyle {
       fontSize: this.fontSize,
       autoLeading: this.autoLeading,
       leading: this.leading,
+      spaceBefore: this.spaceBefore,
+      spaceAfter: this.spaceAfter,
       align: this.align,
       fillColor: this.fillColorId ? this.context.idml.getColorById(this.fillColorId)?.toColorInput() : undefined,
       strokeColor: this.strokeColorId ? this.context.idml.getColorById(this.strokeColorId)?.toColorInput() : undefined,
