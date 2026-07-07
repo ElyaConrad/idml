@@ -64,6 +64,9 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.6.3"
   },
+  "peerDependencies": {
+    "skia-canvas": "^3.0.8"
+  },
   "dependencies": {
     "@bluepic/core": "^0.2.9",
     "@js-bits/dom-parser": "^1.0.3",
