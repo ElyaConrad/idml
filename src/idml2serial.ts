@@ -17,6 +17,7 @@ import { ColorInput } from './types/index';
 import { PathCommand } from './idml';
 import { bakeSpriteMatrix, decomposeMatrix, itemTransform2Matrix } from './util/layout';
 import { arrayBufferToBase64 } from './util/arrayBuffer';
+import { isDisplayableImageMime } from './util/imagePreview';
 import { makeRectangle, makeCircle, makePath, makeImage, makeText, makeGroup, makeMask, emptySerial, shiftElementTranslate, applyDropShadow, DropShadowValue, Paint, SurfaceInput, Box, PathFeature, RichTextRun, SerialImageValue } from './serial/builders';
 import { DecomposedTransform } from './util/layout';
 
@@ -59,6 +60,23 @@ export type ImageGraphicType = 'Image' | 'PDF' | 'EPS' | 'WMF' | 'SVG';
  * bx-studio must convert them (via bx-files) before display. SVG and raster are
  * uploaded and shown directly. */
 const NEEDS_CONVERSION: ReadonlySet<ImageGraphicType> = new Set(['PDF', 'EPS', 'WMF']);
+
+/**
+ * Whether an image's embedded bytes must be rasterized (bx-files) before a browser
+ * can show them. PDF/EPS/WMF always do; SVG never does. graphicType 'Image' is the
+ * subtle one — it covers TIFF and PSD too (not just PNG/JPEG), and those the browser
+ * cannot render, so gate on the sniffed MIME.
+ */
+async function needsConversion(image: ImageSprite, graphicType: ImageGraphicType): Promise<boolean> {
+  if (NEEDS_CONVERSION.has(graphicType)) return true;
+  if (graphicType !== 'Image') return false; // SVG
+  try {
+    const type = await image.getImageType();
+    return !isDisplayableImageMime(type?.mime);
+  } catch {
+    return false;
+  }
+}
 /** A linked image with no embedded source — the user must supply it. */
 export type MissingImage = { elementId: string; imageId: string; linkURI?: string; graphicType: ImageGraphicType };
 /** An image whose bytes we recovered from the IDML (embedded raster, embedded
@@ -71,6 +89,13 @@ export type ImageToUpload = { elementId: string; imageId: string; data: ArrayBuf
 export type SerialAssets = { fonts: RequiredFont[]; missingImages: MissingImage[]; imagesToUpload: ImageToUpload[] };
 /** A produced serial plus its assets. */
 export type ConvertedSerial = { serial: Template.Serial; assets: SerialAssets };
+/**
+ * Supplies a ready preview `src` for an image element by its id — how the
+ * asset-aware converter injects blob previews for displayable images (embedded
+ * or wizard-provided) into the serial. Returns undefined to fall back to the
+ * kernel's own embedded data URL / placeholder.
+ */
+export type ImageSrcResolver = (info: { imageId: string; linkURI?: string }) => string | undefined;
 /** Options for {@link convertIDML2Serial}. */
 export type ConvertIDML2SerialOptions = {
   /**
@@ -101,6 +126,12 @@ export type ConvertIDML2SerialOptions = {
    * `@bluepic/core/headless` globals) — without one it degrades to `'never'`.
    */
   textSplittingHeuristic?: TextSplittingHeuristic;
+  /**
+   * Optional preview-src provider for image elements (by id). The asset-aware
+   * converter passes this to inject blob/data previews for displayable images;
+   * omitted for a bare kernel convert (embedded rasters/SVG still get data URLs).
+   */
+  resolveImageSrc?: ImageSrcResolver;
 };
 /** See {@link ConvertIDML2SerialOptions.textSplittingHeuristic}. */
 export type TextSplittingHeuristic = 'strict' | 'format-and-paragraph-only' | 'never';
@@ -111,6 +142,8 @@ class AssetCollector {
   private fonts = new Map<string, Map<string, FontVariant>>(); // family -> styleName|"w|i" -> variant
   readonly missingImages: MissingImage[] = [];
   readonly imagesToUpload: ImageToUpload[] = [];
+
+  constructor(readonly resolveImageSrc?: ImageSrcResolver) {}
 
   addFont(family: string, variant: FontVariant) {
     if (!family) return;
@@ -125,7 +158,7 @@ class AssetCollector {
    * the `image.src`). Embedded -> imagesToUpload (with bytes); linked with no
    * source -> missingImages.
    */
-  addImage(elementId: string, image: ImageSprite) {
+  async addImage(elementId: string, image: ImageSprite) {
     // Return the bytes whenever the IDML actually carries them — a real raster,
     // an embedded SVG (both browser-renderable, uploaded directly) or an embedded
     // PDF/EPS/WMF (flagged needsConversion so bx-files rasterizes it first). Only
@@ -134,7 +167,7 @@ class AssetCollector {
     const linkURI = image.getLinkURI();
     // getRasterContents() gates on raster; getContents() returns any embedded bytes.
     const embedded = image.getRasterContents() ?? image.getContents();
-    if (embedded) this.imagesToUpload.push({ elementId, imageId: image.getId(), data: embedded, linkURI, graphicType, needsConversion: NEEDS_CONVERSION.has(graphicType) });
+    if (embedded) this.imagesToUpload.push({ elementId, imageId: image.getId(), data: embedded, linkURI, graphicType, needsConversion: await needsConversion(image, graphicType) });
     else this.missingImages.push({ elementId, imageId: image.getId(), linkURI, graphicType });
   }
   result(): SerialAssets {
@@ -261,17 +294,35 @@ function pathFeatures(paths: PathCommand[][]): PathFeature[] {
 const PLACEHOLDER_SVG = `<svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="120" height="120" fill="#EFF1F3"/><path fill-rule="evenodd" clip-rule="evenodd" d="M33.2503 38.4816C33.2603 37.0472 34.4199 35.8864 35.8543 35.875H83.1463C84.5848 35.875 85.7503 37.0431 85.7503 38.4816V80.5184C85.7403 81.9528 84.5807 83.1136 83.1463 83.125H35.8543C34.4158 83.1236 33.2503 81.957 33.2503 80.5184V38.4816ZM80.5006 41.1251H38.5006V77.8751L62.8921 53.4783C63.9172 52.4536 65.5788 52.4536 66.6039 53.4783L80.5006 67.4013V41.1251ZM43.75 51.6249C43.75 54.5244 46.1005 56.8749 49 56.8749C51.8995 56.8749 54.25 54.5244 54.25 51.6249C54.25 48.7254 51.8995 46.3749 49 46.3749C46.1005 46.3749 43.75 48.7254 43.75 51.6249Z" fill="#687787"/></svg>`;
 const PLACEHOLDER_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(PLACEHOLDER_SVG)}`;
 
-async function imageDataUrl(image: ImageSprite): Promise<string | undefined> {
-  const contents = image.getRasterContents();
-  if (!contents) return PLACEHOLDER_IMAGE; // linked/vector image with no usable raster source
-  let mime = 'image/png';
-  try {
-    const type = await image.getImageType();
-    if (type?.mime) mime = type.mime;
-  } catch {
-    /* keep default */
+async function imageDataUrl(image: ImageSprite, resolveImageSrc?: ImageSrcResolver): Promise<string | undefined> {
+  // A converter-supplied preview (compressed blob for any displayable image,
+  // embedded or wizard-provided) wins over the kernel's own bytes.
+  const provided = resolveImageSrc?.({ imageId: image.getId(), linkURI: image.getLinkURI() });
+  if (provided) return provided;
+
+  // Embedded SVG: browser-renderable vector bytes. getRasterContents() returns
+  // undefined for vector graphics, so read the raw contents explicitly.
+  if (image.getGraphicType() === 'SVG') {
+    const svg = image.getContents();
+    if (svg) return `data:image/svg+xml;base64,${arrayBufferToBase64(svg)}`;
   }
-  return `data:${mime};base64,${arrayBufferToBase64(contents)}`;
+
+  // Embedded raster — only when the browser can render the format. TIFF/PSD (also
+  // graphicType 'Image') and the vector formats fall through to the placeholder,
+  // and ride the upload + bx-files conversion path instead.
+  const contents = image.getRasterContents();
+  if (contents) {
+    let mime = 'image/png';
+    try {
+      const type = await image.getImageType();
+      if (type?.mime) mime = type.mime;
+    } catch {
+      /* keep default */
+    }
+    if (isDisplayableImageMime(mime)) return `data:${mime};base64,${arrayBufferToBase64(contents)}`;
+  }
+
+  return PLACEHOLDER_IMAGE; // linked with no supplied file, or non-displayable embedded
 }
 
 function findImageChild(sprite: RectangleSprite | OvalSprite | PolygonSprite): ImageSprite | undefined {
@@ -281,9 +332,9 @@ function findImageChild(sprite: RectangleSprite | OvalSprite | PolygonSprite): I
 async function fullImageElement(image: ImageSprite, transform: DecomposedTransform, collector: AssetCollector): Promise<Template.Element | null> {
   const box = image.getBBox();
   if (!box) return null;
-  const src = await imageDataUrl(image);
+  const src = await imageDataUrl(image, collector.resolveImageSrc);
   if (!src) return null;
-  collector.addImage(image.getId(), image); // this element holds the image.src
+  await collector.addImage(image.getId(), image); // this element holds the image.src
   const value: SerialImageValue = { src, crop: null, cropMode: 'cover', innerAlign: 'center', mirrorX: false, mirrorY: false, innerRotate: 0 };
   return makeImage(image.getId(), box, [0, 0, 0, 0], value, transform, {});
 }
@@ -296,16 +347,21 @@ async function fullImageElement(image: ImageSprite, transform: DecomposedTransfo
  * mask paths use this so they fit the FRAME box identically. A placeholder /
  * unknown-size image returns crop=null (cover the frame box).
  */
-async function frameImageValue(frame: RectangleSprite | OvalSprite | PolygonSprite, image: ImageSprite, pageMatrix: Matrix): Promise<SerialImageValue | null> {
-  const src = await imageDataUrl(image);
+async function frameImageValue(frame: RectangleSprite | OvalSprite | PolygonSprite, image: ImageSprite, pageMatrix: Matrix, resolveImageSrc?: ImageSrcResolver): Promise<SerialImageValue | null> {
+  const src = await imageDataUrl(image, resolveImageSrc);
   if (!src) return null;
   const base = { src, cropMode: 'cover' as const, innerAlign: 'center', mirrorX: false, mirrorY: false, innerRotate: 0 };
 
+  // Natural pixel size: decode embedded bytes when we have them, else fall back to
+  // the IDML metadata (GraphicBounds x ppi) so a LINKED image whose file the wizard
+  // provided still gets the exact InDesign crop, not just a cover fit.
   let natural: { width: number; height: number };
   try {
     natural = await image.getNaturalSize();
   } catch {
-    return { ...base, crop: null };
+    const metadata = image.getMetadataNaturalSize();
+    if (!metadata) return { ...base, crop: null };
+    natural = metadata;
   }
 
   const fb = frame.getGeometricBounds();
@@ -340,9 +396,9 @@ async function imageFrameAsImage(frame: RectangleSprite, image: ImageSprite, pag
   if (Math.abs(imagePlacement.rotate) > 0.5 || Math.abs(imagePlacement.skewX) > 0.5) return null;
   if (!cornersAreSimple(frame.getCornerOptions())) return null;
 
-  const value = await frameImageValue(frame, image, pageMatrix);
+  const value = await frameImageValue(frame, image, pageMatrix, collector.resolveImageSrc);
   if (!value) return null;
-  collector.addImage(frame.getId(), image); // the frame IS the image element here
+  await collector.addImage(frame.getId(), image); // the frame IS the image element here
   const fb = frame.getBBox();
   return makeImage(frame.getId(), fb, cornerRadii(frame.getCornerOptions(), fb), value, transform, surfaceOf(frame));
 }
@@ -571,10 +627,18 @@ function splitRunsIntoChunks(runs: TextRun[], heuristic: 'strict' | 'format-and-
   type Segment = { runs: TextRun[]; breakBefore: 'paragraph' | 'forced' | null };
   const segments: Segment[] = [{ runs: [], breakBefore: null }];
   for (const run of runs) {
+    // `spaceBefore` belongs to the run's FIRST line only (the paragraph's first
+    // line). When a run spans several lines via internal forced breaks, the later
+    // lines must not inherit it, or they'd look like spaced paragraph starts and
+    // split spuriously (Anuga's "Cologne...Anuga..." is one run over two lines).
+    let firstPart = true;
     for (const part of run.text.split(/(\n|\u2028)/)) {
       if (part === '') continue;
       if (part === '\n' || part === '\u2028') segments.push({ runs: [], breakBefore: part === '\n' ? 'paragraph' : 'forced' });
-      else segments[segments.length - 1].runs.push({ ...run, text: part });
+      else {
+        segments[segments.length - 1].runs.push({ ...run, text: part, spaceBefore: firstPart ? run.spaceBefore : undefined });
+        firstPart = false;
+      }
     }
   }
 
@@ -1193,7 +1257,7 @@ function paperBackgroundElement(page: Spread['pages'][number], fill: Paint): Tem
  * bounds, so facing/stacked pages and all their sprites live together.
  */
 export async function convertIDML2Serial(idml: IDML, options: ConvertIDML2SerialOptions = {}): Promise<ConvertedSerial[]> {
-  const { paperBackground = true, textSplittingHeuristic = 'format-and-paragraph-only' } = options;
+  const { paperBackground = true, textSplittingHeuristic = 'format-and-paragraph-only', resolveImageSrc } = options;
   const settings: ConvertSettings = { textSplittingHeuristic };
   const paper = paperBackground ? paperFill(idml) : null;
   const results: ConvertedSerial[] = [];
@@ -1201,7 +1265,7 @@ export async function convertIDML2Serial(idml: IDML, options: ConvertIDML2Serial
     const spread = spreadPackage.getSpread();
     const viewBox = spreadViewBox(spread);
     const viewBoxShift = translate(-viewBox.x, -viewBox.y); // spread coords -> canvas-local
-    const collector = new AssetCollector();
+    const collector = new AssetCollector(resolveImageSrc);
 
     // One Bluepic group per IDML page (mirrors idml2svg's per-page nesting), so
     // every sprite transform is simply its baked matrix relative to its parent.

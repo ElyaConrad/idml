@@ -1,8 +1,33 @@
+import { fileTypeFromBuffer } from 'file-type';
 import { IDML } from './idml.js';
-import { convertIDML2Serial, ConvertedSerial, ConvertIDML2SerialOptions, RequiredFont } from './idml2serial.js';
+import { convertIDML2Serial, ConvertedSerial, ConvertIDML2SerialOptions, ImageGraphicType, ImageSrcResolver, RequiredFont } from './idml2serial.js';
 import { AssetFile, AggregatedAssets, AggregatedFont, AggregatedImage, collectAssets, matchFontFiles, matchImageFile } from './assets.js';
 import { loadFontsForMeasurement, LoadableFont } from './util/fontLoading.js';
+import { isDisplayableImageMime, makeImagePreviewSrc } from './util/imagePreview.js';
 import type { Font as SerialFont } from './serial/serial-types.js';
+
+/** Extension -> MIME for provided files (reliable, and catches SVG which byte
+ * sniffing misses). */
+const EXTENSION_MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', bmp: 'image/bmp', svg: 'image/svg+xml', tif: 'image/tiff', tiff: 'image/tiff', psd: 'image/vnd.adobe.photoshop' };
+
+/**
+ * One image asset the import wizard must handle: its bytes (embedded or from a
+ * provided file), how to display it, and every serial element that references it.
+ */
+export type PreparedImage = {
+  imageId: string;
+  linkURI?: string;
+  graphicType: ImageGraphicType;
+  /** true → not browser-renderable (PDF/EPS/WMF/TIFF/PSD); bx-files must convert it. */
+  needsConversion: boolean;
+  /** true → currently shown in the serial via a blob/data preview src. */
+  hasPreview: boolean;
+  /** Uploadable bytes: embedded IDML bytes, or a provided file. undefined = still missing. */
+  bytes?: ArrayBuffer;
+  source: 'embedded' | 'provided' | 'missing';
+  /** Serial elements (across spreads) whose `image.src` this asset feeds. */
+  occurrences: { serialIndex: number; elementId: string }[];
+};
 
 /**
  * Stateful, asset-aware IDML → Serial converter.
@@ -29,6 +54,10 @@ export class IdmlSerialConverter {
   /** Font/image work list, derived once from a font-independent discovery pass. */
   private aggregated: AggregatedAssets = { fonts: [], images: [] };
   private lastResult: ConvertedSerial[] | null = null;
+  /** Aggregated-image keys that got a preview src in the last convert (for the manifest). */
+  private previewKeys = new Set<string>();
+  /** Blob URLs minted last convert, revoked on the next so a re-convert doesn't leak. */
+  private previewBlobUrls: string[] = [];
 
   private constructor(private readonly idml: IDML) {}
 
@@ -84,10 +113,31 @@ export class IdmlSerialConverter {
   async convert(options?: ConvertIDML2SerialOptions): Promise<ConvertedSerial[]> {
     const loadable = this.buildLoadableFonts();
     const serialFonts = await loadFontsForMeasurement(loadable);
-    const result = await convertIDML2Serial(this.idml, options);
+    // Build the image preview resolver BEFORE converting: displayable images
+    // (embedded, or a provided linked file) become a compressed blob (browser) /
+    // data URL (node) that the kernel wires straight onto the element, instead of
+    // the gray placeholder. Non-displayable (AI/EPS/PSD/PDF/TIFF) stay placeholders
+    // and only ride the upload manifest for bx-files conversion.
+    const resolveImageSrc = await this.buildImageResolver();
+    const result = await convertIDML2Serial(this.idml, { ...options, resolveImageSrc });
     for (const { serial } of result) serial.fonts = mergeFonts(serial.fonts, serialFonts);
     this.lastResult = result;
     return result;
+  }
+
+  /**
+   * The complete image work list for an import wizard: every image asset with its
+   * uploadable bytes (embedded or provided), whether it needs bx-files conversion,
+   * whether it currently previews, and the serial elements to patch with the final
+   * durable URL. Images with `source: 'missing'` still need a file from the user.
+   */
+  get imageManifest(): PreparedImage[] {
+    return this.aggregated.images.map((img) => {
+      const provided = !img.embedded ? this.assetForImage(img) : undefined;
+      const bytes = img.embedded ? img.data : provided?.bytes;
+      const source: PreparedImage['source'] = img.embedded ? 'embedded' : provided ? 'provided' : 'missing';
+      return { imageId: img.imageId, linkURI: img.linkURI, graphicType: img.graphicType, needsConversion: img.needsConversion, hasPreview: this.previewKeys.has(imageKey(img)), bytes, source, occurrences: img.occurrences };
+    });
   }
 
   /** The serials from the most recent {@link convert} (null before the first). */
@@ -118,6 +168,71 @@ export class IdmlSerialConverter {
   private assetForImage(img: AggregatedImage): AssetFile | undefined {
     return img.linkURI ? matchImageFile(img.linkURI, this.assets) : undefined;
   }
+
+  /**
+   * Preview-src provider for displayable images. Compresses each once (blob in the
+   * browser, data URL in Node) and keys it so the kernel can look it up per element:
+   * linked images by their shared linkURI (one blob serves every placement),
+   * embedded images by their sprite id. Returns undefined when nothing is displayable.
+   */
+  private async buildImageResolver(): Promise<ImageSrcResolver | undefined> {
+    for (const url of this.previewBlobUrls) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        /* Node, or already revoked */
+      }
+    }
+    this.previewBlobUrls = [];
+    this.previewKeys = new Set();
+
+    const byLinkURI = new Map<string, string>();
+    const byImageId = new Map<string, string>();
+    for (const img of this.aggregated.images) {
+      const resolved = await this.resolveDisplayableBytes(img);
+      if (!resolved) continue;
+      const src = await makeImagePreviewSrc(resolved.bytes, resolved.mime);
+      if (!src) continue;
+      if (src.startsWith('blob:')) this.previewBlobUrls.push(src);
+      this.previewKeys.add(imageKey(img));
+      if (img.linkURI) byLinkURI.set(img.linkURI, src);
+      else byImageId.set(img.imageId, src);
+    }
+    if (byLinkURI.size === 0 && byImageId.size === 0) return undefined;
+    return ({ imageId, linkURI }) => (linkURI ? byLinkURI.get(linkURI) : undefined) ?? byImageId.get(imageId);
+  }
+
+  /** Displayable bytes + MIME for one aggregated image: embedded IDML bytes, or a
+   * provided linked file. Undefined for non-displayable formats and unresolved links. */
+  private async resolveDisplayableBytes(img: AggregatedImage): Promise<{ bytes: ArrayBuffer; mime: string } | undefined> {
+    if (img.needsConversion) return undefined; // AI/EPS/PSD/PDF/WMF/TIFF — bx-files only
+    if (img.embedded && img.data) {
+      const mime = img.graphicType === 'SVG' ? 'image/svg+xml' : await sniffMime(img.data);
+      return mime && isDisplayableImageMime(mime) ? { bytes: img.data, mime } : undefined;
+    }
+    const file = this.assetForImage(img);
+    if (file) {
+      const mime = mimeFromName(file.name) ?? (await sniffMime(file.bytes));
+      if (mime && isDisplayableImageMime(mime)) return { bytes: file.bytes, mime };
+    }
+    return undefined;
+  }
+}
+
+/** Same de-dup identity as `collectAssets` (linkURI, else sprite id). */
+function imageKey(img: { imageId: string; linkURI?: string }): string {
+  return img.linkURI ? `uri:${img.linkURI}` : `id:${img.imageId}`;
+}
+async function sniffMime(bytes: ArrayBuffer): Promise<string | undefined> {
+  try {
+    return (await fileTypeFromBuffer(new Uint8Array(bytes)))?.mime;
+  } catch {
+    return undefined;
+  }
+}
+function mimeFromName(name: string): string | undefined {
+  const ext = name.split('.').pop()?.toLowerCase();
+  return ext ? EXTENSION_MIME[ext] : undefined;
 }
 
 function dedupeByName(files: AssetFile[]): AssetFile[] {

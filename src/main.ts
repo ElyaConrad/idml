@@ -8,6 +8,7 @@ export * from './idml2serial.js';
 export * from './metadata.js';
 export * from './assets.js';
 export * from './converter.js';
+export * from './util/imagePreview.js';
 
 export * from './controllers/Story.js';
 export * from './controllers/Color.js';

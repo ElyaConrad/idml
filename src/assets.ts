@@ -1,4 +1,6 @@
-import type { ConvertedSerial, FontVariant } from './idml2serial.js';
+import type { ConvertedSerial, FontVariant, ImageGraphicType } from './idml2serial.js';
+
+const GRAPHIC_NEEDS_CONVERSION: ReadonlySet<ImageGraphicType> = new Set(['PDF', 'EPS', 'WMF']);
 
 /**
  * Environment-agnostic asset matching for the IDML import flow.
@@ -10,8 +12,14 @@ import type { ConvertedSerial, FontVariant } from './idml2serial.js';
  * want the low-level matchers can use them directly.
  */
 
+/** The minimum a file needs for the matchers — its base name. `matchImageFile` /
+ * `matchFontFiles` are generic over this, so a consumer can pass its own richer
+ * file shape (e.g. bx-studio's `{ name, path, file: File }`) and get that same
+ * object back, instead of duplicating the matching logic. */
+export type NamedFile = { name: string };
+
 /** A provided asset file: its name (for matching) and its bytes (for use). */
-export type AssetFile = { name: string; bytes: ArrayBuffer };
+export type AssetFile = NamedFile & { bytes: ArrayBuffer };
 
 // All image formats an IDML may link, INCLUDING non-web ones (AI/EPS/PDF/PSD),
 // which a consumer rasterizes before the renderer sees them.
@@ -25,6 +33,16 @@ function extensionOf(name: string): string {
 function baseNameOf(path: string): string {
   // Handle both POSIX and Windows separators (IDML link URIs carry either).
   return path.split(/[\\/]/).pop() ?? path;
+}
+/** IDML link URIs are percent-encoded (`A%2BA` = `A+A`, `Ergo%20Daten` = a space).
+ * Decode so the base name matches the real on-disk file name. Malformed sequences
+ * (a bare `%`) throw, so fall back to the raw string. */
+function decodeURISafe(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 function stripExtension(name: string): string {
   return name.replace(/\.[^.]+$/, '');
@@ -40,10 +58,12 @@ function normalize(value: string): string {
  * base name without extension — catching the common case where InDesign wrote an
  * absolute `file:///…/Links/foo.png` but the user supplied the package folder.
  */
-export function matchImageFile(linkURI: string | undefined, files: AssetFile[]): AssetFile | undefined {
+export function matchImageFile<T extends NamedFile>(linkURI: string | undefined, files: T[]): T | undefined {
   if (!linkURI) return undefined;
-  const wantedFull = normalize(baseNameOf(linkURI));
-  const wantedBase = normalize(stripExtension(baseNameOf(linkURI)));
+  // Decode the link's base name first — `A%2BA_…jpg` must match the file `A+A_…jpg`.
+  const base = decodeURISafe(baseNameOf(linkURI));
+  const wantedFull = normalize(base);
+  const wantedBase = normalize(stripExtension(base));
   const candidates = files.filter((f) => IMAGE_EXTENSIONS.includes(extensionOf(f.name)));
   const exact = candidates.find((f) => normalize(baseNameOf(f.name)) === wantedFull);
   if (exact) return exact;
@@ -60,7 +80,7 @@ export function matchImageFile(linkURI: string | undefined, files: AssetFile[]):
  * though "DINBd_" bears no resemblance to the family "DIN-Bold". Only when the
  * metadata gave nothing do we fall back to the fuzzy family-name heuristic.
  */
-export function matchFontFiles(family: string, expectedFileNames: string[], files: AssetFile[]): AssetFile[] {
+export function matchFontFiles<T extends NamedFile>(family: string, expectedFileNames: string[], files: T[]): T[] {
   const fontEntries = files.filter((f) => FONT_EXTENSIONS.includes(extensionOf(f.name)));
 
   // 1) Exact match on the metadata file names (base name, case-insensitive).
@@ -88,6 +108,12 @@ export interface AggregatedImage {
   /** true → bytes are embedded in the IDML (always uploadable). */
   embedded: boolean;
   data?: ArrayBuffer;
+  /** IDML source tag: 'Image' (raster incl. TIFF/PSD) | PDF | EPS | WMF | SVG. */
+  graphicType: ImageGraphicType;
+  /** true when the bytes a browser can't render (PDF/EPS/WMF, and TIFF/PSD) — bx-files
+   * must rasterize before display. Best-effort for still-missing images (no bytes to
+   * sniff): keyed off graphicType only. */
+  needsConversion: boolean;
   /** Every serial element that references this image (patch targets). */
   occurrences: { serialIndex: number; elementId: string }[];
 }
@@ -123,16 +149,18 @@ export function collectAssets(serials: ConvertedSerial[]): AggregatedAssets {
   serials.forEach(({ assets }, serialIndex) => {
     for (const image of assets.imagesToUpload) {
       const key = imageAssetKey(image);
-      const entry = images.get(key) ?? { imageId: image.imageId, linkURI: image.linkURI, embedded: false, occurrences: [] };
+      const entry = images.get(key) ?? { imageId: image.imageId, linkURI: image.linkURI, embedded: false, graphicType: image.graphicType, needsConversion: image.needsConversion, occurrences: [] };
       entry.embedded = true;
       entry.data = image.data;
+      entry.graphicType = image.graphicType;
+      entry.needsConversion = image.needsConversion;
       entry.linkURI ??= image.linkURI;
       entry.occurrences.push({ serialIndex, elementId: image.elementId });
       images.set(key, entry);
     }
     for (const image of assets.missingImages) {
       const key = imageAssetKey(image);
-      const entry = images.get(key) ?? { imageId: image.imageId, linkURI: image.linkURI, embedded: false, occurrences: [] };
+      const entry = images.get(key) ?? { imageId: image.imageId, linkURI: image.linkURI, embedded: false, graphicType: image.graphicType, needsConversion: GRAPHIC_NEEDS_CONVERSION.has(image.graphicType), occurrences: [] };
       entry.linkURI ??= image.linkURI;
       entry.occurrences.push({ serialIndex, elementId: image.elementId });
       images.set(key, entry);
