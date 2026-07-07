@@ -47,7 +47,11 @@ export async function makeImagePreviewSrc(bytes: ArrayBuffer, mime: string): Pro
   if (mime === 'image/svg+xml') return URL.createObjectURL(new Blob([bytes], { type: mime }));
 
   try {
-    const { default: Compressor } = (await import(/* @vite-ignore */ 'compressorjs')) as unknown as { default: new (file: Blob, opts: Record<string, unknown>) => void };
+    // NOT @vite-ignore'd (unlike the node-only linkedom/sharp/skia imports):
+    // compressorjs is a browser dependency the consumer's bundler SHOULD bundle, so
+    // the dynamic import resolves at build time. This branch is browser-only (Node
+    // returned above), so the import is never reached under Node.
+    const { default: Compressor } = (await import('compressorjs')) as unknown as { default: new (file: Blob, opts: Record<string, unknown>) => void };
     const source = new Blob([bytes], { type: mime });
     const compressed = await new Promise<Blob>((resolve, reject) => {
       // eslint-disable-next-line no-new
