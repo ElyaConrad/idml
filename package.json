@@ -65,12 +65,20 @@
     "typescript": "^5.6.3"
   },
   "peerDependencies": {
+    "canvas": "^2.11.2",
     "skia-canvas": "^3.0.8"
+  },
+  "peerDependenciesMeta": {
+    "canvas": {
+      "optional": true
+    },
+    "skia-canvas": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@bluepic/core": "^0.2.9",
     "@js-bits/dom-parser": "^1.0.3",
-    "canvas": "^2.11.2",
     "client-zip": "^2.4.5",
     "color": "^4.2.3",
     "css-expression": "^0.0.8",
