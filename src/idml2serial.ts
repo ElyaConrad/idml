@@ -18,7 +18,7 @@ import { PathCommand } from './idml';
 import { bakeSpriteMatrix, decomposeMatrix, itemTransform2Matrix } from './util/layout';
 import { arrayBufferToBase64 } from './util/arrayBuffer';
 import { isDisplayableImageMime } from './util/imagePreview';
-import { makeRectangle, makeCircle, makePath, makeImage, makeText, makeGroup, makeMask, emptySerial, shiftElementTranslate, applyDropShadow, DropShadowValue, Paint, SurfaceInput, Box, PathFeature, RichTextRun, SerialImageValue } from './serial/builders';
+import { makeRectangle, makeCircle, makePath, makeImage, makeText, makeGroup, makeMask, emptySerial, shiftElementTranslate, applyDropShadow, DropShadowValue, Paint, SurfaceInput, Box, PathFeature, RichTextRun, SerialImageValue, TextBounding } from './serial/builders';
 import { DecomposedTransform } from './util/layout';
 
 /**
@@ -132,11 +132,43 @@ export type ConvertIDML2SerialOptions = {
    * omitted for a bare kernel convert (embedded rasters/SVG still get data URLs).
    */
   resolveImageSrc?: ImageSrcResolver;
+  /**
+   * Which core line-box model reproduces InDesign's `VerticalJustification="JustifyAlign"`
+   * (lines distributed to fill the frame height). Both emit uniform baseline gaps by
+   * widening the line advance; they differ in how the block anchors and how close it
+   * lands to InDesign:
+   *
+   *  - `'fontSize'` — advance = fontSize × lineHeight, first baseline placed via the
+   *    canvas hanging offset. Near-exact InDesign match (gap within ~0.2%), and the
+   *    grown box overshoots the frame the least. **Default.**
+   *  - `'actual-outer'` — outer lines capped to their real ink, inner lines to the
+   *    font box, so the block auto-anchors on the first line's actual cap-top. Slightly
+   *    further from InDesign and needs a taller grown box, but never relies on the
+   *    hanging-offset constant.
+   */
+  verticalJustifyImplementationBounding?: VerticalJustifyBounding;
+  /**
+   * How the vertical-justify element reconciles InDesign's behaviour (last line's
+   * baseline at the frame bottom, descenders hanging *past* it) with core's rule that
+   * text is shrunk to never overflow its box:
+   *
+   *  - `'grow'` — emit an element a few px TALLER than the IDML frame (= the natural
+   *    block height) so the descenders overflow the frame just like InDesign and the
+   *    font is never shrunk. Matches InDesign's gap exactly. **Default.**
+   *  - `'contain'` — keep the element at the IDML frame height. No shrink, descenders
+   *    stay inside, but gaps come out ~3–5% tighter than InDesign (the last line's
+   *    descent is reserved instead of overflowing).
+   */
+  verticalJustifyImplementationFit?: VerticalJustifyFit;
 };
 /** See {@link ConvertIDML2SerialOptions.textSplittingHeuristic}. */
 export type TextSplittingHeuristic = 'strict' | 'format-and-paragraph-only' | 'never';
+/** See {@link ConvertIDML2SerialOptions.verticalJustifyImplementationBounding}. */
+export type VerticalJustifyBounding = 'fontSize' | 'actual-outer';
+/** See {@link ConvertIDML2SerialOptions.verticalJustifyImplementationFit}. */
+export type VerticalJustifyFit = 'grow' | 'contain';
 /** Resolved options, threaded through the sprite walk. */
-type ConvertSettings = { textSplittingHeuristic: TextSplittingHeuristic };
+type ConvertSettings = { textSplittingHeuristic: TextSplittingHeuristic; verticalJustifyBounding: VerticalJustifyBounding; verticalJustifyFit: VerticalJustifyFit };
 
 class AssetCollector {
   private fonts = new Map<string, Map<string, FontVariant>>(); // family -> styleName|"w|i" -> variant
@@ -699,7 +731,7 @@ function loadTextLayout() {
 }
 
 /** Build one text element from runs (uniform runs collapse to plaintext). */
-function textElementFromRuns(id: string, runs: TextRun[], box: Box, align: number, justify: boolean, verticalAlign: number, lineHeightPercent: number, transform: DecomposedTransform): Template.Elements.Text {
+function textElementFromRuns(id: string, runs: TextRun[], box: Box, align: number, justify: boolean, verticalAlign: number, lineHeightPercent: number, transform: DecomposedTransform, bounding?: TextBounding): Template.Elements.Text {
   const base = runs[0].style;
   const uniform = runs.every((r) => sameTextStyle(r.style, base));
   const plainText = runs.map((r) => r.text).join('');
@@ -735,6 +767,7 @@ function textElementFromRuns(id: string, runs: TextRun[], box: Box, align: numbe
       textAlign: align,
       justifyText: justify,
       verticalAlign,
+      bounding,
       autoLinebreaks: true,
       uppercase,
       fill: base.color,
@@ -786,12 +819,121 @@ function fontAscent(core: typeof import('@bluepic/core/text'), style: EffectiveT
   }
 }
 
+/** A layout probe over the merged frame: `(lineHeight%, bounding, blockTopY, maxHeight)`.
+ * Vertical justify uses it to read the natural (huge maxHeight = un-shrunk) block. */
+type ProbeLayout = (lineHeight: number, bounding: TextBounding, y: number, maxHeight: number) => import('@bluepic/core/text').TextLayoutResult;
+
+/** actualBoundingBox ascent/descent of ONE rendered line's text at the base style — the
+ * real ink extent (content-dependent), used to anchor vertical justify on InDesign's grid. */
+function lineActualMetrics(core: typeof import('@bluepic/core/text'), style: EffectiveTextStyle, text: string): { ascent: number; descent: number } {
+  try {
+    const m = core.textInfo(text || 'M', { fontFamily: style.fontFamily, fontWeight: style.fontWeight, fontStyle: style.fontStyle, fontSize: style.fontSize, letterSpacing: style.letterSpacing }, 'alphabetic', false);
+    const asc = m?.actualBoundingBoxAscent;
+    const desc = m?.actualBoundingBoxDescent;
+    return { ascent: asc && Number.isFinite(asc) ? asc : 0, descent: desc && Number.isFinite(desc) ? desc : 0 };
+  } catch {
+    return { ascent: 0, descent: 0 };
+  }
+}
+
+/** Binary-search the lineHeight % whose natural (un-shrunk) block height equals `target`
+ * — the widest line spread that still fits a frame without core shrinking the font. */
+function fitLineHeightForBlockHeight(probe: ProbeLayout, bounding: TextBounding, y: number, target: number): number {
+  let lo = 50;
+  let hi = 1000;
+  for (let k = 0; k < 32; k++) {
+    const mid = (lo + hi) / 2;
+    if (probe(mid, bounding, y, 1e6).virtualBBox.height < target) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
 function firstBaselineAscentShift(core: typeof import('@bluepic/core/text'), style: EffectiveTextStyle): number {
   try {
     return (1 - HANGING_BASELINE_FRACTION) * fontAscent(core, style);
   } catch {
     return 0;
   }
+}
+
+/**
+ * Reproduce InDesign `VerticalJustification="JustifyAlign"` as ONE Bluepic text
+ * element: the lines are spread to a uniform baseline gap that fills the frame, with
+ * the first baseline on InDesign's grid (frameTop + the first line's actual ascent).
+ *
+ * Core has no vertical-justify mode and ALWAYS shrinks text that would overflow its
+ * box, so we widen the line advance (lineHeight) to the justified gap and place the
+ * box ourselves. Two knobs, from {@link ConvertSettings}:
+ *  - bounding `'fontSize'` (advance = fontSize×lineHeight; near-exact InDesign match,
+ *    box grows the least) or `'actual-outer'` (block auto-anchors on the first line's
+ *    real ink, never needs the hanging-offset constant).
+ *  - fit `'grow'` (box a few px TALLER than the frame so the last line's descenders
+ *    overflow it like InDesign and the font is never shrunk — gap exact) or `'contain'`
+ *    (box = frame height; descenders kept inside, gap ~3–5% tighter).
+ *
+ * The baseline advance is linear in lineHeight with slope fontSize/100 in BOTH bounding
+ * modes (verified), so one calibration probe fixes the constant offset and lets us solve
+ * lineHeight for a target gap. Returns null (caller falls through to the normal path)
+ * for a single line, a frame too short to spread into, or unusable measurements.
+ */
+function buildVerticalJustifyElement(
+  id: string,
+  runs: TextRun[],
+  box: Box,
+  align: number,
+  justify: boolean,
+  transform: DecomposedTransform,
+  core: typeof import('@bluepic/core/text'),
+  base: EffectiveTextStyle,
+  settings: ConvertSettings,
+  probe: ProbeLayout
+): Template.Elements.Text | null {
+  const frameTop = box.y;
+  const bounding = settings.verticalJustifyBounding;
+  const naturalLineHeight = base.lineHeight * 100;
+  const HUGE = 1e6;
+
+  // How many lines the text naturally wraps to at its own leading (un-shrunk).
+  const natural = probe(naturalLineHeight, bounding, frameTop, HUGE);
+  const N = natural.lines.length;
+  if (N < 2) return null; // one line: nothing to distribute — normal path applies.
+
+  // InDesign anchors the justified block so the first line's ink cap-top meets the
+  // frame top: first baseline = frameTop + that line's actual ascent.
+  const mTop = lineActualMetrics(core, base, natural.lines[0]?.text ?? '').ascent;
+
+  // advance(lineHeight) = offset + (fontSize/100)*lineHeight — calibrate offset once.
+  const slope = base.fontSize / 100;
+  const calib = probe(150, bounding, frameTop, HUGE);
+  const advRef = calib.lines.length > 1 ? calib.lines[1].y - calib.lines[0].y : base.fontSize * 1.5;
+  const offset = advRef - slope * 150;
+  // Where the first VISUAL baseline sits below the block top for this bounding mode:
+  // 'actual-outer' reports it as the first line's ascent; 'fontSize' draws hanging.
+  const firstBaselineOffset = bounding === 'actual-outer' ? (calib.lines[0]?.ascent ?? mTop) : HANGING_BASELINE_FRACTION * fontAscent(core, base);
+
+  let lineHeightPercent: number;
+  let boxHeight: number;
+  if (settings.verticalJustifyFit === 'contain') {
+    // Widest spread whose natural block still fits the frame (no shrink, descenders in).
+    lineHeightPercent = fitLineHeightForBlockHeight(probe, bounding, frameTop, box.height);
+    boxHeight = box.height;
+  } else {
+    // grow: uniform gap from the first baseline down to the frame bottom (descent overflows).
+    const gap = (box.height - mTop) / (N - 1);
+    lineHeightPercent = (gap - offset) / slope;
+    // Grow the box to the natural block height so core never shrinks the overflowing text.
+    const block = probe(lineHeightPercent, bounding, frameTop, HUGE).virtualBBox.height;
+    boxHeight = Math.max(box.height, block + 0.5);
+  }
+
+  // Only justify when it actually SPREADS the lines (widens past their natural leading);
+  // a frame shorter than the natural block would compress/shrink — leave that to the
+  // normal path, which fits it the usual way.
+  if (!Number.isFinite(lineHeightPercent) || lineHeightPercent <= naturalLineHeight) return null;
+
+  const justifyBox = { ...box, y: frameTop + mTop - firstBaselineOffset, height: boxHeight };
+  return textElementFromRuns(id, runs, justifyBox, align, justify, 0, lineHeightPercent, transform, bounding);
 }
 
 /**
@@ -885,7 +1027,8 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
   const base = runs[0]?.style;
   if (!base) return [];
   const verticalAlign = frame.getVerticalAlign();
-  const lineHeightPercent = base.lineHeight * 100; // relative %, e.g. 120
+  const verticalJustify = frame.isVerticalJustify();
+  let lineHeightPercent = base.lineHeight * 100; // relative %, e.g. 120 (widened below for vertical justify)
 
   // Drop a trailing empty paragraph: a final line break with no content after it
   // (often styled at the largest size) is an invisible last line for TOP-aligned
@@ -913,16 +1056,48 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
   const fullText = runs.map((r) => r.text).join('');
   if (fullText.trim() === '') return []; // empty frame -> no text element (caller still draws any background)
 
-  // Compensate the ascent-vs-hanging first-baseline mismatch (see
-  // firstBaselineAscentShift). Loaded here, before the unsplit early returns, so
-  // the shift applies to every text path, and reused for the split layout below.
-  // `core` is null without a canvas (plain Node), which leaves the box as-is.
+  // `core` is null without a canvas (plain Node) \u2014 vertical justify and the ascent-vs-
+  // hanging first-baseline correction both need measurement, so they no-op there and the
+  // frame keeps its natural leading / box.
   const core = await loadTextLayout();
+
+  // Forced breaks normalized: core only breaks lines on '\n', so a raw U+2028 would
+  // render as a glyph. Reused by every layout + emit path below.
+  const normalizedRuns = runs.map((r) => ({ ...r, text: r.text.replace(/\u2028/g, '\n') }));
+
+  // Lay out the merged frame exactly as bluepic-core would render it. `bounding`, block
+  // top `y` and `maxHeight` are params: the split path uses the emit bounding at the
+  // shifted box, while vertical justify probes the natural (huge maxHeight = un-shrunk)
+  // block and may measure 'actual-outer'. `lineHeight` is a param because justify widens it.
+  const probeLayout: ProbeLayout = (lineHeight, bounding, y, maxHeight) =>
+    core!.layoutText({
+      // Measure AllCaps runs as uppercase \u2014 capitals are wider, so wrapping matches.
+      features: normalizedRuns.map((r) => ({
+        text: r.style.uppercase ? r.text.toUpperCase() : r.text,
+        style: { fontFamily: r.style.fontFamily, fontSize: r.style.fontSize, fontWeight: r.style.fontWeight, fontStyle: r.style.fontStyle === 'italic' ? 'italic' : 'normal', letterSpacing: r.style.letterSpacing, color: r.style.color, rotate: 0, scale: 1 },
+      })),
+      fontSize: base.fontSize, x: box.x, y, maxWidth: box.width, maxHeight,
+      anchor: [firstAlign, verticalAlign], lineHeight, bounding, textAlign: firstAlign, justifyText: firstJustify,
+      autoLinebreaks: true, allowBreakChars: false, cachingEnabled: false,
+    });
+
+  // Vertical justify short-circuits to ONE distributed element: it owns its box.y (first
+  // baseline on InDesign's grid) and box.height (grown past the frame, or contained), so
+  // it runs BEFORE the generic top shift and INSTEAD of the split path. Returns null
+  // (fall through) for <2 lines, too-short frames, or if measurement fails.
+  if (verticalJustify && core) {
+    const justified = buildVerticalJustifyElement(id, normalizedRuns, box, firstAlign, firstJustify, singleElementTransform, core, base, settings, probeLayout);
+    if (justified) return [justified];
+  }
+
+  // Compensate the ascent-vs-hanging first-baseline mismatch for ordinary top-aligned text.
   if (verticalAlign === 0 && core) box = { ...box, y: box.y + firstBaselineAscentShift(core, base) };
 
-  // The unsplit fallback: everything in one element, forced breaks normalized.
-  const normalizedRuns = runs.map((r) => ({ ...r, text: r.text.replace(/\u2028/g, '\n') }));
+  // The unsplit fallback: everything in one element.
   const singleElement = () => [textElementFromRuns(id, normalizedRuns, box, firstAlign, firstJustify, verticalAlign, lineHeightPercent, singleElementTransform)];
+
+  // Line-stacking layout for the split path: emit bounding ('fontSize'), the shifted box.
+  const runLayout = (lineHeight: number) => probeLayout(lineHeight, 'fontSize', box.y, box.height);
 
   // 'never' keeps the whole frame as one element (richText carries real diffs).
   if (settings.textSplittingHeuristic === 'never') return singleElement();
@@ -933,40 +1108,11 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
 
   if (!core) return singleElement();
 
-  // Lay out the merged frame exactly as bluepic-core would render the current
-  // single-element conversion (same features, box, anchors, bounding).
+  // Lay out the merged frame (justify already widened lineHeightPercent above, so
+  // split chunks distribute to fill the frame just like the single-element path).
   let layout: import('@bluepic/core/text').TextLayoutResult;
   try {
-    layout = core.layoutText({
-      features: normalizedRuns.map((r) => ({
-        // Measure AllCaps runs as uppercase — capitals are wider, so wrapping
-        // (and thus how many lines each chunk spans) matches what core renders.
-        text: r.style.uppercase ? r.text.toUpperCase() : r.text,
-        style: {
-          fontFamily: r.style.fontFamily,
-          fontSize: r.style.fontSize,
-          fontWeight: r.style.fontWeight,
-          fontStyle: r.style.fontStyle === 'italic' ? 'italic' : 'normal',
-          letterSpacing: r.style.letterSpacing,
-          color: r.style.color,
-          rotate: 0,
-          scale: 1,
-        },
-      })),
-      fontSize: base.fontSize,
-      x: box.x,
-      y: box.y,
-      maxWidth: box.width,
-      maxHeight: box.height,
-      anchor: [firstAlign, verticalAlign],
-      lineHeight: lineHeightPercent,
-      bounding: 'fontSize',
-      textAlign: firstAlign,
-      justifyText: firstJustify,
-      autoLinebreaks: true,
-      allowBreakChars: false,
-      cachingEnabled: false,
-    });
+    layout = runLayout(lineHeightPercent);
   } catch (error) {
     console.warn(`[idml2serial] text layout failed for frame ${frame.getId()} — emitting it unsplit.`, error);
     return singleElement();
@@ -1071,7 +1217,9 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
   const uniformSize = emitted.every((e) => firstContentStyle(e.chunk).fontSize === base.fontSize);
   const uniformLeading = segmentLeadings.every((l) => l === segmentLeadings[0]);
   const noParagraphSpacing = segmentSpaceBefore.every((s) => s === 0);
-  const applyGrid = verticalAlign === 0 && segmentLeadings.length === segmentTops.length && emitted.length > 0 && !(uniformSize && uniformLeading && noParagraphSpacing);
+  // Vertical justify already widened the layout so segmentTops distribute the lines;
+  // the natural-leading grid would undo that, so skip it for justify frames.
+  const applyGrid = !verticalJustify && verticalAlign === 0 && segmentLeadings.length === segmentTops.length && emitted.length > 0 && !(uniformSize && uniformLeading && noParagraphSpacing);
   const refAscent = applyGrid ? fontAscent(core, base, base.fontSize * fitScale) : 0;
 
   const frameBottom = box.y + box.height;
@@ -1257,8 +1405,8 @@ function paperBackgroundElement(page: Spread['pages'][number], fill: Paint): Tem
  * bounds, so facing/stacked pages and all their sprites live together.
  */
 export async function convertIDML2Serial(idml: IDML, options: ConvertIDML2SerialOptions = {}): Promise<ConvertedSerial[]> {
-  const { paperBackground = true, textSplittingHeuristic = 'format-and-paragraph-only', resolveImageSrc } = options;
-  const settings: ConvertSettings = { textSplittingHeuristic };
+  const { paperBackground = true, textSplittingHeuristic = 'format-and-paragraph-only', resolveImageSrc, verticalJustifyImplementationBounding = 'fontSize', verticalJustifyImplementationFit = 'grow' } = options;
+  const settings: ConvertSettings = { textSplittingHeuristic, verticalJustifyBounding: verticalJustifyImplementationBounding, verticalJustifyFit: verticalJustifyImplementationFit };
   const paper = paperBackground ? paperFill(idml) : null;
   const results: ConvertedSerial[] = [];
   for (const spreadPackage of idml.spreadPackages) {

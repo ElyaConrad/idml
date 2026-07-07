@@ -58,6 +58,15 @@ export class TextFrame extends GeometricSprite {
     if (vj === 'BottomAlign') return 1;
     return 0;
   }
+  /**
+   * `VerticalJustification="JustifyAlign"` — InDesign distributes the lines to fill
+   * the frame height (equal gaps, first line at top, last at bottom). Core has no
+   * such mode, so the converter reproduces it by WIDENING the line advance (see
+   * idml2serial). Rendered top-anchored (getVerticalAlign stays 0).
+   */
+  isVerticalJustify(): boolean {
+    return this.textFramePreference?.sourceElement.getAttribute('VerticalJustification') === 'JustifyAlign';
+  }
 
   serialize() {
     const baseElement = this.serializeGeometricSprite();

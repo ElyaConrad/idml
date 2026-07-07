@@ -218,6 +218,9 @@ export function makeImage(id: string, box: Box, radius: [number, number, number,
 
 export type RichTextRun = { text: string; format: Record<string, unknown> };
 
+/** The core line-box models a Text element's `bounding` may select. */
+export type TextBounding = 'font' | 'actual' | 'actual-outer' | 'fontSize';
+
 export type TextInput = {
   box: Box;
   textMode: 'plaintext' | 'richtext';
@@ -233,6 +236,11 @@ export type TextInput = {
   justifyText: boolean; // stretch interior lines to fill the width
   verticalAlign: number; // 0 top, 0.5 center, 1 bottom (vertical anchor within the frame)
   uppercase?: boolean; // render text force-uppercased (IDML AllCaps)
+  // Line-box model core uses for advance + first-baseline. Default 'fontSize'
+  // (advance = fontSize * lineHeight, matches InDesign leading). Vertical-justify
+  // may emit 'actual-outer' (outer lines capped to their real ink, inner lines to
+  // the font box) so the block anchors on the first line's actual cap-top.
+  bounding?: TextBounding;
   autoLinebreaks: boolean;
   fill: Paint;
   stroke?: Paint;
@@ -256,7 +264,7 @@ export function makeText(id: string, input: TextInput, transform: DecomposedTran
       // 'fontSize' bounding makes the line advance = fontSize * lineHeight, so it
       // matches InDesign's leading exactly ('font' inflates it by the font's
       // bounding box). lineHeight is the relative percentage (120 = 120%).
-      bounding: str('fontSize'),
+      bounding: str(input.bounding ?? 'fontSize'),
       uppercase: bool(input.uppercase ?? false),
       // pos[0]/pos[1] are the horizontal/vertical anchors: they position the text
       // block within the frame (core: offset = (max - block) * pos), and x/y are the
