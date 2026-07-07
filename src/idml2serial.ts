@@ -17,7 +17,7 @@ import { ColorInput } from './types/index';
 import { PathCommand } from './idml';
 import { bakeSpriteMatrix, decomposeMatrix, itemTransform2Matrix } from './util/layout';
 import { arrayBufferToBase64 } from './util/arrayBuffer';
-import { makeRectangle, makeCircle, makePath, makeImage, makeText, makeGroup, makeMask, emptySerial, shiftElementTranslate, Paint, SurfaceInput, Box, PathFeature, RichTextRun, SerialImageValue } from './serial/builders';
+import { makeRectangle, makeCircle, makePath, makeImage, makeText, makeGroup, makeMask, emptySerial, shiftElementTranslate, applyDropShadow, DropShadowValue, Paint, SurfaceInput, Box, PathFeature, RichTextRun, SerialImageValue } from './serial/builders';
 import { DecomposedTransform } from './util/layout';
 
 /**
@@ -51,11 +51,22 @@ export type FontVariant = {
 };
 /** A font family + the distinct weight/italic combinations used. */
 export type RequiredFont = { family: string; variants: FontVariant[] };
+/** The IDML page-item tag an image originated from. `'Image'` is a real raster
+ * and `'SVG'` is directly browser-renderable; `'PDF'`/`'EPS'`/`'WMF'` are placed
+ * vector graphics a browser can't render and bx-files must rasterize first. */
+export type ImageGraphicType = 'Image' | 'PDF' | 'EPS' | 'WMF' | 'SVG';
+/** True for graphic types whose bytes a browser can't render directly, so
+ * bx-studio must convert them (via bx-files) before display. SVG and raster are
+ * uploaded and shown directly. */
+const NEEDS_CONVERSION: ReadonlySet<ImageGraphicType> = new Set(['PDF', 'EPS', 'WMF']);
 /** A linked image with no embedded source — the user must supply it. */
-export type MissingImage = { elementId: string; imageId: string; linkURI?: string };
-/** An embedded image whose bytes the wizard can upload, then swap the data URL
- * on `elementId` for the returned cloud URL. */
-export type ImageToUpload = { elementId: string; imageId: string; data: ArrayBuffer; linkURI?: string };
+export type MissingImage = { elementId: string; imageId: string; linkURI?: string; graphicType: ImageGraphicType };
+/** An image whose bytes we recovered from the IDML (embedded raster, embedded
+ * SVG source, or an embedded PDF/EPS/WMF source). The wizard uploads `data`,
+ * then swaps the data URL on `elementId` for the returned cloud URL.
+ * `needsConversion` is true only for EPS/PDF/WMF — bytes a browser can't render,
+ * which bx-files must rasterize first. Raster and SVG upload directly. */
+export type ImageToUpload = { elementId: string; imageId: string; data: ArrayBuffer; linkURI?: string; graphicType: ImageGraphicType; needsConversion: boolean };
 /** Assets a single serial involves. */
 export type SerialAssets = { fonts: RequiredFont[]; missingImages: MissingImage[]; imagesToUpload: ImageToUpload[] };
 /** A produced serial plus its assets. */
@@ -115,11 +126,16 @@ class AssetCollector {
    * source -> missingImages.
    */
   addImage(elementId: string, image: ImageSprite) {
-    // Only real raster bytes can be uploaded; vector placed graphics (PDF/EPS/WMF)
-    // have no usable raster, so they go to missingImages with their link URI.
-    const contents = image.getRasterContents();
-    if (contents) this.imagesToUpload.push({ elementId, imageId: image.getId(), data: contents, linkURI: image.getLinkURI() });
-    else this.missingImages.push({ elementId, imageId: image.getId(), linkURI: image.getLinkURI() });
+    // Return the bytes whenever the IDML actually carries them — a real raster,
+    // an embedded SVG (both browser-renderable, uploaded directly) or an embedded
+    // PDF/EPS/WMF (flagged needsConversion so bx-files rasterizes it first). Only
+    // a linked graphic with no embedded bytes is truly "missing".
+    const graphicType = image.getGraphicType() as ImageGraphicType;
+    const linkURI = image.getLinkURI();
+    // getRasterContents() gates on raster; getContents() returns any embedded bytes.
+    const embedded = image.getRasterContents() ?? image.getContents();
+    if (embedded) this.imagesToUpload.push({ elementId, imageId: image.getId(), data: embedded, linkURI, graphicType, needsConversion: NEEDS_CONVERSION.has(graphicType) });
+    else this.missingImages.push({ elementId, imageId: image.getId(), linkURI, graphicType });
   }
   result(): SerialAssets {
     return {
@@ -185,6 +201,29 @@ function surfaceOf(sprite: Sprite): SurfaceInput {
     strokeWidth: sprite.getEffectiveStrokeWeight(),
     strokeAlignment: sprite.getEffectiveStrokeAlignment(),
     opacity: sprite.getOpacity() / 100,
+  };
+}
+
+/**
+ * Translate an InDesign drop shadow into the Bluepic `filter.dropShadow` value,
+ * or null when the sprite has none. InDesign stores the offset (XOffset/YOffset)
+ * and blur (Size) in the object's LOCAL, unscaled units; the serial applies them
+ * in the element's local space and then scales/rotates by the element transform
+ * — exactly how InDesign scales an effect with its object — so we pass them
+ * through without compensation. The renderer wants a polar offset
+ * (dx = sin(rot)·dist, dy = cos(rot)·dist), so cartesian -> (rotation°, distance).
+ */
+function dropShadowValue(sprite: Sprite): DropShadowValue | null {
+  const ds = sprite.getDropShadow();
+  if (!ds) return null;
+  const round = (n: number) => Math.round(n * 1000) / 1000;
+  return {
+    rotation: round(Math.atan2(ds.xOffset, ds.yOffset) * (180 / Math.PI)),
+    distance: round(Math.hypot(ds.xOffset, ds.yOffset)),
+    color: ds.effectColor ? colorToHex(ds.effectColor) : '#000000',
+    opacity: round((ds.opacity ?? 100) / 100),
+    blur: round(ds.size),
+    quality: 3, // InDesign's default shadow quality; not represented in IDML
   };
 }
 
@@ -488,6 +527,15 @@ const sameLetterSpacing = (a: number, b: number) => Math.abs(a - b) <= LETTER_SP
 const sameTextStyle = (a: EffectiveTextStyle, b: EffectiveTextStyle) =>
   a.fontFamily === b.fontFamily && a.fontSize === b.fontSize && a.fontWeight === b.fontWeight && a.fontStyle === b.fontStyle && a.color === b.color && sameLetterSpacing(a.letterSpacing, b.letterSpacing);
 
+// Baseline-to-baseline distances (leading = lineHeight * fontSize) within this many
+// points count as equal. Core has no per-LINE leading, so two lines that differ only
+// in leading can't be spaced correctly inside one element — they must become separate
+// elements, each positioned on the InDesign baseline grid. Used ONLY for the split
+// decision, deliberately NOT part of `sameTextStyle` (which also gates plaintext vs
+// richtext — leading has no per-run richText equivalent, so it must not churn that).
+const LEADING_TOLERANCE = 0.5;
+const sameLeading = (a: EffectiveTextStyle, b: EffectiveTextStyle) => Math.abs(a.lineHeight * a.fontSize - b.lineHeight * b.fontSize) <= LEADING_TOLERANCE;
+
 type TextRun = { text: string; style: EffectiveTextStyle; align: number; justify: boolean };
 /** One future text element: a paragraph (or a style-delimited piece of one). */
 type TextChunk = { runs: TextRun[]; align: number; justify: boolean };
@@ -497,11 +545,13 @@ const chunkText = (chunk: TextChunk) => chunk.runs.map((r) => r.text).join('');
 /**
  * Split runs into chunks (= future text elements) at hard breaks. What counts
  * as "hard" (starts a new element) vs "soft" (kept as a `\n` inside the same
- * element) depends on the heuristic:
+ * element) depends on the heuristic. A style OR leading change across a break is
+ * always "differs" — differing leading forces a split because core has no per-line
+ * leading, so the two lines can only be spaced correctly as separate elements:
  *
  *  - `'strict'`: every PARAGRAPH break (IDML `<Br/>`, Enter) is hard; a forced
- *    break (U+2028, Shift+Enter) is hard only when the style differs across it.
- *  - `'format-and-paragraph-only'`: ANY break is hard only when the style
+ *    break (U+2028, Shift+Enter) is hard only when the style/leading differs.
+ *  - `'format-and-paragraph-only'`: ANY break is hard only when the style/leading
  *    differs across it OR it forms a GAP (a blank line between content) — so
  *    same-style consecutive lines with no blank line between (a hyphenated
  *    "Firmen-\nlogo", a wrapped address) stay together as one element.
@@ -538,7 +588,7 @@ function splitRunsIntoChunks(runs: TextRun[], heuristic: 'strict' | 'format-and-
       const next = firstContent(seg);
       // A GAP is a break with no real content on one side = a blank line.
       const gap = !prev || !next;
-      const styleDiffers = !!prev && !!next && !sameTextStyle(prev.style, next.style);
+      const styleDiffers = !!prev && !!next && (!sameTextStyle(prev.style, next.style) || !sameLeading(prev.style, next.style));
       const hard = heuristic === 'strict' ? seg.breakBefore === 'paragraph' || styleDiffers : styleDiffers || gap;
       if (hard) {
         chunks.push(current);
@@ -645,11 +695,29 @@ function textElementFromRuns(id: string, runs: TextRun[], box: Box, align: numbe
  * Only top alignment is corrected; center/bottom justification anchors the block
  * differently and is left untouched for now.
  */
+// The canvas 'hanging' baseline sits a fixed 0.8*ascent above the alphabetic
+// baseline for every font without a BASE table (all Latin fonts; verified across
+// Barlow/Minion/Arial/Georgia/Times), so the alphabetic baseline a top-aligned
+// line renders at is 0.8*ascent below its box top. The first-baseline shift adds
+// the remaining 0.2*ascent to match InDesign's Ascent first-baseline.
+const HANGING_BASELINE_FRACTION = 0.8;
+
+/** Canvas `fontBoundingBoxAscent` for a style at a given size (default the style's
+ * own) — the metric InDesign's Ascent first-baseline and core both read. 0 if no
+ * canvas / unmeasurable. */
+function fontAscent(core: typeof import('@bluepic/core/text'), style: EffectiveTextStyle, fontSize: number = style.fontSize): number {
+  try {
+    const metrics = core.textInfo('Mg', { fontFamily: style.fontFamily, fontWeight: style.fontWeight, fontStyle: style.fontStyle, fontSize, letterSpacing: style.letterSpacing }, 'alphabetic', false);
+    const ascent = metrics?.fontBoundingBoxAscent;
+    return ascent && Number.isFinite(ascent) ? ascent : 0;
+  } catch {
+    return 0;
+  }
+}
+
 function firstBaselineAscentShift(core: typeof import('@bluepic/core/text'), style: EffectiveTextStyle): number {
   try {
-    const metrics = core.textInfo('Mg', { fontFamily: style.fontFamily, fontWeight: style.fontWeight, fontStyle: style.fontStyle, fontSize: style.fontSize, letterSpacing: style.letterSpacing }, 'alphabetic', false);
-    const ascent = metrics?.fontBoundingBoxAscent;
-    return ascent && Number.isFinite(ascent) ? 0.2 * ascent : 0;
+    return (1 - HANGING_BASELINE_FRACTION) * fontAscent(core, style);
   } catch {
     return 0;
   }
@@ -746,9 +814,18 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
   // that empty line legitimately shifts the visible text, so leave it there.
   // Only trailing NEWLINES are stripped: trailing spaces stay (they can matter
   // for a right/center-aligned last line's position and never add a phantom line).
+  // Leading of the trailing pilcrow(s) trimmed here. In InDesign the paragraph-end
+  // character sits ON the last visible line, so a trailing empty range styled larger
+  // than the last content (e.g. "Position"(14pt lead) followed by an empty 23pt range
+  // \u2192 24.85) raises that line's effective leading. Captured to fold into the last
+  // chunk's leading when we position split lines on InDesign's baseline grid.
+  let trimmedTrailingLeading = 0;
   if (verticalAlign === 0) {
     const isBlankLine = (t: string) => t === '' || (/[\n\u2028\u2029]/.test(t) && t.trim() === '');
-    while (runs.length > 1 && isBlankLine(runs[runs.length - 1].text)) runs.pop();
+    while (runs.length > 1 && isBlankLine(runs[runs.length - 1].text)) {
+      const dropped = runs.pop()!;
+      trimmedTrailingLeading = Math.max(trimmedTrailingLeading, dropped.style.lineHeight * dropped.style.fontSize);
+    }
     const lastRun = runs[runs.length - 1];
     if (lastRun) lastRun.text = lastRun.text.replace(/[\n\u2028\u2029]+$/, '');
   }
@@ -826,16 +903,24 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
 
   // Every '\n'-terminated piece of the merged text is one "segment"; the
   // layout marks each segment's last wrapped line via paragraphEnd. Record
-  // where each segment starts vertically.
+  // where each segment starts vertically and how many lines it wrapped to.
   const segmentTops: number[] = [];
+  const segmentLineCounts: number[] = [];
   let segmentOpen = false;
+  let segLines = 0;
   for (const line of layout.lines) {
     if (!segmentOpen) {
       segmentTops.push(line.y);
       segmentOpen = true;
+      segLines = 0;
     }
-    if (line.paragraphEnd) segmentOpen = false;
+    segLines++;
+    if (line.paragraphEnd) {
+      segmentLineCounts.push(segLines);
+      segmentOpen = false;
+    }
   }
+  if (segmentOpen) segmentLineCounts.push(segLines);
   // A chunk covers (inline '\n' count + 1) segments. Sanity: the totals must
   // agree with the layout, otherwise fall back to the unsplit element.
   const segmentCounts = chunks.map((chunk) => (chunkText(chunk).match(/\n/g)?.length ?? 0) + 1);
@@ -844,26 +929,72 @@ async function buildTextElements(frame: TextFrame, box: Box, singleElementTransf
     return singleElement();
   }
 
+  // Per-segment effective leading = the max IDML leading of the runs on that
+  // segment (auto-leading is already baked into run.lineHeight = leading/fontSize).
+  // This is InDesign's baseline-to-baseline distance PER LINE, which core's single
+  // frame line-height flattens — so a small subtitle under a big name (or vice
+  // versa) mis-spaces. Built by mirroring splitRunsIntoChunks' segment cut so it
+  // lines up 1:1 with segmentTops. The last visible segment also inherits the
+  // trimmed trailing pilcrow's leading (its ¶ sits on that line: Anuga 14->24.85).
+  const runLeading = (r: TextRun) => r.style.lineHeight * r.style.fontSize;
+  const segmentLeadings: number[] = [0];
+  for (const run of runs) {
+    for (const part of run.text.split(/(\n|\u2028)/)) {
+      if (part === '') continue;
+      if (part === '\n' || part === '\u2028') segmentLeadings.push(0);
+      else segmentLeadings[segmentLeadings.length - 1] = Math.max(segmentLeadings[segmentLeadings.length - 1], runLeading(run));
+    }
+  }
+  segmentLeadings[segmentLeadings.length - 1] = Math.max(segmentLeadings[segmentLeadings.length - 1], trimmedTrailingLeading);
+
+  // InDesign baseline grid (offset from segment 0's first line): each line advances
+  // by its OWN leading; a wrapped segment's inner lines share that segment's
+  // leading, then the next segment's first line advances by its leading.
+  const baselineGrid: number[] = new Array(segmentTops.length).fill(0);
+  for (let s = 1; s < segmentTops.length; s++) {
+    const prevWrapped = Math.max(0, (segmentLineCounts[s - 1] ?? 1) - 1);
+    baselineGrid[s] = baselineGrid[s - 1] + prevWrapped * segmentLeadings[s - 1] + segmentLeadings[s];
+  }
+
   // Top y of each chunk = its first segment's first line; skip empty chunks
   // (their vertical space folds into the preceding emitted chunk).
-  const emitted: { chunk: TextChunk; top: number }[] = [];
+  const emitted: { chunk: TextChunk; top: number; segIndex: number }[] = [];
   let segmentCursor = 0;
   chunks.forEach((chunk, index) => {
+    const segIndex = segmentCursor;
     const top = segmentTops[segmentCursor];
     segmentCursor += segmentCounts[index];
-    if (chunkText(chunk).trim() !== '') emitted.push({ chunk, top });
+    if (chunkText(chunk).trim() !== '') emitted.push({ chunk, top, segIndex });
   });
+
+  // Re-seat each chunk's first line onto the InDesign baseline grid instead of
+  // core's single-line-height stacking. Two terms: the grid offset (per-line
+  // leading), and the ascent float (a smaller line's hanging baseline sits higher
+  // inside its own box). A frame with uniform size AND leading needs neither — skip
+  // it entirely so its output stays byte-identical to the pre-grid behaviour.
+  const firstContentStyle = (chunk: TextChunk) => chunk.runs.find((r) => r.text.trim() !== '')?.style ?? chunk.runs[0]?.style ?? base;
+  const uniformSize = emitted.every((e) => firstContentStyle(e.chunk).fontSize === base.fontSize);
+  const uniformLeading = segmentLeadings.every((l) => l === segmentLeadings[0]);
+  const applyGrid = verticalAlign === 0 && segmentLeadings.length === segmentTops.length && emitted.length > 0 && !(uniformSize && uniformLeading);
+  const refAscent = applyGrid ? fontAscent(core, base, base.fontSize * fitScale) : 0;
 
   const frameBottom = box.y + box.height;
   const elements: Template.Elements.Text[] = [];
   for (let i = 0; i < emitted.length; i++) {
-    const { chunk, top } = emitted[i];
+    const { chunk, top, segIndex } = emitted[i];
     const bottom = emitted[i + 1]?.top ?? Math.max(frameBottom, top);
     if (bottom - top <= 0) {
       console.warn(`[idml2serial] non-positive chunk height for frame ${frame.getId()} — emitting it unsplit.`);
       return singleElement();
     }
-    const chunkBox: Box = { x: box.x, y: top, width: box.width, height: bottom - top };
+    let y = top;
+    if (applyGrid) {
+      const first = firstContentStyle(chunk);
+      const gridOffset = (baselineGrid[segIndex] - baselineGrid[emitted[0].segIndex]) * fitScale;
+      const ascentFloat = HANGING_BASELINE_FRACTION * (refAscent - fontAscent(core, first, first.fontSize * fitScale));
+      y = emitted[0].top + gridOffset + ascentFloat;
+    }
+    const chunkBox: Box = { x: box.x, y, width: box.width, height: bottom - top };
     const chunkRuns = fitScale === 1 ? chunk.runs : chunk.runs.map((r) => ({ ...r, style: { ...r.style, fontSize: r.style.fontSize * fitScale } }));
     // Children are positioned inside the caller's group -> identity transform.
     elements.push(textElementFromRuns(`${id}_${i + 1}`, chunkRuns, chunkBox, chunk.align, chunk.justify, 0, lineHeightPercent, IDENTITY_DECOMP));
@@ -909,6 +1040,10 @@ async function spriteToElement(sprite: Sprite, pageMatrix: Matrix, collector: As
   const baked = bakeSpriteMatrix(sprite, pageMatrix);
   const transform = decomposeMatrix(baked);
 
+  // Build the element, then stamp any InDesign drop shadow onto its root. Doing
+  // it here (the single choke point every sprite — top-level AND nested group
+  // children — passes through) covers the whole tree in one place.
+  const element = await (async (): Promise<Template.Element | null> => {
   switch (sprite.type) {
     case 'Rectangle': {
       const rect = sprite as RectangleSprite;
@@ -970,6 +1105,9 @@ async function spriteToElement(sprite: Sprite, pageMatrix: Matrix, collector: As
     default:
       return null;
   }
+  })();
+  if (element) applyDropShadow(element, dropShadowValue(sprite));
+  return element;
 }
 
 /** Combined bounding box of all of a spread's pages, in spread space (= the SVG viewBox). */

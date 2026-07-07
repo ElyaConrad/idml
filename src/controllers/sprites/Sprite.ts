@@ -24,6 +24,7 @@ export type DropShadowSetting = {
   size: number;
   effectColorId: string;
   spread: number;
+  opacity: number; // InDesign shadow opacity, 0..100
 };
 export type TransparencySetting = {
   blendingSetting?: BlendingSetting;
@@ -37,6 +38,7 @@ export type DropShadowInput = {
   size: number;
   effectColor: ColorInput;
   spread: number;
+  opacity: number; // InDesign shadow opacity, 0..100
 };
 
 export type SpriteOpts = {
@@ -330,8 +332,9 @@ export abstract class Sprite {
       xOffset: this.transparencySetting.dropShadowSetting.xOffset,
       yOffset: this.transparencySetting.dropShadowSetting.yOffset,
       size: this.transparencySetting.dropShadowSetting.size,
-      effectColor: this.context.idml.getColorById(this.transparencySetting.dropShadowSetting.effectColorId)!,
+      effectColor: this.context.idml.getColorById(this.transparencySetting.dropShadowSetting.effectColorId),
       spread: this.transparencySetting.dropShadowSetting.spread,
+      opacity: this.transparencySetting.dropShadowSetting.opacity,
     };
   }
   setDropShadow(dropShadow: DropShadowInput) {
@@ -345,6 +348,7 @@ export abstract class Sprite {
       size: dropShadow.size,
       effectColorId: dropShadow.effectColor ? this.context.idml.assumeColor(dropShadow.effectColor).id : 'Color/Black',
       spread: dropShadow.spread,
+      opacity: dropShadow.opacity,
     };
   }
   getVisible() {
@@ -381,6 +385,7 @@ export abstract class Sprite {
         ? [
             makeElementNode('DropShadowSetting', {
               Mode: dropShadowSettingModeMap.getExternal(this.transparencySetting.dropShadowSetting.mode),
+              Opacity: this.transparencySetting.dropShadowSetting.opacity,
               XOffset: this.transparencySetting.dropShadowSetting.xOffset,
               YOffset: this.transparencySetting.dropShadowSetting.yOffset,
               Size: this.transparencySetting.dropShadowSetting.size,
@@ -540,6 +545,7 @@ export abstract class Sprite {
     const size = ensureNumber(element.getAttribute('Size')) ?? 0;
     const effectColorId = element.getAttribute('EffectColor') ?? 'Color/Black';
     const spread = ensureNumber(element.getAttribute('Spread')) ?? 0;
+    const opacity = ensureNumber(element.getAttribute('Opacity')) ?? 100;
 
     return {
       mode,
@@ -548,6 +554,7 @@ export abstract class Sprite {
       size,
       effectColorId,
       spread,
+      opacity,
     };
   }
   static parseTransparencySetting(element: Element) {

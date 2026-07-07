@@ -24,6 +24,18 @@ function defaultFilter(): Template.Filter {
   return { blur: n, grayscale: n, sepia: n, exposure: n, contrast: n, saturate: n, brightness: n, invert: n, gradientMap: n, hueRotate: n, opacity: n, dropShadow: n };
 }
 
+/** The object shape Bluepic's renderer expects for `filter.dropShadow` (see
+ * bluepic-core SvgFilter): offset is polar — dx = sin(rotation°)·distance,
+ * dy = cos(rotation°)·distance — with `blur` = stdDeviation, `color` a CSS
+ * color, `opacity` 0..1, and `quality` a render hint. */
+export type DropShadowValue = { rotation: number; distance: number; color: string; opacity: number; blur: number; quality: number };
+
+/** Set the drop-shadow filter on an already-built element (no-op when null). */
+export function applyDropShadow(element: Template.Element, shadow: DropShadowValue | null): void {
+  if (!shadow) return;
+  element.filter.dropShadow = obj(shadow);
+}
+
 function serialTransform(t: DecomposedTransform): Template.Transform {
   return {
     translateX: num(t.translateX),

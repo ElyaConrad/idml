@@ -88,11 +88,12 @@ export class Spread {
         case 'Oval':      return [OvalSprite.parseElement(child, context)];
         case 'Polygon':   return [PolygonSprite.parseElement(child, context)];
         // Placed graphics share the Image structure (GraphicBounds/Contents/Link).
-        // PDF/EPS/WMF are vector — modelled as ImageSprite but flagged non-raster.
+        // PDF/EPS/WMF/SVG are vector — modelled as ImageSprite but flagged non-raster.
         case 'Image':
         case 'PDF':
         case 'EPS':
-        case 'WMF':       return [ImageSprite.parseElement(child, context)];
+        case 'WMF':
+        case 'SVG':       return [ImageSprite.parseElement(child, context)];
         default:          return [];
       }
     });
@@ -307,6 +308,7 @@ export class Spread {
             xOffset: opts.dropShadow.xOffset,
             yOffset: opts.dropShadow.yOffset,
             effectColorId: opts.dropShadow.effectColor ? this.context.idml.assumeColor(opts.dropShadow.effectColor).id : 'Color/Black',
+            opacity: opts.dropShadow.opacity,
           }
         : undefined,
     };
@@ -420,6 +422,7 @@ export class Spread {
             xOffset: opts.dropShadow.xOffset,
             yOffset: opts.dropShadow.yOffset,
             effectColorId: opts.dropShadow.effectColor ? this.context.idml.assumeColor(opts.dropShadow.effectColor).id : 'Color/Black',
+            opacity: opts.dropShadow.opacity,
           }
         : undefined,
     };
@@ -480,6 +483,7 @@ export class Spread {
             xOffset: opts.dropShadow.xOffset,
             yOffset: opts.dropShadow.yOffset,
             effectColorId: opts.dropShadow.effectColor ? this.context.idml.assumeColor(opts.dropShadow.effectColor).id : 'Color/Black',
+            opacity: opts.dropShadow.opacity,
           }
         : undefined,
     };
@@ -558,6 +562,7 @@ export class Spread {
             xOffset: opts.dropShadow.xOffset,
             yOffset: opts.dropShadow.yOffset,
             effectColorId: opts.dropShadow.effectColor ? this.context.idml.assumeColor(opts.dropShadow.effectColor).id : 'Color/Black',
+            opacity: opts.dropShadow.opacity,
           }
         : undefined,
     };
@@ -634,6 +639,7 @@ export class Spread {
             xOffset: opts.dropShadow.xOffset,
             yOffset: opts.dropShadow.yOffset,
             effectColorId: opts.dropShadow.effectColor ? this.context.idml.assumeColor(opts.dropShadow.effectColor).id : 'Color/Black',
+            opacity: opts.dropShadow.opacity,
           }
         : undefined,
     };

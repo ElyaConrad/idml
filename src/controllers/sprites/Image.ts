@@ -20,8 +20,9 @@ export class ImageSprite extends GeometricSprite {
   private graphicBounds?: GraphicBounds;
   public linkURI?: string;
   // The source IDML tag: 'Image' (raster) or a placed vector graphic
-  // ('PDF' | 'EPS' | 'WMF'). All are modelled as ImageSprite (same GraphicBounds
-  // / Contents / Link structure) but only 'Image' has usable raster bytes.
+  // ('PDF' | 'EPS' | 'WMF' | 'SVG'). All are modelled as ImageSprite (same
+  // GraphicBounds / Contents / Link structure) but only 'Image' has usable
+  // raster bytes.
   private graphicType: string;
   // Intrinsic resolution from the IDML ActualPpi attribute (x/y pixels per inch).
   private actualPpi?: { x: number; y: number };
@@ -38,12 +39,12 @@ export class ImageSprite extends GeometricSprite {
   getLinkURI() {
     return this.linkURI;
   }
-  /** The source IDML tag ('Image' | 'PDF' | 'EPS' | 'WMF'). */
+  /** The source IDML tag ('Image' | 'PDF' | 'EPS' | 'WMF' | 'SVG'). */
   getGraphicType() {
     return this.graphicType;
   }
-  /** True for placed vector graphics (PDF/EPS/WMF) whose embedded bytes are not
-   * a browser-renderable raster — they must be supplied via their link instead. */
+  /** True for placed vector graphics (PDF/EPS/WMF/SVG) whose embedded bytes are
+   * not a browser-renderable raster — they must be supplied via their link instead. */
   isVectorGraphic() {
     return this.graphicType !== 'Image';
   }
@@ -211,7 +212,7 @@ export class ImageSprite extends GeometricSprite {
       },
       context,
       linkURI,
-      element.tagName, // 'Image' | 'PDF' | 'EPS' | 'WMF'
+      element.tagName, // 'Image' | 'PDF' | 'EPS' | 'WMF' | 'SVG'
       actualPpi
     );
   }
