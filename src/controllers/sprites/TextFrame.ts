@@ -1,11 +1,35 @@
-import { flattenIDMLProperties, getIDMLElementProperties, serializeElement } from '../../helpers.js';
+import { ensureNumber, flattenIDMLProperties, getIDMLElementProperties, serializeElement } from '../../helpers.js';
+import { KeyMap } from '../../util/keyMap.js';
 import { Spread } from '../Spread.js';
 import { IDMLSpreadPackageContext } from '../SpreadPackage.js';
 import { GeometricSprite, GeometricSpriteOpts } from './GeometricSprite.js';
 import { RectangleSprite, CornerOptions, parseCornerOptions } from './Rectangle.js';
 import { Sprite, SpriteOpts } from './Sprite.js';
 
+/** Vertical text alignment within a frame (InDesign `VerticalJustification`). */
+export type VerticalJustification = 'top' | 'center' | 'bottom' | 'justify';
+// TopAlign first → the KeyMap default (InDesign's default when the attribute is absent).
+const verticalJustificationMap = new KeyMap({
+  TopAlign: 'top',
+  CenterAlign: 'center',
+  BottomAlign: 'bottom',
+  JustifyAlign: 'justify',
+} as const);
+
+/**
+ * Parsed `<TextFramePreference>` — the frame-level text layout settings, read
+ * abstractly (typed fields) rather than by poking the raw XML at call sites. Only
+ * the fields the converter consumes are modeled; `sourceElement` is retained so
+ * {@link TextFrame.serialize} round-trips the attributes we don't model.
+ */
 export type TextFramePreference = {
+  /** Vertical text alignment (default `'top'`). */
+  verticalJustification: VerticalJustification;
+  /** First-baseline offset mode, e.g. `'Ascent'`/`'AscentOffset'` (informational). */
+  firstBaselineOffset?: string;
+  /** Minimum first-baseline offset in pt. */
+  minimumFirstBaselineOffset?: number;
+  /** The raw element, kept so serialize preserves unmodeled attributes. */
   sourceElement: Element;
 };
 
@@ -49,14 +73,18 @@ export class TextFrame extends GeometricSprite {
   }
   /**
    * The frame's vertical text alignment as a 0..1 fraction (0 top, 0.5 center,
-   * 1 bottom), from TextFramePreference `VerticalJustification`. Defaults to top.
-   * `JustifyAlign` (distribute lines) has no core equivalent → treated as top.
+   * 1 bottom). Defaults to top. `justify` (distribute lines) has no core equivalent
+   * for the anchor → treated as top (see {@link isVerticalJustify}).
    */
   getVerticalAlign(): number {
-    const vj = this.textFramePreference?.sourceElement.getAttribute('VerticalJustification');
-    if (vj === 'CenterAlign') return 0.5;
-    if (vj === 'BottomAlign') return 1;
-    return 0;
+    switch (this.textFramePreference?.verticalJustification) {
+      case 'center':
+        return 0.5;
+      case 'bottom':
+        return 1;
+      default:
+        return 0;
+    }
   }
   /**
    * `VerticalJustification="JustifyAlign"` — InDesign distributes the lines to fill
@@ -65,7 +93,7 @@ export class TextFrame extends GeometricSprite {
    * idml2serial). Rendered top-anchored (getVerticalAlign stays 0).
    */
   isVerticalJustify(): boolean {
-    return this.textFramePreference?.sourceElement.getAttribute('VerticalJustification') === 'JustifyAlign';
+    return this.textFramePreference?.verticalJustification === 'justify';
   }
 
   serialize() {
@@ -76,10 +104,34 @@ export class TextFrame extends GeometricSprite {
     };
 
     if (this.textFramePreference) {
-      baseElement.children?.push(serializeElement('TextFramePreference', {}, this.textFramePreference.sourceElement, this.context.spreadPackageRoot, ['Properties']));
+      // Write the modeled fields back (so programmatic changes persist); all other
+      // attributes ride through from the retained sourceElement.
+      baseElement.children?.push(
+        serializeElement(
+          'TextFramePreference',
+          {
+            VerticalJustification: verticalJustificationMap.getExternal(this.textFramePreference.verticalJustification),
+            FirstBaselineOffset: this.textFramePreference.firstBaselineOffset,
+            MinimumFirstBaselineOffset: this.textFramePreference.minimumFirstBaselineOffset,
+          },
+          this.textFramePreference.sourceElement,
+          this.context.spreadPackageRoot,
+          ['Properties']
+        )
+      );
     }
     return baseElement;
   }
+  /** Parse a `<TextFramePreference>` element into its typed representation. */
+  static parseTextFramePreference(element: Element): TextFramePreference {
+    return {
+      verticalJustification: verticalJustificationMap.getInternal(element.getAttribute('VerticalJustification')),
+      firstBaselineOffset: element.getAttribute('FirstBaselineOffset') ?? undefined,
+      minimumFirstBaselineOffset: ensureNumber(element.getAttribute('MinimumFirstBaselineOffset')) ?? undefined,
+      sourceElement: element,
+    };
+  }
+
   static parseElement(element: Element, context: IDMLSpreadPackageContext) {
     const { id, ...opts } = Sprite.parseElementOptions(element, context);
 
@@ -100,7 +152,7 @@ export class TextFrame extends GeometricSprite {
     const pathGeometry = GeometricSprite.parsePathGeometry(element);
 
     const textFramePreferenceElement = Spread.getDirectChildren(element, 'TextFramePreference')[0];
-    const textFramePreference = textFramePreferenceElement ? { sourceElement: textFramePreferenceElement } : undefined;
+    const textFramePreference = textFramePreferenceElement ? TextFrame.parseTextFramePreference(textFramePreferenceElement) : undefined;
 
     return new TextFrame(
       id,
