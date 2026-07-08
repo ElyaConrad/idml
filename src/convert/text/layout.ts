@@ -172,9 +172,11 @@ export function fitLineHeightForBlockHeight(probe: ProbeLayout, bounding: TextBo
  * Core has no vertical-justify mode and ALWAYS shrinks text that would overflow its
  * box, so we widen the line advance (lineHeight) to the justified gap and place the
  * box ourselves. Two knobs, from {@link ConvertSettings}:
- *  - bounding `'fontSize'` (advance = fontSize×lineHeight; near-exact InDesign match,
- *    box grows the least) or `'actual-outer'` (block auto-anchors on the first line's
- *    real ink, never needs the hanging-offset constant).
+ *  - bounding `'font'` (default; alphabetic baseline at exactly fontBoundingBoxAscent —
+ *    no approximation constant, consistent with every other text element), `'fontSize'`
+ *    (advance = fontSize×lineHeight, first baseline via the 0.8·ascent hanging guess) or
+ *    `'actual-outer'` (block auto-anchors on the first line's real ink). Only the first
+ *    baseline's box-top offset differs; the advance is measured, so gaps are identical.
  *  - fit `'grow'` (box a few px TALLER than the frame so the last line's descenders
  *    overflow it like InDesign and the font is never shrunk — gap exact) or `'contain'`
  *    (box = frame height; descenders kept inside, gap ~3–5% tighter).
@@ -220,8 +222,15 @@ export function buildVerticalJustifyElement(
   const advRef = calib.lines.length > 1 ? baselineOf(calib.lines[1]) - baselineOf(calib.lines[0]) : base.fontSize * 1.5;
   const offset = advRef - slope * 150;
   // Where the first VISUAL baseline sits below the block top for this bounding mode:
-  // 'actual-outer' reports it as the first line's ascent; 'fontSize' draws hanging.
-  const firstBaselineOffset = bounding === 'actual-outer' ? (calib.lines[0]?.ascent ?? mTop) : HANGING_BASELINE_FRACTION * fontAscent(core, base);
+  // 'font' draws the alphabetic baseline at exactly fontBoundingBoxAscent (no constant,
+  // = InDesign's Ascent and the rest of the converter); 'actual-outer' reports it as the
+  // first line's actual ascent; 'fontSize' draws the hanging baseline (0.8·ascent guess).
+  const firstBaselineOffset =
+    bounding === 'actual-outer'
+      ? calib.lines[0]?.ascent ?? mTop
+      : bounding === 'font'
+        ? fontAscent(core, base)
+        : HANGING_BASELINE_FRACTION * fontAscent(core, base);
 
   let lineHeightPercent: number;
   let boxHeight: number;

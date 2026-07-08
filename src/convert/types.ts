@@ -39,17 +39,19 @@ export type ConvertIDML2SerialOptions = {
   resolveImageSrc?: ImageSrcResolver;
   /**
    * Which core line-box model reproduces InDesign's `VerticalJustification="JustifyAlign"`
-   * (lines distributed to fill the frame height). Both emit uniform baseline gaps by
-   * widening the line advance; they differ in how the block anchors and how close it
-   * lands to InDesign:
+   * (lines distributed to fill the frame height). All emit uniform baseline gaps by
+   * widening the line advance; they differ only in where the FIRST baseline is drawn
+   * relative to the box top (the advance calibration is measured, so it's identical):
    *
+   *  - `'font'` — the alphabetic baseline sits at exactly `fontBoundingBoxAscent` below
+   *    the box top, matching the rest of the converter (see the bounding=font migration)
+   *    and InDesign's "Ascent" first-baseline with NO approximation constant. **Default.**
    *  - `'fontSize'` — advance = fontSize × lineHeight, first baseline placed via the
-   *    canvas hanging offset. Near-exact InDesign match (gap within ~0.2%), and the
-   *    grown box overshoots the frame the least. **Default.**
+   *    canvas *hanging* offset (`0.8·ascent` constant — off by the font's real
+   *    `hangingBaseline − 0.8·ascent`). The old default; kept as a fallback.
    *  - `'actual-outer'` — outer lines capped to their real ink, inner lines to the
-   *    font box, so the block auto-anchors on the first line's actual cap-top. Slightly
-   *    further from InDesign and needs a taller grown box, but never relies on the
-   *    hanging-offset constant.
+   *    font box, so the block auto-anchors on the first line's actual cap-top. Needs a
+   *    taller grown box; never relies on any hanging-offset constant.
    */
   verticalJustifyImplementationBounding?: VerticalJustifyBounding;
   /**
@@ -77,7 +79,7 @@ export type ConvertIDML2SerialOptions = {
 /** See {@link ConvertIDML2SerialOptions.textSplittingHeuristic}. */
 export type TextSplittingHeuristic = 'strict' | 'format-and-paragraph-only' | 'never';
 /** See {@link ConvertIDML2SerialOptions.verticalJustifyImplementationBounding}. */
-export type VerticalJustifyBounding = 'fontSize' | 'actual-outer';
+export type VerticalJustifyBounding = 'font' | 'fontSize' | 'actual-outer';
 /** See {@link ConvertIDML2SerialOptions.verticalJustifyImplementationFit}. */
 export type VerticalJustifyFit = 'grow' | 'contain';
 /** Resolved options, threaded through the sprite walk. */
