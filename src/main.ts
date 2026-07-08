@@ -9,6 +9,7 @@ export * from './metadata.js';
 export * from './assets.js';
 export * from './converter.js';
 export * from './util/imagePreview.js';
+export * from './util/fontCss.js';
 
 export * from './controllers/Story.js';
 export * from './controllers/Color.js';

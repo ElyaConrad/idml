@@ -175,7 +175,7 @@ export class IdmlSerialConverter {
       const exact = exactName ? matched.find((m) => baseName(m.name) === exactName) : undefined;
       const file = exact ?? (await this.pickFaceByMetrics(matched, variant, used));
       if (file) {
-        faces.push({ weight: variant.weight, italic: variant.italic, bytes: file.bytes });
+        faces.push({ weight: variant.weight, italic: variant.italic, bytes: file.bytes, fileName: file.name });
         used.add(file);
       }
     }
