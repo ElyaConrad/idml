@@ -246,6 +246,10 @@ export type SerialImageValue = {
   mirrorX: boolean;
   mirrorY: boolean;
   innerRotate: number;
+  /** Per-side inset [top, right, bottom, left] in ELEMENT-box px, honoured by core in
+   * `contain` mode (Image.vue). Reproduces InDesign's "graphic placed smaller than /
+   * offset within its frame" — a raster crop can only cover/pan, never inset freely. */
+  padding?: [number, number, number, number];
   /** Pixel size the `crop` is expressed in (the asset's intrinsic size at convert time).
    * Lets a consumer that resizes the asset rescale the crop by finalSize/natural. The
    * renderer ignores these; an editor interaction (ensureImageValue) drops them. */

@@ -77,16 +77,23 @@ async function frameImageValue(frame: RectangleSprite | OvalSprite | PolygonSpri
   if (!src) return null;
   const base = { src, cropMode: 'cover' as const, innerAlign: 'center', mirrorX: false, mirrorY: false, innerRotate: 0 };
 
-  // Natural pixel size: decode embedded bytes when we have them, else fall back to
-  // the IDML metadata (GraphicBounds x ppi) so a LINKED image whose file the wizard
-  // provided still gets the exact InDesign crop, not just a cover fit.
+  // Natural size: for a VECTOR graphic (SVG/PDF/EPS/WMF) the embedded-bytes pixel decode
+  // is unreliable or irrelevant (an SVG may declare no width/height/viewBox → the browser
+  // reports a bogus default), so use its IDML GraphicBounds — the true intrinsic coordinate
+  // size. For a raster, decode the bytes (exact), else fall back to metadata (linked image).
   let natural: { width: number; height: number };
-  try {
-    natural = await image.getNaturalSize();
-  } catch {
+  if (image.isVectorGraphic()) {
     const metadata = image.getMetadataNaturalSize();
     if (!metadata) return { ...base, crop: null };
     natural = metadata;
+  } else {
+    try {
+      natural = await image.getNaturalSize();
+    } catch {
+      const metadata = image.getMetadataNaturalSize();
+      if (!metadata) return { ...base, crop: null };
+      natural = metadata;
+    }
   }
 
   const fb = frame.getGeometricBounds();
@@ -107,11 +114,35 @@ async function frameImageValue(frame: RectangleSprite | OvalSprite | PolygonSpri
   const ys = corners.map((p) => p.y);
   const left = Math.min(...xs);
   const top = Math.min(...ys);
+  const cw = Math.max(...xs) - left;
+  const ch = Math.max(...ys) - top;
+  const nw = natural.width;
+  const nh = natural.height;
+
+  // When the placed graphic sits ENTIRELY inside the frame window — the frame is bigger
+  // than the graphic on ALL four sides (an inset logo/icon, e.g. an SVG scaled to ~20% and
+  // offset within its frame), not a crop — the crop over-scans the source on every side.
+  // A cover crop would blow it up to fill the frame (too big). Instead position it the way
+  // InDesign does: `contain` + a per-side `padding`. The over-scan on each side, as a
+  // fraction of the crop window, is the box inset in ELEMENT-box px. padding is
+  // [top, right, bottom, left] (core's order). A partial overlap / real crop keeps cover.
+  const overL = -left;
+  const overT = -top;
+  const overR = left + cw - nw;
+  const overB = top + ch - nh;
+  if (cw > 0 && ch > 0 && overL > 0 && overT > 0 && overR > 0 && overB > 0 && fb.width > 0 && fb.height > 0) {
+    // `fb` (frame geometric bounds) sizes the padding — same dimensions as the element box
+    // this frame becomes (axis-aligned image frame). padding is [top, right, bottom, left].
+    const padding: [number, number, number, number] = [(overT / ch) * fb.height, (overR / cw) * fb.width, (overB / ch) * fb.height, (overL / cw) * fb.width];
+    // Full source shown (nothing cropped away); contain fits it into the padded box.
+    return { ...base, cropMode: 'contain', crop: { left: 0, top: 0, width: nw, height: nh }, padding, naturalWidth: nw, naturalHeight: nh };
+  }
+
   // The crop is in `natural`-pixel space. Emit that reference size so a consumer that
   // downscales the asset (compress/rasterize) can rescale the crop by finalSize/natural —
   // the crop is really a placement RATIO, so the exact `natural` cancels and only needs to
   // be KNOWN. For a linked image at convert time this is the IDML metadata size.
-  return { ...base, crop: { left, top, width: Math.max(...xs) - left, height: Math.max(...ys) - top }, naturalWidth: natural.width, naturalHeight: natural.height };
+  return { ...base, crop: { left, top, width: cw, height: ch }, naturalWidth: nw, naturalHeight: nh };
 }
 
 /**

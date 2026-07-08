@@ -71,11 +71,18 @@ export class ImageSprite extends GeometricSprite {
    * pixels of the (externally converted) file.
    */
   getMetadataNaturalSize(): { width: number; height: number } | undefined {
-    if (!this.graphicBounds || !this.actualPpi) return undefined;
-    const width = ((this.graphicBounds.right - this.graphicBounds.left) / 72) * this.actualPpi.x;
-    const height = ((this.graphicBounds.bottom - this.graphicBounds.top) / 72) * this.actualPpi.y;
-    if (!(width > 0 && height > 0)) return undefined;
-    return { width: Math.round(width), height: Math.round(height) };
+    if (!this.graphicBounds) return undefined;
+    const gw = this.graphicBounds.right - this.graphicBounds.left;
+    const gh = this.graphicBounds.bottom - this.graphicBounds.top;
+    if (!(gw > 0 && gh > 0)) return undefined;
+    // Raster with a known ppi: GraphicBounds (points) × ppi → source pixels. Otherwise —
+    // a vector graphic (SVG/PDF/EPS/WMF, no ppi) or a raster missing ppi — the GraphicBounds
+    // ARE the intrinsic coordinate size. Only the aspect/ratio matters for the crop and the
+    // inset padding (the absolute value cancels as a placement ratio), so return them as-is.
+    if (this.actualPpi) {
+      return { width: Math.round((gw / 72) * this.actualPpi.x), height: Math.round((gh / 72) * this.actualPpi.y) };
+    }
+    return { width: gw, height: gh };
   }
   async getNaturalSize() {
     try {
