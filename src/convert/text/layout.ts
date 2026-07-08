@@ -443,9 +443,25 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
   const lastRunStyle = runs[runs.length - 1]?.style ?? base;
   const overflowPad = core && emitBounding === 'font' && verticalAlign === 0 ? fontDescent(core, lastRunStyle, lastRunStyle.fontSize) : 0;
 
+  const growToFit = !!core && emitBounding === 'font' && verticalAlign === 0;
+
   // The unsplit fallback: everything in one element (+ its line-background bar, if any).
   const singleElement = (): Template.Element[] => {
-    const paddedBox: Box = { ...box, height: box.height + overflowPad };
+    let height = box.height;
+    if (growToFit) {
+      // Grow the box to the natural (un-shrunk) block height so core never shrinks a
+      // frame that InDesign simply lets overflow — a font descent alone isn't enough
+      // when the ascent already exceeds the frame (tight leading + tall ascent). fontSize
+      // is a MAX: a taller box can't scale text up, only prevents shrink. Top-anchored,
+      // so the extra height hangs below. Same "grow to the block" idea as vertical justify.
+      try {
+        const block = probeLayout(lineHeightPercent, emitBounding, box.y, 1e6).virtualBBox.height;
+        height = Math.max(height, block + 0.5);
+      } catch {
+        /* measurement failed — keep the frame height */
+      }
+    }
+    const paddedBox: Box = { ...box, height };
     const el = textElementFromRuns(id, normalizedRuns, paddedBox, firstAlign, firstJustify, verticalAlign, lineHeightPercent, singleElementTransform, emitBounding);
     return withBars([{ el, style: base, scale: 1, boxX: box.x, align: firstAlign }]);
   };
@@ -598,15 +614,17 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
       const ascentFloat = refAscent - fontAscent(core, first, first.fontSize * fitScale);
       y = emitted[0].top + gridOffset + ascentFloat;
     }
-    // The gap to the next chunk (bottom - top) is the baseline leading; but 'font'
-    // bounding reserves the full font box (ascent + descent) per line in core's fit,
-    // so a box sized only to that gap makes core SHRINK the text when leading is tight
-    // (deficit = descent + nextAscent - leading). InDesign instead lets the last line's
-    // descent overflow the gap (lines overlap, never shrink). Add that descent back so
-    // the intended size renders — top-anchored, so the extra height hangs below and
-    // never moves the text. Same principle as vertical-justify's "grow".
+    // 'font' bounding reserves the full font box (ascent + descent) per line in core's
+    // fit, so a box sized only to the baseline gap (bottom - top) makes core SHRINK the
+    // text whenever the gap is smaller than that box. Tight leading eats it from BOTH
+    // sides: the descent hangs below the gap AND, for a tall-ascent font, the ascent
+    // exceeds the gap too (Anuga "Meet me at Anuga!": Barlow SemiCondensed ascent ≈ the
+    // em > the 0.95·em leading — so gap+descent still fell short). The font-box floor
+    // `max(gap, ascent) + descent` covers both; InDesign likewise lets lines overlap and
+    // never shrinks. Top-anchored, so the extra height hangs below and never moves text.
+    const fba = fontAscent(core, first, first.fontSize * fitScale);
     const descentPad = fontDescent(core, first, first.fontSize * fitScale);
-    const chunkBox: Box = { x: box.x, y, width: box.width, height: bottom - top + descentPad };
+    const chunkBox: Box = { x: box.x, y, width: box.width, height: Math.max(bottom - top, fba) + descentPad };
     const chunkRuns = fitScale === 1 ? chunk.runs : chunk.runs.map((r) => ({ ...r, style: { ...r.style, fontSize: r.style.fontSize * fitScale } }));
     // Children are positioned inside the caller's group -> identity transform.
     elements.push(textElementFromRuns(`${id}_${i + 1}`, chunkRuns, chunkBox, chunk.align, chunk.justify, 0, lineHeightPercent, IDENTITY_DECOMP, emitBounding));
