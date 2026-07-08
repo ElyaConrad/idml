@@ -83,19 +83,32 @@ export function matchImageFile<T extends NamedFile>(linkURI: string | undefined,
 export function matchFontFiles<T extends NamedFile>(family: string, expectedFileNames: string[], files: T[]): T[] {
   const fontEntries = files.filter((f) => FONT_EXTENSIONS.includes(extensionOf(f.name)));
 
-  // 1) Exact match on the metadata file names (base name, case-insensitive).
   const wantedFiles = new Set(expectedFileNames.filter(Boolean).map((n) => normalize(baseNameOf(n))));
-  if (wantedFiles.size) {
-    const exact = fontEntries.filter((f) => wantedFiles.has(normalize(baseNameOf(f.name))));
-    if (exact.length) return exact;
+  const wanted = normalize(family);
+  const out: T[] = [];
+  const seen = new Set<T>();
+  const push = (f: T) => {
+    if (!seen.has(f)) {
+      seen.add(f);
+      out.push(f);
+    }
+  };
+
+  // 1) Exact matches on the metadata file names first (authoritative WHEN the name is
+  //    right) — so a caller that trusts the exact hit gets it at index 0.
+  for (const f of fontEntries) if (wantedFiles.has(normalize(baseNameOf(f.name)))) push(f);
+
+  // 2) UNION with fuzzy family-name matches (not a fallback). A variant's metadata file
+  //    name is sometimes WRONG (a real IDML case: a family's Regular resolving to another
+  //    family's file name), which would otherwise drop that weight's real file entirely
+  //    and collapse the family to one binary. Returning the family's files too lets the
+  //    caller disambiguate by actual weight/style. Exact hits still lead the list.
+  for (const f of fontEntries) {
+    const stem = normalize(stripExtension(baseNameOf(f.name)));
+    if (stem === wanted || stem.startsWith(wanted) || stem.includes(wanted)) push(f);
   }
 
-  // 2) Fallback: fuzzy family-name match against the file stem.
-  const wanted = normalize(family);
-  return fontEntries.filter((f) => {
-    const stem = normalize(stripExtension(baseNameOf(f.name)));
-    return stem === wanted || stem.startsWith(wanted) || stem.includes(wanted);
-  });
+  return out;
 }
 
 // ---------------------------------------------------------------------------

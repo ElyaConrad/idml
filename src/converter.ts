@@ -1,6 +1,6 @@
 import { fileTypeFromBuffer } from 'file-type';
 import { IDML } from './idml.js';
-import { convertIDML2Serial, ConvertedSerial, ConvertIDML2SerialOptions, ImageGraphicType, ImageSrcResolver, RequiredFont } from './idml2serial.js';
+import { convertIDML2Serial, ConvertedSerial, ConvertIDML2SerialOptions, FontVariant, ImageGraphicType, ImageSrcResolver, RequiredFont } from './idml2serial.js';
 import { AssetFile, AggregatedAssets, AggregatedFont, AggregatedImage, collectAssets, matchFontFiles, matchImageFile } from './assets.js';
 import { loadFontsForMeasurement, LoadableFont } from './util/fontLoading.js';
 import { isDisplayableImageMime, makeImagePreviewSrc } from './util/imagePreview.js';
@@ -92,7 +92,9 @@ export class IdmlSerialConverter {
   }
   /** Required fonts with no matching file among the currently-provided assets. */
   get missingFonts(): AggregatedFont[] {
-    return this.aggregated.fonts.filter((f) => this.facesFor(f).length === 0);
+    // "Missing" = not a single file for the family (exact name OR fuzzy family match);
+    // picking the right binary per weight is facesFor's job, not this presence check.
+    return this.aggregated.fonts.filter((f) => matchFontFiles(f.family, f.variants.map((v) => v.fontFileName).filter((n): n is string => Boolean(n)), this.assets).length === 0);
   }
   /** Linked images with neither embedded bytes nor a matching provided file. */
   get missingImages(): AggregatedImage[] {
@@ -111,7 +113,7 @@ export class IdmlSerialConverter {
    * faces; a persisting consumer swaps those for durable URLs at upload time.
    */
   async convert(options?: ConvertIDML2SerialOptions): Promise<ConvertedSerial[]> {
-    const loadable = this.buildLoadableFonts();
+    const loadable = await this.buildLoadableFonts();
     const serialFonts = await loadFontsForMeasurement(loadable);
     // Build the image preview resolver BEFORE converting: displayable images
     // (embedded, or a provided linked file) become a compressed blob (browser) /
@@ -152,18 +154,60 @@ export class IdmlSerialConverter {
 
   // -- internals ------------------------------------------------------------
 
-  /** Provided font files matched to a required family, paired to their variants. */
-  private facesFor(font: AggregatedFont): LoadableFont['faces'] {
+  /**
+   * Provided font files matched to a required family, one binary per variant.
+   *
+   * `matchFontFiles` returns exact-metadata-name hits PLUS the family's other files
+   * (a variant's stored file name is sometimes wrong — see matchFontFiles), so for a
+   * multi-weight family every variant sees several candidates. Picking `matched[0]`
+   * blindly gave EVERY weight the same (first) binary — the family collapsed to one
+   * weight at render. Instead: trust an exact file-name hit, else pick the candidate
+   * whose REAL weight/italic (read from the binary via fontkit) matches the variant,
+   * preferring a file not already taken by another variant.
+   */
+  private async facesFor(font: AggregatedFont): Promise<LoadableFont['faces']> {
     const faces: LoadableFont['faces'] = [];
+    const used = new Set<AssetFile>();
     for (const variant of font.variants) {
       const matched = matchFontFiles(font.family, variant.fontFileName ? [variant.fontFileName] : [], this.assets);
-      const file = matched[0];
-      if (file) faces.push({ weight: variant.weight, italic: variant.italic, bytes: file.bytes });
+      if (matched.length === 0) continue;
+      const exactName = variant.fontFileName ? baseName(variant.fontFileName) : undefined;
+      const exact = exactName ? matched.find((m) => baseName(m.name) === exactName) : undefined;
+      const file = exact ?? (await this.pickFaceByMetrics(matched, variant, used));
+      if (file) {
+        faces.push({ weight: variant.weight, italic: variant.italic, bytes: file.bytes });
+        used.add(file);
+      }
     }
     return faces;
   }
-  private buildLoadableFonts(): LoadableFont[] {
-    return this.aggregated.fonts.map((f) => ({ family: f.family, faces: this.facesFor(f) })).filter((f) => f.faces.length > 0);
+
+  /** Among candidate binaries, the one whose real weight/italic best fits `variant`. */
+  private async pickFaceByMetrics(candidates: AssetFile[], variant: FontVariant, used: Set<AssetFile>): Promise<AssetFile | undefined> {
+    if (candidates.length <= 1) return candidates[0];
+    const scored: { file: AssetFile; score: number; order: number }[] = [];
+    for (let i = 0; i < candidates.length; i++) {
+      const meta = await this.faceMeta(candidates[i]);
+      // Unknown metrics sort last (large, order-stable) so a parseable sibling wins.
+      const weightDist = meta ? Math.abs(meta.weight - variant.weight) : 2000 + i;
+      const italicPenalty = meta && meta.italic !== variant.italic ? 400 : 0;
+      scored.push({ file: candidates[i], score: weightDist + italicPenalty, order: i });
+    }
+    scored.sort((a, b) => a.score - b.score || (used.has(a.file) ? 1 : 0) - (used.has(b.file) ? 1 : 0) || a.order - b.order);
+    return scored[0].file;
+  }
+
+  private faceMetaCache = new Map<AssetFile, { weight: number; italic: boolean } | null>();
+  private async faceMeta(file: AssetFile): Promise<{ weight: number; italic: boolean } | null> {
+    if (this.faceMetaCache.has(file)) return this.faceMetaCache.get(file)!;
+    const meta = await faceMetrics(file.bytes);
+    this.faceMetaCache.set(file, meta);
+    return meta;
+  }
+
+  private async buildLoadableFonts(): Promise<LoadableFont[]> {
+    const built = await Promise.all(this.aggregated.fonts.map(async (f) => ({ family: f.family, faces: await this.facesFor(f) })));
+    return built.filter((f) => f.faces.length > 0);
   }
   private assetForImage(img: AggregatedImage): AssetFile | undefined {
     return img.linkURI ? matchImageFile(img.linkURI, this.assets) : undefined;
@@ -239,6 +283,35 @@ function dedupeByName(files: AssetFile[]): AssetFile[] {
   const byName = new Map<string, AssetFile>();
   for (const file of files) byName.set(file.name.toLowerCase(), file);
   return [...byName.values()];
+}
+
+/** Lower-cased base name (no directory) — the font file-name match key. */
+function baseName(name: string): string {
+  return (name.split(/[\\/]/).pop() ?? name).toLowerCase();
+}
+
+/**
+ * A font binary's real weight/italic, read from the file itself (OS/2 `usWeightClass`
+ * + italic flags) via fontkit — the same source of truth bx-studio's uploader uses. Lets
+ * the converter assign the right binary to each weight variant even when the IDML's
+ * per-variant file names are wrong. Returns null on a collection/unparseable file.
+ */
+async function faceMetrics(bytes: ArrayBuffer): Promise<{ weight: number; italic: boolean } | null> {
+  try {
+    const { create } = await import('fontkit');
+    const u8 = new Uint8Array(bytes);
+    // fontkit wants a Buffer under Node, accepts a Uint8Array in the browser.
+    const input = typeof Buffer !== 'undefined' ? Buffer.from(u8) : u8;
+    const font = create(input as Buffer);
+    // A collection (.ttc/.dfont) has no single familyName — skip (rare for IDML fonts).
+    if (!font || typeof (font as { familyName?: unknown }).familyName !== 'string') return null;
+    const f = font as unknown as { 'OS/2'?: { usWeightClass?: number; fsSelection?: { italic?: boolean } }; head?: { macStyle?: { italic?: boolean } }; italicAngle?: number };
+    const weight = f['OS/2']?.usWeightClass ?? 400;
+    const italic = Boolean(f['OS/2']?.fsSelection?.italic || f.head?.macStyle?.italic || (typeof f.italicAngle === 'number' && f.italicAngle !== 0));
+    return { weight, italic };
+  } catch {
+    return null;
+  }
 }
 
 function mergeFonts(existing: SerialFont[], added: SerialFont[]): SerialFont[] {
