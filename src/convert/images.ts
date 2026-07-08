@@ -107,7 +107,11 @@ async function frameImageValue(frame: RectangleSprite | OvalSprite | PolygonSpri
   const ys = corners.map((p) => p.y);
   const left = Math.min(...xs);
   const top = Math.min(...ys);
-  return { ...base, crop: { left, top, width: Math.max(...xs) - left, height: Math.max(...ys) - top } };
+  // The crop is in `natural`-pixel space. Emit that reference size so a consumer that
+  // downscales the asset (compress/rasterize) can rescale the crop by finalSize/natural —
+  // the crop is really a placement RATIO, so the exact `natural` cancels and only needs to
+  // be KNOWN. For a linked image at convert time this is the IDML metadata size.
+  return { ...base, crop: { left, top, width: Math.max(...xs) - left, height: Math.max(...ys) - top }, naturalWidth: natural.width, naturalHeight: natural.height };
 }
 
 /**

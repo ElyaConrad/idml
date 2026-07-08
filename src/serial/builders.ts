@@ -181,6 +181,11 @@ export type SerialImageValue = {
   mirrorX: boolean;
   mirrorY: boolean;
   innerRotate: number;
+  /** Pixel size the `crop` is expressed in (the asset's intrinsic size at convert time).
+   * Lets a consumer that resizes the asset rescale the crop by finalSize/natural. The
+   * renderer ignores these; an editor interaction (ensureImageValue) drops them. */
+  naturalWidth?: number;
+  naturalHeight?: number;
 };
 
 export function makeImage(id: string, box: Box, radius: [number, number, number, number], image: SerialImageValue, transform: DecomposedTransform, surface: SurfaceInput): Template.Elements.Image {
