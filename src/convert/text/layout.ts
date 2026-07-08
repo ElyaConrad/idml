@@ -427,14 +427,24 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
     lineHeightPercent = base.lineHeight * 100 - (fontDescent(core, base) / base.fontSize) * 100;
   }
 
+  // The last line's font-box descent, added to a box height so 'font' bounding's fit
+  // doesn't shrink text that InDesign would just let overflow (see the split loop).
+  // Only meaningful with a canvas + 'font' bounding, and only for TOP-aligned frames
+  // (centre/bottom anchoring would shift if we grew the box). 0 otherwise.
+  const lastRunStyle = runs[runs.length - 1]?.style ?? base;
+  const overflowPad = core && emitBounding === 'font' && verticalAlign === 0 ? fontDescent(core, lastRunStyle, lastRunStyle.fontSize) : 0;
+
   // The unsplit fallback: everything in one element (+ its line-background bar, if any).
   const singleElement = (): Template.Element[] => {
-    const el = textElementFromRuns(id, normalizedRuns, box, firstAlign, firstJustify, verticalAlign, lineHeightPercent, singleElementTransform, emitBounding);
+    const paddedBox: Box = { ...box, height: box.height + overflowPad };
+    const el = textElementFromRuns(id, normalizedRuns, paddedBox, firstAlign, firstJustify, verticalAlign, lineHeightPercent, singleElementTransform, emitBounding);
     return withBars([{ el, style: base, scale: 1, boxX: box.x, align: firstAlign }]);
   };
 
-  // Line-stacking layout for the split path: same bounding + lineHeight we emit.
-  const runLayout = (lineHeight: number) => probeLayout(lineHeight, emitBounding, box.y, box.height);
+  // Line-stacking layout for the split path: same bounding + lineHeight we emit. The
+  // merged fit gets the same descent overflow allowance so the whole frame isn't
+  // shrunk just because its last line's descent grazes past the frame bottom.
+  const runLayout = (lineHeight: number) => probeLayout(lineHeight, emitBounding, box.y, box.height + overflowPad);
 
   // 'never' keeps the whole frame as one element (richText carries real diffs).
   if (settings.textSplittingHeuristic === 'never') return singleElement();
@@ -569,9 +579,9 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
       console.warn(`[idml2serial] non-positive chunk height for frame ${frame.getId()} — emitting it unsplit.`);
       return singleElement();
     }
+    const first = firstContentStyle(chunk);
     let y = top;
     if (applyGrid) {
-      const first = firstContentStyle(chunk);
       const gridOffset = (baselineGrid[segIndex] - baselineGrid[emitted[0].segIndex]) * fitScale;
       // 'font' emits an alphabetic baseline at fontAscent below the box top (full ascent,
       // not the 0.8 hanging factor), so a chunk sized differently from the reference shifts
@@ -579,7 +589,15 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
       const ascentFloat = refAscent - fontAscent(core, first, first.fontSize * fitScale);
       y = emitted[0].top + gridOffset + ascentFloat;
     }
-    const chunkBox: Box = { x: box.x, y, width: box.width, height: bottom - top };
+    // The gap to the next chunk (bottom - top) is the baseline leading; but 'font'
+    // bounding reserves the full font box (ascent + descent) per line in core's fit,
+    // so a box sized only to that gap makes core SHRINK the text when leading is tight
+    // (deficit = descent + nextAscent - leading). InDesign instead lets the last line's
+    // descent overflow the gap (lines overlap, never shrink). Add that descent back so
+    // the intended size renders — top-anchored, so the extra height hangs below and
+    // never moves the text. Same principle as vertical-justify's "grow".
+    const descentPad = fontDescent(core, first, first.fontSize * fitScale);
+    const chunkBox: Box = { x: box.x, y, width: box.width, height: bottom - top + descentPad };
     const chunkRuns = fitScale === 1 ? chunk.runs : chunk.runs.map((r) => ({ ...r, style: { ...r.style, fontSize: r.style.fontSize * fitScale } }));
     // Children are positioned inside the caller's group -> identity transform.
     elements.push(textElementFromRuns(`${id}_${i + 1}`, chunkRuns, chunkBox, chunk.align, chunk.justify, 0, lineHeightPercent, IDENTITY_DECOMP, emitBounding));
