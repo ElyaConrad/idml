@@ -133,9 +133,14 @@ async function frameImageValue(frame: RectangleSprite | OvalSprite | PolygonSpri
   if (cw > 0 && ch > 0 && overL > 0 && overT > 0 && overR > 0 && overB > 0 && fb.width > 0 && fb.height > 0) {
     // `fb` (frame geometric bounds) sizes the padding — same dimensions as the element box
     // this frame becomes (axis-aligned image frame). padding is [top, right, bottom, left].
+    // The over-scan ratios are natural-independent (natural cancels), so the metadata
+    // GraphicBounds used above is fine as the reference even for a size-less SVG.
     const padding: [number, number, number, number] = [(overT / ch) * fb.height, (overR / cw) * fb.width, (overB / ch) * fb.height, (overL / cw) * fb.width];
-    // Full source shown (nothing cropped away); contain fits it into the padded box.
-    return { ...base, cropMode: 'contain', crop: { left: 0, top: 0, width: nw, height: nh }, padding, naturalWidth: nw, naturalHeight: nh };
+    // crop: null (not a GraphicBounds crop) — in contain mode core derives the crop from the
+    // RENDERED image size (imageInfo, Image.vue), so the whole graphic fits the padded box at
+    // the correct scale whatever intrinsic size the SVG declares. Emitting a GraphicBounds
+    // crop mismatched the SVG's own units (crop.width > imageInfo) → it rendered too small.
+    return { ...base, cropMode: 'contain', crop: null, padding };
   }
 
   // The crop is in `natural`-pixel space. Emit that reference size so a consumer that
