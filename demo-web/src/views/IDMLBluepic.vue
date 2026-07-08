@@ -106,14 +106,28 @@ function onInput(e: Event) {
   input.value = ''; // allow re-selecting the same folder
 }
 
-// Dev affordance: ?src=/foo.idml auto-loads a single IDML (no side assets — shows
-// the "fonts unresolved → fallback" path). Drop a folder to see precise mode.
+// Dev affordance: ?src=/foo.idml auto-loads a single IDML. Add ?assets=/a.svg,/b.eps
+// (comma-separated URLs under public/) to also feed the linked assets — the converter
+// matches them to the IDML links by file name, so they resolve instead of falling back
+// to placeholders. Lets us test the REAL image placement, not the placeholder. Drop a
+// folder for the same effect via the picker.
 onMounted(async () => {
-  const src = new URLSearchParams(location.search).get('src');
+  const params = new URLSearchParams(location.search);
+  const src = params.get('src');
   if (!src) return;
   status.value = `Fetching ${src}…`;
-  const bytes = await fetch(src).then((r) => r.arrayBuffer());
-  await run([{ name: src.split('/').pop() || 'document.idml', bytes }]);
+  const files: AssetFile[] = [{ name: src.split('/').pop() || 'document.idml', bytes: await fetch(src).then((r) => r.arrayBuffer()) }];
+  const assets = params.get('assets');
+  if (assets) {
+    for (const url of assets.split(',').map((s) => s.trim()).filter(Boolean)) {
+      try {
+        files.push({ name: decodeURIComponent(url.split('/').pop() || url), bytes: await fetch(url).then((r) => r.arrayBuffer()) });
+      } catch (e) {
+        console.warn('[playground] asset fetch failed', url, e);
+      }
+    }
+  }
+  await run(files);
 });
 </script>
 

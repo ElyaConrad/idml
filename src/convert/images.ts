@@ -77,10 +77,10 @@ async function frameImageValue(frame: RectangleSprite | OvalSprite | PolygonSpri
   if (!src) return null;
   const base = { src, cropMode: 'cover' as const, innerAlign: 'center', mirrorX: false, mirrorY: false, innerRotate: 0 };
 
-  // Natural size: for a VECTOR graphic (SVG/PDF/EPS/WMF) the embedded-bytes pixel decode
-  // is unreliable or irrelevant (an SVG may declare no width/height/viewBox → the browser
-  // reports a bogus default), so use its IDML GraphicBounds — the true intrinsic coordinate
-  // size. For a raster, decode the bytes (exact), else fall back to metadata (linked image).
+  // Natural size (only its ASPECT/ratio matters below — it cancels per axis in both the
+  // crop and the inset detection/padding). VECTOR graphics (SVG/PDF/EPS/WMF) use their IDML
+  // GraphicBounds: the embedded-bytes decode is unreliable (a browser reports a bogus or
+  // 0×0 size for a size-less SVG). Rasters decode the bytes, else fall back to metadata.
   let natural: { width: number; height: number };
   if (image.isVectorGraphic()) {
     const metadata = image.getMetadataNaturalSize();
@@ -116,44 +116,29 @@ async function frameImageValue(frame: RectangleSprite | OvalSprite | PolygonSpri
   const top = Math.min(...ys);
   const cw = Math.max(...xs) - left;
   const ch = Math.max(...ys) - top;
-  const nw = natural.width;
-  const nh = natural.height;
 
-  // NB a graphic that sits ENTIRELY inside its frame (inset logo/icon, not a crop) is NOT
-  // handled here — `imageFrameAsImage` detects that first (isGraphicFullyInset) and emits
-  // the image at its own placement instead, so this crop path only ever sees real crops.
+  // Inset placement: when the frame window over-scans the source on ALL four sides, the
+  // graphic sits ENTIRELY inside its frame (an inset logo/icon, e.g. an SVG scaled ~20% and
+  // offset) — NOT a crop. Cover would blow it up to fill the frame. Keep the frame element's
+  // box + transform (correct on the page) and inset the image WITHIN it via `contain` + a
+  // per-side `padding` [top,right,bottom,left] in ELEMENT-box px. The over-scan on each side
+  // as a fraction of the crop window is the inset; each axis's `natural` cancels, so a
+  // size-less SVG's aspect is irrelevant. `crop:null` → core sizes the crop from the RENDERED
+  // image (imageInfo, Image.vue), so it fits whatever the SVG declares.
+  const overL = -left;
+  const overT = -top;
+  const overR = left + cw - natural.width;
+  const overB = top + ch - natural.height;
+  if (cw > 0 && ch > 0 && overL > 0 && overT > 0 && overR > 0 && overB > 0 && fb.width > 0 && fb.height > 0) {
+    const padding: [number, number, number, number] = [(overT / ch) * fb.height, (overR / cw) * fb.width, (overB / ch) * fb.height, (overL / cw) * fb.width];
+    return { ...base, cropMode: 'contain', crop: null, padding };
+  }
 
   // The crop is in `natural`-pixel space. Emit that reference size so a consumer that
   // downscales the asset (compress/rasterize) can rescale the crop by finalSize/natural —
   // the crop is really a placement RATIO, so the exact `natural` cancels and only needs to
   // be KNOWN. For a linked image at convert time this is the IDML metadata size.
-  return { ...base, crop: { left, top, width: cw, height: ch }, naturalWidth: nw, naturalHeight: nh };
-}
-
-/**
- * True when the placed graphic sits ENTIRELY inside its frame window on all four sides —
- * an inset logo/icon (scaled smaller + offset within the frame), not a crop. The frame
- * corners are mapped into the image's NORMALIZED space (0..1 across the image bounds);
- * fully inside ⇒ that window spans beyond [0,1] on every side. Normalized, so it's
- * natural-independent and works even for a size-less SVG.
- */
-function isGraphicFullyInset(frame: RectangleSprite | OvalSprite | PolygonSprite, image: ImageSprite, pageMatrix: Matrix): boolean {
-  const ib = image.getBBox();
-  if (!ib || ib.width === 0 || ib.height === 0) return false;
-  const fb = frame.getGeometricBounds();
-  const frameToImage = inverse(bakeSpriteMatrix(image, pageMatrix));
-  const pts = [
-    { x: fb.x, y: fb.y },
-    { x: fb.x + fb.width, y: fb.y },
-    { x: fb.x + fb.width, y: fb.y + fb.height },
-    { x: fb.x, y: fb.y + fb.height },
-  ].map((c) => {
-    const local = applyToPoint(frameToImage, c);
-    return { x: (local.x - ib.x) / ib.width, y: (local.y - ib.y) / ib.height };
-  });
-  const xs = pts.map((p) => p.x);
-  const ys = pts.map((p) => p.y);
-  return Math.min(...xs) < 0 && Math.min(...ys) < 0 && Math.max(...xs) > 1 && Math.max(...ys) > 1;
+  return { ...base, crop: { left, top, width: cw, height: ch }, naturalWidth: natural.width, naturalHeight: natural.height };
 }
 
 /**
@@ -167,26 +152,11 @@ export async function imageFrameAsImage(frame: RectangleSprite, image: ImageSpri
   if (Math.abs(imagePlacement.rotate) > 0.5 || Math.abs(imagePlacement.skewX) > 0.5) return null;
   if (!cornersAreSimple(frame.getCornerOptions())) return null;
 
-  const fb = frame.getBBox();
-  const radii = cornerRadii(frame.getCornerOptions(), fb);
-  const surface = surfaceOf(frame);
-
-  // A graphic scaled SMALLER than its frame and offset within it (an inset logo/icon —
-  // e.g. an SVG placed at ~20%) is NOT a crop: cover would blow it up to fill the frame.
-  // When the frame is a PLAIN crop container (no fill/stroke/corner-radius) emit the image
-  // at its OWN placement (its bbox + baked transform) so it renders at exactly InDesign's
-  // inset position, size AND any non-uniform scale (carried by the transform's scaleX/scaleY),
-  // cover-filling its own source-aspect box cleanly. Styled frames / real crops keep the
-  // frame-box + crop path below (which also handles the frame's stroke/corners).
-  const plainFrame = !surface.fill && (!surface.stroke || !surface.strokeWidth) && radii.every((r) => r === 0);
-  if (plainFrame && isGraphicFullyInset(frame, image, pageMatrix)) {
-    return fullImageElement(image, imagePlacement, collector);
-  }
-
   const value = await frameImageValue(frame, image, pageMatrix, collector.resolveImageSrc);
   if (!value) return null;
   await collector.addImage(frame.getId(), image); // the frame IS the image element here
-  return makeImage(frame.getId(), fb, radii, value, transform, surface);
+  const fb = frame.getBBox();
+  return makeImage(frame.getId(), fb, cornerRadii(frame.getCornerOptions(), fb), value, transform, surfaceOf(frame));
 }
 
 /**

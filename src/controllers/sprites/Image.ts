@@ -75,10 +75,10 @@ export class ImageSprite extends GeometricSprite {
     const gw = this.graphicBounds.right - this.graphicBounds.left;
     const gh = this.graphicBounds.bottom - this.graphicBounds.top;
     if (!(gw > 0 && gh > 0)) return undefined;
-    // Raster with a known ppi: GraphicBounds (points) × ppi → source pixels. Otherwise —
-    // a vector graphic (SVG/PDF/EPS/WMF, no ppi) or a raster missing ppi — the GraphicBounds
-    // ARE the intrinsic coordinate size. Only the aspect/ratio matters for the crop and the
-    // inset padding (the absolute value cancels as a placement ratio), so return them as-is.
+    // Raster with a ppi: GraphicBounds (points) × ppi → source pixels. Otherwise (vector
+    // graphic — SVG/PDF/EPS/WMF — or a raster missing ppi) GraphicBounds ARE the intrinsic
+    // coordinate size; only the aspect/ratio matters downstream (it cancels as a placement
+    // ratio), so return them as-is instead of undefined.
     if (this.actualPpi) {
       return { width: Math.round((gw / 72) * this.actualPpi.x), height: Math.round((gh / 72) * this.actualPpi.y) };
     }
