@@ -119,35 +119,41 @@ async function frameImageValue(frame: RectangleSprite | OvalSprite | PolygonSpri
   const nw = natural.width;
   const nh = natural.height;
 
-  // When the placed graphic sits ENTIRELY inside the frame window — the frame is bigger
-  // than the graphic on ALL four sides (an inset logo/icon, e.g. an SVG scaled to ~20% and
-  // offset within its frame), not a crop — the crop over-scans the source on every side.
-  // A cover crop would blow it up to fill the frame (too big). Instead position it the way
-  // InDesign does: `contain` + a per-side `padding`. The over-scan on each side, as a
-  // fraction of the crop window, is the box inset in ELEMENT-box px. padding is
-  // [top, right, bottom, left] (core's order). A partial overlap / real crop keeps cover.
-  const overL = -left;
-  const overT = -top;
-  const overR = left + cw - nw;
-  const overB = top + ch - nh;
-  if (cw > 0 && ch > 0 && overL > 0 && overT > 0 && overR > 0 && overB > 0 && fb.width > 0 && fb.height > 0) {
-    // `fb` (frame geometric bounds) sizes the padding — same dimensions as the element box
-    // this frame becomes (axis-aligned image frame). padding is [top, right, bottom, left].
-    // The over-scan ratios are natural-independent (natural cancels), so the metadata
-    // GraphicBounds used above is fine as the reference even for a size-less SVG.
-    const padding: [number, number, number, number] = [(overT / ch) * fb.height, (overR / cw) * fb.width, (overB / ch) * fb.height, (overL / cw) * fb.width];
-    // crop: null (not a GraphicBounds crop) — in contain mode core derives the crop from the
-    // RENDERED image size (imageInfo, Image.vue), so the whole graphic fits the padded box at
-    // the correct scale whatever intrinsic size the SVG declares. Emitting a GraphicBounds
-    // crop mismatched the SVG's own units (crop.width > imageInfo) → it rendered too small.
-    return { ...base, cropMode: 'contain', crop: null, padding };
-  }
+  // NB a graphic that sits ENTIRELY inside its frame (inset logo/icon, not a crop) is NOT
+  // handled here — `imageFrameAsImage` detects that first (isGraphicFullyInset) and emits
+  // the image at its own placement instead, so this crop path only ever sees real crops.
 
   // The crop is in `natural`-pixel space. Emit that reference size so a consumer that
   // downscales the asset (compress/rasterize) can rescale the crop by finalSize/natural —
   // the crop is really a placement RATIO, so the exact `natural` cancels and only needs to
   // be KNOWN. For a linked image at convert time this is the IDML metadata size.
   return { ...base, crop: { left, top, width: cw, height: ch }, naturalWidth: nw, naturalHeight: nh };
+}
+
+/**
+ * True when the placed graphic sits ENTIRELY inside its frame window on all four sides —
+ * an inset logo/icon (scaled smaller + offset within the frame), not a crop. The frame
+ * corners are mapped into the image's NORMALIZED space (0..1 across the image bounds);
+ * fully inside ⇒ that window spans beyond [0,1] on every side. Normalized, so it's
+ * natural-independent and works even for a size-less SVG.
+ */
+function isGraphicFullyInset(frame: RectangleSprite | OvalSprite | PolygonSprite, image: ImageSprite, pageMatrix: Matrix): boolean {
+  const ib = image.getBBox();
+  if (!ib || ib.width === 0 || ib.height === 0) return false;
+  const fb = frame.getGeometricBounds();
+  const frameToImage = inverse(bakeSpriteMatrix(image, pageMatrix));
+  const pts = [
+    { x: fb.x, y: fb.y },
+    { x: fb.x + fb.width, y: fb.y },
+    { x: fb.x + fb.width, y: fb.y + fb.height },
+    { x: fb.x, y: fb.y + fb.height },
+  ].map((c) => {
+    const local = applyToPoint(frameToImage, c);
+    return { x: (local.x - ib.x) / ib.width, y: (local.y - ib.y) / ib.height };
+  });
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  return Math.min(...xs) < 0 && Math.min(...ys) < 0 && Math.max(...xs) > 1 && Math.max(...ys) > 1;
 }
 
 /**
@@ -161,11 +167,26 @@ export async function imageFrameAsImage(frame: RectangleSprite, image: ImageSpri
   if (Math.abs(imagePlacement.rotate) > 0.5 || Math.abs(imagePlacement.skewX) > 0.5) return null;
   if (!cornersAreSimple(frame.getCornerOptions())) return null;
 
+  const fb = frame.getBBox();
+  const radii = cornerRadii(frame.getCornerOptions(), fb);
+  const surface = surfaceOf(frame);
+
+  // A graphic scaled SMALLER than its frame and offset within it (an inset logo/icon —
+  // e.g. an SVG placed at ~20%) is NOT a crop: cover would blow it up to fill the frame.
+  // When the frame is a PLAIN crop container (no fill/stroke/corner-radius) emit the image
+  // at its OWN placement (its bbox + baked transform) so it renders at exactly InDesign's
+  // inset position, size AND any non-uniform scale (carried by the transform's scaleX/scaleY),
+  // cover-filling its own source-aspect box cleanly. Styled frames / real crops keep the
+  // frame-box + crop path below (which also handles the frame's stroke/corners).
+  const plainFrame = !surface.fill && (!surface.stroke || !surface.strokeWidth) && radii.every((r) => r === 0);
+  if (plainFrame && isGraphicFullyInset(frame, image, pageMatrix)) {
+    return fullImageElement(image, imagePlacement, collector);
+  }
+
   const value = await frameImageValue(frame, image, pageMatrix, collector.resolveImageSrc);
   if (!value) return null;
   await collector.addImage(frame.getId(), image); // the frame IS the image element here
-  const fb = frame.getBBox();
-  return makeImage(frame.getId(), fb, cornerRadii(frame.getCornerOptions(), fb), value, transform, surfaceOf(frame));
+  return makeImage(frame.getId(), fb, radii, value, transform, surface);
 }
 
 /**
