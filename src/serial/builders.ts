@@ -103,6 +103,57 @@ export function makeRectangle(id: string, box: Box, radius: [number, number, num
   };
 }
 
+/**
+ * A rectangle iterated once per line of a target text element — the "Bauchbinde"
+ * highlight bar behind each line, reconstructed from InDesign's thick offset
+ * underline. It binds to `<targetTextId>.lines[i]` (exposed `{x, y, width, height}`),
+ * so it tracks the text's wrap/line count live and, as a sibling under the same
+ * (frame) group transform, rotates/scales with the text exactly as InDesign does.
+ *
+ * The bar's centre sits on `baseline + underlineOffset` (baseline = line top +
+ * ascent) and its height = the underline weight. When the caller measured the font
+ * ascent (`ascent` given), that's baked into a constant; without a canvas it falls
+ * back to `0.8·lines[i].height` (the render-time font-bounding proportion). Horizontal
+ * `padX` insets each edge (0 = hug the line box; the run's leading/trailing spaces
+ * already give a small margin).
+ */
+export function makeLineBackgroundRectangle(id: string, targetTextId: string, opts: { fill: Paint; weight: number; offset: number; ascent: number | null; padX: number }): Template.Elements.Rectangle {
+  const fmt = (n: number) => Number(n.toFixed(4)).toString();
+  // ` + n` / ` - n`, so a negative constant reads `- 58.63` rather than `+ -58.63`.
+  const signed = (n: number) => (n >= 0 ? ` + ${fmt(n)}` : ` - ${fmt(-n)}`);
+  const L = `${targetTextId}.lines[i]`;
+  const { padX, weight, offset, ascent } = opts;
+  const k = offset - weight / 2; // bar top relative to the baseline
+  const yExpr = ascent !== null ? `${L}.y${signed(ascent + k)}` : `${L}.y + 0.8 * ${L}.height${signed(k)}`;
+  return {
+    name: 'rectangle',
+    id,
+    locked: false,
+    properties: {
+      'v-transform-origin': ORIGIN_0,
+      visible: bool(true),
+      x: exprRaw(padX ? `${L}.x - ${fmt(padX)}` : `${L}.x`),
+      y: exprRaw(yExpr),
+      width: exprRaw(padX ? `${L}.width + ${fmt(padX * 2)}` : `${L}.width`),
+      height: exprRaw(fmt(weight)),
+      radius: numArray([0, 0, 0, 0]),
+      pos: POS_TL,
+      fill: paint(opts.fill),
+      stroke: paint(null),
+      strokeWidth: num(0),
+      opacity: num(1),
+      strokeDasharray: numArray([0, 0]),
+      strokeDashoffset: num(0),
+      strokeAlignment: str('center'),
+    },
+    // Identity: the bar is positioned entirely by its line-bound x/y expressions,
+    // in the same coordinate space as the sibling text under the shared group.
+    transform: serialTransform({ translateX: 0, translateY: 0, rotate: 0, skewX: 0, skewY: 0, scaleX: 1, scaleY: 1 }),
+    filter: defaultFilter(),
+    iteration: { expression: `${targetTextId}.lines.length`, key: 'i' },
+  };
+}
+
 /** Circle/ellipse — radius accepts [rx, ry]. x/y is the bbox top-left (pos [0,0]). */
 export function makeCircle(id: string, box: Box, transform: DecomposedTransform, surface: SurfaceInput): Template.Elements.Circle {
   return {

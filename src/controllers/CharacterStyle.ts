@@ -12,6 +12,12 @@ export type CharacterStyleInput = {
   fillColor?: ColorInput;
   strokeColor?: ColorInput;
   underline?: boolean;
+  /** InDesign underline stroke thickness, in points (character-level attribute). */
+  underlineWeight?: number;
+  /** Underline position relative to the baseline, in points (negative = above it). */
+  underlineOffset?: number;
+  /** Underline stroke color (own swatch, independent of the text fill). */
+  underlineColor?: ColorInput;
   strikeThrough?: boolean;
   tracking?: number;
   leading?: number;
@@ -28,6 +34,9 @@ export class CharacterStyle {
   public fillColorId?: string;
   public strokeColorId?: string;
   public underline?: boolean;
+  public underlineWeight?: number;
+  public underlineOffset?: number;
+  public underlineColorId?: string;
   public strikeThrough?: boolean;
   public tracking?: number;
   public leading?: number;
@@ -55,6 +64,9 @@ export class CharacterStyle {
       fillColorId?: string;
       strokeColorId?: string;
       underline?: boolean;
+      underlineWeight?: number;
+      underlineOffset?: number;
+      underlineColorId?: string;
       strikeThrough?: boolean;
       tracking?: number;
       leading?: number;
@@ -76,6 +88,9 @@ export class CharacterStyle {
     this.fillColorId = opts.fillColorId;
     this.strokeColorId = opts.strokeColorId;
     this.underline = opts.underline;
+    this.underlineWeight = opts.underlineWeight;
+    this.underlineOffset = opts.underlineOffset;
+    this.underlineColorId = opts.underlineColorId;
     this.strikeThrough = opts.strikeThrough;
     this.tracking = opts.tracking;
     this.leading = opts.leading;
@@ -92,6 +107,9 @@ export class CharacterStyle {
       tracking: this.tracking,
       leading: this.leading,
       underline: this.underline,
+      underlineWeight: this.underlineWeight,
+      underlineOffset: this.underlineOffset,
+      underlineColor: this.underlineColorId ? this.context.idml.getColorById(this.underlineColorId)?.toColorInput() : undefined,
       strikeThrough: this.strikeThrough,
     }).filter(([_, value]) => value !== undefined)) as CharacterStyleInput;
   }
@@ -177,6 +195,11 @@ export class CharacterStyle {
     const strokeColorId = props.StrokeColor;
     const strokeWeight = ensureNumber(props.StrokeWeight);
     const underline = ensureBoolean(props.Underline);
+    const underlineWeight = ensureNumber(props.UnderlineWeight);
+    const underlineOffset = ensureNumber(props.UnderlineOffset);
+    // `UnderlineColor` is a nested <Properties> object reference (a swatch id like
+    // "Color/Paper"), flattened here to its id — resolved on demand, mirroring FillColor.
+    const underlineColorId = props.UnderlineColor;
     const strikeThrough = ensureBoolean(props.StrikeThru);
     const tracking = ensureNumber(props.Tracking);
     const leading = ensureNumber(props.Leading);
@@ -198,6 +221,9 @@ export class CharacterStyle {
         strokeColorId,
         strokeWeight,
         underline,
+        underlineWeight,
+        underlineOffset,
+        underlineColorId,
         strikeThrough,
         tracking,
         leading,

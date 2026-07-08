@@ -1,7 +1,7 @@
 import type * as Template from '../../serial/serial-types';
 import { TextFrame } from '../../controllers/sprites/TextFrame';
 import { DecomposedTransform } from '../../util/layout';
-import { makeRectangle, makeText, makeGroup, Box, RichTextRun, TextBounding } from '../../serial/builders';
+import { makeRectangle, makeLineBackgroundRectangle, makeText, makeGroup, Box, RichTextRun, TextBounding } from '../../serial/builders';
 import { IDENTITY_DECOMP } from '../constants';
 import { ConvertSettings } from '../types';
 import { AssetCollector } from '../assets';
@@ -103,6 +103,35 @@ export function fontDescent(core: typeof import('@bluepic/core/text'), style: Ef
   } catch {
     return 0;
   }
+}
+
+// A character underline this thick (relative to the em) is not a real underline
+// but InDesign's idiom for a per-line highlight bar ("Bauchbinde") — reconstructed
+// as a line-bound background rectangle rather than an actual text-decoration.
+export const BAUCHBINDE_MIN_WEIGHT_RATIO = 0.5;
+
+/**
+ * Build the "Bauchbinde" highlight bar for a text element whose base run carries a
+ * thick offset underline — an iterated rectangle bound to `<id>.lines[i]`, one bar
+ * per rendered line, behind the text. Returns null unless the run is underlined
+ * with a bar-thick stroke and the font ascent is measurable (needs a canvas).
+ *
+ * `scale` is the merged-fit factor (split path) so the bar's weight/offset and the
+ * measured ascent all track the shrunken text; the emitted rectangle centres on the
+ * baseline+offset (baseline = line top + ascent) with height = the underline weight.
+ */
+export function lineBackgroundBar(core: typeof import('@bluepic/core/text') | null, targetTextId: string, style: EffectiveTextStyle, scale: number): Template.Elements.Rectangle | null {
+  if (!style.underline) return null;
+  const fontSize = style.fontSize * scale;
+  const weight = (style.underlineWeight ?? 0) * scale;
+  if (!(fontSize > 0 && weight >= BAUCHBINDE_MIN_WEIGHT_RATIO * fontSize)) return null;
+  const offset = (style.underlineOffset ?? 0) * scale;
+  // Exact baseline needs the font ascent (line top -> baseline for 'font' bounding).
+  // Without a canvas, the builder falls back to a render-time 0.8*lineHeight estimate.
+  const ascent = core ? fontAscent(core, style, fontSize) : null;
+  // Underline color defaults to the text fill when the run gives none (InDesign).
+  const fill = style.underlineColor ?? style.color;
+  return makeLineBackgroundRectangle(`${targetTextId}_linebg`, targetTextId, { fill, weight, offset, ascent, padX: 0 });
 }
 
 /** A layout probe over the merged frame: `(lineHeight%, bounding, blockTopY, maxHeight)`.
@@ -251,7 +280,7 @@ export function buildVerticalJustifyElement(
  * except that U+2028 is now always normalized to '\n' (core only breaks
  * lines on '\n'; a raw U+2028 would render as a glyph, not a break).
  */
-export async function buildTextElements(frame: TextFrame, box: Box, singleElementTransform: DecomposedTransform, collector: AssetCollector, id: string, settings: ConvertSettings): Promise<Template.Elements.Text[]> {
+export async function buildTextElements(frame: TextFrame, box: Box, singleElementTransform: DecomposedTransform, collector: AssetCollector, id: string, settings: ConvertSettings): Promise<Template.Element[]> {
   const paragraphs = frame.getStory()?.getParagraphs() ?? [];
   if (paragraphs.length === 0) return [];
 
@@ -344,6 +373,14 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
   // keeps its natural leading and the render-font-independent 'fontSize' fallback.
   const core = await loadTextLayout();
 
+  // Prepend a line-background "Bauchbinde" bar for every emitted element whose base
+  // run carries a thick offset underline (see lineBackgroundBar). Bars go BEFORE the
+  // text in build order so the global z-reverse lands them behind it.
+  const withBars = (pairs: Array<{ el: Template.Elements.Text; style: EffectiveTextStyle; scale: number }>): Template.Element[] => {
+    const bars = pairs.map((p) => lineBackgroundBar(core, p.el.id, p.style, p.scale)).filter((b): b is Template.Elements.Rectangle => b !== null);
+    return [...bars, ...pairs.map((p) => p.el)];
+  };
+
   // Forced breaks normalized: core only breaks lines on '\n', so a raw U+2028 would
   // render as a glyph. Reused by every layout + emit path below.
   const normalizedRuns = runs.map((r) => ({ ...r, text: r.text.replace(/\u2028/g, '\n') }));
@@ -370,7 +407,7 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
   // (fall through) for <2 lines, too-short frames, or if measurement fails.
   if (verticalJustify && core) {
     const justified = buildVerticalJustifyElement(id, normalizedRuns, box, firstAlign, firstJustify, singleElementTransform, core, base, settings, probeLayout);
-    if (justified) return [justified];
+    if (justified) return withBars([{ el: justified, style: base, scale: 1 }]);
   }
 
   // Emit with 'font' bounding (the system default). Its first line's alphabetic baseline
@@ -385,8 +422,11 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
     lineHeightPercent = base.lineHeight * 100 - (fontDescent(core, base) / base.fontSize) * 100;
   }
 
-  // The unsplit fallback: everything in one element.
-  const singleElement = () => [textElementFromRuns(id, normalizedRuns, box, firstAlign, firstJustify, verticalAlign, lineHeightPercent, singleElementTransform, emitBounding)];
+  // The unsplit fallback: everything in one element (+ its line-background bar, if any).
+  const singleElement = (): Template.Element[] => {
+    const el = textElementFromRuns(id, normalizedRuns, box, firstAlign, firstJustify, verticalAlign, lineHeightPercent, singleElementTransform, emitBounding);
+    return withBars([{ el, style: base, scale: 1 }]);
+  };
 
   // Line-stacking layout for the split path: same bounding + lineHeight we emit.
   const runLayout = (lineHeight: number) => probeLayout(lineHeight, emitBounding, box.y, box.height);
@@ -539,7 +579,9 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
     // Children are positioned inside the caller's group -> identity transform.
     elements.push(textElementFromRuns(`${id}_${i + 1}`, chunkRuns, chunkBox, chunk.align, chunk.justify, 0, lineHeightPercent, IDENTITY_DECOMP, emitBounding));
   }
-  return elements;
+  // Each split element's bar binds to that element (its own lines), and the fit
+  // scale is threaded so weight/offset/ascent track any merged-fit shrink.
+  return withBars(emitted.map((e, i) => ({ el: elements[i], style: firstContentStyle(e.chunk), scale: fitScale })));
 }
 
 /**
@@ -561,11 +603,16 @@ export async function textFrameElement(frame: TextFrame, transform: DecomposedTr
   if (!hasBackground) {
     if (texts.length === 0) return null;
     if (texts.length === 1) return texts[0];
-    return makeGroup(frame.getId(), texts, transform, surface.opacity ?? 1);
+    // >1 is either split text (children already id-suffixed) or a single text plus
+    // its line-background bar — in that case the lone text keeps the frame id, so the
+    // wrapping group needs a distinct id to stay globally unique.
+    const collides = texts.some((t) => t.id === frame.getId());
+    return makeGroup(collides ? `${frame.getId()}_g` : frame.getId(), texts, transform, surface.opacity ?? 1);
   }
 
-  // Children in natural IDML paint order (background behind, text in front);
-  // reverseZOrder() flips the whole tree to Bluepic's first-on-top convention.
+  // Children in natural IDML paint order (background behind, text — and its
+  // line-background bars — in front); reverseZOrder() flips the whole tree to
+  // Bluepic's first-on-top convention.
   const background = makeRectangle(`${frame.getId()}_bg`, box, cornerRadii(frame.getCornerOptions(), box), IDENTITY_DECOMP, { fill: surface.fill, stroke: surface.stroke, strokeWidth: surface.strokeWidth, opacity: 1 });
   return makeGroup(frame.getId(), [background, ...texts], transform, surface.opacity ?? 1);
 }

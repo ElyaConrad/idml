@@ -31,46 +31,27 @@
       </div>
     </div>
 
-    <div class="panes">
-      <!-- Left: idml2svg dev preview (same parsed IDML instance) -->
-      <section class="pane">
-        <h3>SVG preview (dev)</h3>
-        <div class="svg-list">
-          <svg
-            v-for="(spread, i) in spreads"
-            :key="`svg-${i}`"
-            xmlns="http://www.w3.org/2000/svg"
-            :viewBox="`${spread.viewBox.x} ${spread.viewBox.y} ${spread.viewBox.width} ${spread.viewBox.height}`"
-          >
-            <SVGElement v-for="page in spread.pages" :element="page" />
-          </svg>
-        </div>
-      </section>
-
-      <!-- Right: the serials from IdmlSerialConverter, rendered by SerialWrapper -->
-      <section class="pane">
-        <h3>Bluepic Serial preview ({{ serials.length }})</h3>
-        <div class="serial-list">
-          <div v-for="(bundle, i) in serials" :key="`serial-${i}`" class="serial-block">
-            <div class="serial-frame" :style="{ width: '420px', aspectRatio: `${bundle.serial.width} / ${bundle.serial.height}` }">
-              <SerialWrapper :serial="bundle.serial as any" :load-fonts="true" />
-            </div>
+    <!-- The serials from IdmlSerialConverter, rendered by SerialWrapper -->
+    <section class="pane">
+      <h3>Bluepic Serial preview ({{ serials.length }})</h3>
+      <div class="serial-list">
+        <div v-for="(bundle, i) in serials" :key="`serial-${i}`" class="serial-block">
+          <div class="serial-frame" :style="{ aspectRatio: `${bundle.serial.width} / ${bundle.serial.height}` }">
+            <SerialWrapper :serial="bundle.serial as any" :load-fonts="true" />
           </div>
         </div>
-      </section>
-    </div>
+      </div>
+    </section>
   </div>
 </template>
 
 <script lang="ts" setup>
 import { NButton } from 'naive-ui';
 import { ref, onMounted } from 'vue';
-import SVGElement from '../components/SVGElement.vue';
-import { convertIDML2SVG, IdmlSerialConverter, type AssetFile, type SpreadDocument } from '../../../src/main';
+import { IdmlSerialConverter, type AssetFile } from '../../../src/main';
 import { SerialWrapper } from '@bluepic/core';
 import '@bluepic/core/style.css';
 
-const spreads = ref<SpreadDocument[]>([]);
 const serials = ref<any[]>([]);
 const requiredFonts = ref<{ family: string }[]>([]);
 const missingFontFamilies = ref<Set<string>>(new Set());
@@ -103,9 +84,6 @@ async function run(files: AssetFile[]) {
     requiredFonts.value = converter.requiredFonts.map((f) => ({ family: f.family }));
     missingFontFamilies.value = new Set(converter.missingFonts.map((f) => f.family));
     missingImages.value = converter.missingImages.map((m) => ({ imageId: m.imageId, linkURI: m.linkURI }));
-
-    status.value = 'idml2svg preview…';
-    spreads.value = await convertIDML2SVG(converter.document);
 
     status.value = 'Injecting fonts + converting (precise)…';
     serials.value = await converter.convert();
@@ -141,14 +119,14 @@ onMounted(async () => {
 
 <style scoped lang="scss">
 .view-idml-bluepic {
-  padding: 16px;
+
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  height: 100%;
   overflow: hidden;
 
   .toolbar {
+      padding: 16px;
     display: flex;
     align-items: center;
     gap: 16px;
@@ -167,6 +145,7 @@ onMounted(async () => {
     margin-top: 10px;
     font-size: 12px;
     color: #555;
+      padding: 0 16px;
     .asset-group {
       display: flex;
       align-items: center;
@@ -190,51 +169,40 @@ onMounted(async () => {
     }
   }
 
-  .panes {
+  .pane {
+      padding: 16px;
     display: flex;
-    gap: 24px;
-    margin-top: 16px;
+    flex-direction: column;
     flex: 1 1 auto;
-    overflow: hidden;
+    margin-top: 16px;
+    overflow: scroll;
 
-    .pane {
-      flex: 1 1 50%;
+    h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: #333;
+      flex: 0 0 auto;
+    }
+
+    .serial-list {
+
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      gap: 16px;
+      padding-right: 8px;
+    }
 
-      h3 {
-        margin: 0 0 8px;
-        font-size: 14px;
-        color: #333;
-        flex: 0 0 auto;
-      }
+    .serial-frame {
+      width: 100%;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      background-image: linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
+      background-size: 16px 16px;
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 
-      .svg-list,
-      .serial-list {
-        overflow: auto;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        padding-right: 8px;
-      }
-
-      svg {
-        border: 1px solid #ccc;
-        background: #f9f9f9;
+      :deep(.serial-wrapper) {
         width: 100%;
-      }
-
-      .serial-frame {
-        border: 1px solid #ccc;
-        background-image: linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%);
-        background-size: 16px 16px;
-        background-position: 0 0, 0 8px, 8px -8px, -8px 0;
-
-        :deep(.serial-wrapper) {
-          width: 100%;
-          height: 100%;
-        }
+        height: 100%;
       }
     }
   }

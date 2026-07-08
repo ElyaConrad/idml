@@ -16,6 +16,15 @@ export type EffectiveTextStyle = {
   color: string;
   /** IDML `Capitalization="AllCaps"` -> renders uppercase (serial `uppercase` prop). */
   uppercase: boolean;
+  /** IDML character `Underline`. A thick, offset underline is InDesign's idiom for a
+   * per-line highlight bar ("Bauchbinde") — see buildTextElements' line-background emit. */
+  underline: boolean;
+  /** Underline stroke thickness in px (pt at 72dpi). */
+  underlineWeight?: number;
+  /** Underline position relative to the baseline in px (negative = above the baseline). */
+  underlineOffset?: number;
+  /** Underline stroke color as hex (own swatch — e.g. Paper -> white). */
+  underlineColor?: string;
 };
 
 // Bluepic textAlign is a 0..1 fraction: offset = (maxLineWidth - lineWidth) * textAlign.
@@ -58,6 +67,10 @@ export function effectiveTextStyle(paragraph: ParagraphOutput, feature: Paragrap
   // Only AllCaps maps to the serial's boolean `uppercase`; SmallCaps has no
   // Bluepic equivalent, so it renders as-is (not forced to full caps).
   const capitalization = pick('capitalization') as string | undefined;
+  const underline = pick('underline') as boolean | undefined;
+  const underlineWeight = pick('underlineWeight') as number | undefined;
+  const underlineOffset = pick('underlineOffset') as number | undefined;
+  const underlineColor = pick('underlineColor') as ColorInput | undefined;
   return {
     // No explicit font in any style layer -> the document's root default
     // ([No paragraph style] AppliedFont), which is what unstyled IDML text
@@ -74,6 +87,10 @@ export function effectiveTextStyle(paragraph: ParagraphOutput, feature: Paragrap
     lineHeight: leading && leading > 0 ? leading / fontSize : 1.2,
     color: colorInputToHex(fillColor) ?? '#000000ff',
     uppercase: capitalization === 'allCaps',
+    underline: underline === true,
+    underlineWeight,
+    underlineOffset,
+    underlineColor: colorInputToHex(underlineColor) ?? undefined,
   };
 }
 
