@@ -60,6 +60,10 @@ export async function makeImagePreviewSrc(bytes: ArrayBuffer, mime: string): Pro
         maxWidth: PREVIEW_MAX_DIMENSION,
         maxHeight: PREVIEW_MAX_DIMENSION,
         mimeType: mime,
+        // Preserve transparency: without this, compressorjs auto-converts PNGs over its
+        // 5MB `convertSize` to JPEG and flattens alpha onto a white background. Only PNGs
+        // are affected (`convertTypes`); downscaling to PREVIEW_MAX_DIMENSION still runs.
+        convertSize: Infinity,
         success: (result: Blob) => resolve(result),
         error: (err: unknown) => reject(err),
       });
