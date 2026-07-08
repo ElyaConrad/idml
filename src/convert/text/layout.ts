@@ -71,34 +71,12 @@ export function textElementFromRuns(id: string, runs: TextRun[], box: Box, align
   );
 }
 
-/**
- * Vertical offset (px, frame-local) to add to a TOP-aligned text frame's box so
- * bluepic-core renders its baselines where InDesign does.
- *
- * InDesign's default First Baseline Offset is "Ascent": the first line's baseline
- * sits at `frameTop + fontAscent`. bluepic-core, because {@link makeText} emits
- * `bounding: 'fontSize'`, draws every line with canvas `textBaseline: 'hanging'`,
- * which sits at `frameTop + 0.8*fontAscent` (the canvas hanging baseline is a
- * fixed 0.8*ascent for every font without a BASE table, i.e. all Latin fonts;
- * verified across Barlow/Minion/Arial/Georgia/Times). So core places EVERY line
- * `0.2*ascent` too high; since later lines advance by leading in both systems,
- * the whole block is a constant `0.2*ascent` too high, and shifting the box down
- * by that amount (from the first line's font) corrects all lines at once.
- *
- * `fontAscent` is the canvas `fontBoundingBoxAscent` of the first run: the same
- * metric InDesign's "Ascent" reads (measured equal for the document fonts) and
- * the same canvas core measures against, so the correction is self-consistent
- * with the renderer rather than an independent guess. Returns 0 when no canvas is
- * available, leaving the box (and thus the prior, slightly-high output) unchanged.
- *
- * Only top alignment is corrected; center/bottom justification anchors the block
- * differently and is left untouched for now.
- */
 // The canvas 'hanging' baseline sits a fixed 0.8*ascent above the alphabetic
 // baseline for every font without a BASE table (all Latin fonts; verified across
-// Barlow/Minion/Arial/Georgia/Times), so the alphabetic baseline a top-aligned
-// line renders at is 0.8*ascent below its box top. The first-baseline shift adds
-// the remaining 0.2*ascent to match InDesign's Ascent first-baseline.
+// Barlow/Minion/Arial/Georgia/Times). The normal text path now emits the 'font'
+// bounding (alphabetic baseline = fontAscent below the box top, which matches
+// InDesign's Ascent first-baseline directly), so this only remains for the vertical
+// -justify path's optional 'fontSize' mode, whose hanging baseline needs the factor.
 export const HANGING_BASELINE_FRACTION = 0.8;
 
 /** Canvas `fontBoundingBoxAscent` for a style at a given size (default the style's
@@ -109,6 +87,19 @@ export function fontAscent(core: typeof import('@bluepic/core/text'), style: Eff
     const metrics = core.textInfo('Mg', { fontFamily: style.fontFamily, fontWeight: style.fontWeight, fontStyle: style.fontStyle, fontSize, letterSpacing: style.letterSpacing }, 'alphabetic', false);
     const ascent = metrics?.fontBoundingBoxAscent;
     return ascent && Number.isFinite(ascent) ? ascent : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Canvas `fontBoundingBoxDescent` for a style — the descent 'font' bounding places
+ * below the baseline and adds to the line advance. Subtracted out of the emitted
+ * lineHeight so the physical leading still equals InDesign's. 0 if no canvas. */
+export function fontDescent(core: typeof import('@bluepic/core/text'), style: EffectiveTextStyle, fontSize: number = style.fontSize): number {
+  try {
+    const metrics = core.textInfo('Mg', { fontFamily: style.fontFamily, fontWeight: style.fontWeight, fontStyle: style.fontStyle, fontSize, letterSpacing: style.letterSpacing }, 'alphabetic', false);
+    const descent = metrics?.fontBoundingBoxDescent;
+    return descent && Number.isFinite(descent) ? descent : 0;
   } catch {
     return 0;
   }
@@ -142,14 +133,6 @@ export function fitLineHeightForBlockHeight(probe: ProbeLayout, bounding: TextBo
     else hi = mid;
   }
   return (lo + hi) / 2;
-}
-
-export function firstBaselineAscentShift(core: typeof import('@bluepic/core/text'), style: EffectiveTextStyle): number {
-  try {
-    return (1 - HANGING_BASELINE_FRACTION) * fontAscent(core, style);
-  } catch {
-    return 0;
-  }
 }
 
 /**
@@ -256,11 +239,12 @@ export function buildVerticalJustifyElement(
  * per-paragraph leading is (as before) not preserved — which keeps each
  * chunk's own rendering self-consistent with the merged layout above.
  *
- * With `bounding: 'fontSize'` (what makeText emits) line advances depend only
- * on fontSize × lineHeight, NOT on font metrics — so chunk positions are
- * exact even when the document's fonts aren't loaded at conversion time; only
- * auto-wrap points (and therefore how many lines a chunk occupies) need real
- * measurements.
+ * The normal path emits `bounding: 'font'` (the system default): line advances
+ * are (fontBoundingBox height) × lineHeight and the first line's alphabetic
+ * baseline lands at frameTop + fontAscent = InDesign's "Ascent", so no box shift
+ * is needed. 'font''s extra descent is subtracted out of the emitted lineHeight so
+ * the physical leading still equals InDesign's. Without a canvas (fonts unmeasured)
+ * the path falls back to the render-font-independent `'fontSize'`.
  *
  * When splitting is off, unnecessary (single statement) or unavailable (no
  * canvas), the result is a single element equal to the pre-split output —
@@ -355,9 +339,9 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
   const fullText = runs.map((r) => r.text).join('');
   if (fullText.trim() === '') return []; // empty frame -> no text element (caller still draws any background)
 
-  // `core` is null without a canvas (plain Node) — vertical justify and the ascent-vs-
-  // hanging first-baseline correction both need measurement, so they no-op there and the
-  // frame keeps its natural leading / box.
+  // `core` is null without a canvas (plain Node) — vertical justify and the 'font'
+  // leading/baseline math both need measurement, so they no-op there and the frame
+  // keeps its natural leading and the render-font-independent 'fontSize' fallback.
   const core = await loadTextLayout();
 
   // Forced breaks normalized: core only breaks lines on '\n', so a raw U+2028 would
@@ -366,7 +350,7 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
 
   // Lay out the merged frame exactly as bluepic-core would render it. `bounding`, block
   // top `y` and `maxHeight` are params: the split path uses the emit bounding at the
-  // shifted box, while vertical justify probes the natural (huge maxHeight = un-shrunk)
+  // frame box, while vertical justify probes the natural (huge maxHeight = un-shrunk)
   // block and may measure 'actual-outer'. `lineHeight` is a param because justify widens it.
   const probeLayout: ProbeLayout = (lineHeight, bounding, y, maxHeight) =>
     core!.layoutText({
@@ -389,14 +373,23 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
     if (justified) return [justified];
   }
 
-  // Compensate the ascent-vs-hanging first-baseline mismatch for ordinary top-aligned text.
-  if (verticalAlign === 0 && core) box = { ...box, y: box.y + firstBaselineAscentShift(core, base) };
+  // Emit with 'font' bounding (the system default). Its first line's alphabetic baseline
+  // sits at frameTop + fontAscent = InDesign's "Ascent" first-baseline, so — unlike the
+  // hanging 'fontSize' baseline — NO box shift is needed. 'font' widens the line advance by
+  // fontBoundingBoxDescent, so subtract that out of lineHeight to keep the physical leading
+  // equal to InDesign's. Without a canvas we can't measure the metric, so fall back to the
+  // render-font-independent 'fontSize' (advance = fontSize × lineHeight, box unshifted).
+  let emitBounding: TextBounding = 'fontSize';
+  if (core) {
+    emitBounding = 'font';
+    lineHeightPercent = base.lineHeight * 100 - (fontDescent(core, base) / base.fontSize) * 100;
+  }
 
   // The unsplit fallback: everything in one element.
-  const singleElement = () => [textElementFromRuns(id, normalizedRuns, box, firstAlign, firstJustify, verticalAlign, lineHeightPercent, singleElementTransform)];
+  const singleElement = () => [textElementFromRuns(id, normalizedRuns, box, firstAlign, firstJustify, verticalAlign, lineHeightPercent, singleElementTransform, emitBounding)];
 
-  // Line-stacking layout for the split path: emit bounding ('fontSize'), the shifted box.
-  const runLayout = (lineHeight: number) => probeLayout(lineHeight, 'fontSize', box.y, box.height);
+  // Line-stacking layout for the split path: same bounding + lineHeight we emit.
+  const runLayout = (lineHeight: number) => probeLayout(lineHeight, emitBounding, box.y, box.height);
 
   // 'never' keeps the whole frame as one element (richText carries real diffs).
   if (settings.textSplittingHeuristic === 'never') return singleElement();
@@ -509,9 +502,10 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
 
   // Re-seat each chunk's first line onto the InDesign baseline grid instead of
   // core's single-line-height stacking. Two terms: the grid offset (per-line
-  // leading), and the ascent float (a smaller line's hanging baseline sits higher
-  // inside its own box). A frame with uniform size AND leading needs neither — skip
-  // it entirely so its output stays byte-identical to the pre-grid behaviour.
+  // leading), and the ascent float (a smaller line's alphabetic baseline sits at
+  // fontAscent below its box top, so a size change shifts the box top by the ascent
+  // difference). A frame with uniform size AND leading needs neither — skip it
+  // entirely so its output stays byte-identical to the pre-grid behaviour.
   const firstContentStyle = (chunk: TextChunk) => chunk.runs.find((r) => r.text.trim() !== '')?.style ?? chunk.runs[0]?.style ?? base;
   const uniformSize = emitted.every((e) => firstContentStyle(e.chunk).fontSize === base.fontSize);
   const uniformLeading = segmentLeadings.every((l) => l === segmentLeadings[0]);
@@ -534,13 +528,16 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
     if (applyGrid) {
       const first = firstContentStyle(chunk);
       const gridOffset = (baselineGrid[segIndex] - baselineGrid[emitted[0].segIndex]) * fitScale;
-      const ascentFloat = HANGING_BASELINE_FRACTION * (refAscent - fontAscent(core, first, first.fontSize * fitScale));
+      // 'font' emits an alphabetic baseline at fontAscent below the box top (full ascent,
+      // not the 0.8 hanging factor), so a chunk sized differently from the reference shifts
+      // its box top by the whole ascent difference.
+      const ascentFloat = refAscent - fontAscent(core, first, first.fontSize * fitScale);
       y = emitted[0].top + gridOffset + ascentFloat;
     }
     const chunkBox: Box = { x: box.x, y, width: box.width, height: bottom - top };
     const chunkRuns = fitScale === 1 ? chunk.runs : chunk.runs.map((r) => ({ ...r, style: { ...r.style, fontSize: r.style.fontSize * fitScale } }));
     // Children are positioned inside the caller's group -> identity transform.
-    elements.push(textElementFromRuns(`${id}_${i + 1}`, chunkRuns, chunkBox, chunk.align, chunk.justify, 0, lineHeightPercent, IDENTITY_DECOMP));
+    elements.push(textElementFromRuns(`${id}_${i + 1}`, chunkRuns, chunkBox, chunk.align, chunk.justify, 0, lineHeightPercent, IDENTITY_DECOMP, emitBounding));
   }
   return elements;
 }

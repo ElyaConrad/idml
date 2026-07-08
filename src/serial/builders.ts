@@ -261,10 +261,13 @@ export function makeText(id: string, input: TextInput, transform: DecomposedTran
       richText: obj(input.richText),
       autoLinebreaks: bool(input.autoLinebreaks),
       autoLinebreaksAllowBreakChars: bool(false),
-      // 'fontSize' bounding makes the line advance = fontSize * lineHeight, so it
-      // matches InDesign's leading exactly ('font' inflates it by the font's
-      // bounding box). lineHeight is the relative percentage (120 = 120%).
-      bounding: str(input.bounding ?? 'fontSize'),
+      // Default 'font' (the system-wide default): line advance = (fontBoundingBox
+      // ascent+descent) * lineHeight and the first line's alphabetic baseline sits at
+      // frameTop + fontAscent — matching InDesign's "Ascent" first-baseline with no
+      // extra shift. The idml text pipeline compensates 'font''s extra descent in the
+      // emitted lineHeight so the physical leading still equals InDesign's. lineHeight
+      // is the relative percentage (120 = 120%).
+      bounding: str(input.bounding ?? 'font'),
       uppercase: bool(input.uppercase ?? false),
       // pos[0]/pos[1] are the horizontal/vertical anchors: they position the text
       // block within the frame (core: offset = (max - block) * pos), and x/y are the
