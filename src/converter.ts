@@ -1,9 +1,10 @@
 import { fileTypeFromBuffer } from 'file-type';
 import { IDML } from './idml.js';
-import { convertIDML2Serial, ConvertedSerial, ConvertIDML2SerialOptions, FontVariant, ImageGraphicType, ImageSrcResolver, RequiredFont } from './idml2serial.js';
+import { convertIDML2Serial, ConvertedSerial, ConvertIDML2SerialOptions, FontVariant, ImageGraphicType, ImageSrcResolver, ImageViewBoxResolver, RequiredFont } from './idml2serial.js';
 import { AssetFile, AggregatedAssets, AggregatedFont, AggregatedImage, collectAssets, matchFontFiles, matchImageFile } from './assets.js';
 import { loadFontsForMeasurement, LoadableFont } from './util/fontLoading.js';
 import { isDisplayableImageMime, makeImagePreviewSrc } from './util/imagePreview.js';
+import { parseSvgViewBox, type SvgViewBox } from './util/svgViewBox.js';
 import type { Font as SerialFont } from './serial/serial-types.js';
 
 /** Extension -> MIME for provided files (reliable, and catches SVG which byte
@@ -121,7 +122,10 @@ export class IdmlSerialConverter {
     // the gray placeholder. Non-displayable (AI/EPS/PSD/PDF/TIFF) stay placeholders
     // and only ride the upload manifest for bx-files conversion.
     const resolveImageSrc = await this.buildImageResolver();
-    const result = await convertIDML2Serial(this.idml, { ...options, resolveImageSrc });
+    // Supply SVG viewBoxes for LINKED SVGs (bytes not on the sprite) so their crop is placed
+    // against the rendered artboard, not the auto-cropped content bbox (embedded read directly).
+    const resolveImageViewBox = this.buildImageViewBoxResolver();
+    const result = await convertIDML2Serial(this.idml, { ...options, resolveImageSrc, resolveImageViewBox });
     for (const { serial } of result) serial.fonts = mergeFonts(serial.fonts, serialFonts);
     this.lastResult = result;
     return result;
@@ -241,6 +245,28 @@ export class IdmlSerialConverter {
       this.previewKeys.add(imageKey(img));
       if (img.linkURI) byLinkURI.set(img.linkURI, src);
       else byImageId.set(img.imageId, src);
+    }
+    if (byLinkURI.size === 0 && byImageId.size === 0) return undefined;
+    return ({ imageId, linkURI }) => (linkURI ? byLinkURI.get(linkURI) : undefined) ?? byImageId.get(imageId);
+  }
+
+  /**
+   * SVG viewBox provider (by linkURI / imageId) for LINKED SVGs — their bytes aren't on the
+   * sprite, so the kernel can't read the viewBox itself. Parse it from the embedded-or-provided
+   * bytes so the crop is placed against the rendered artboard (InDesign's GraphicBounds is the
+   * auto-cropped content bbox). Undefined when no SVG has a resolvable viewBox.
+   */
+  private buildImageViewBoxResolver(): ImageViewBoxResolver | undefined {
+    const byLinkURI = new Map<string, SvgViewBox>();
+    const byImageId = new Map<string, SvgViewBox>();
+    for (const img of this.aggregated.images) {
+      if (img.graphicType !== 'SVG') continue;
+      const bytes = img.embedded && img.data ? img.data : this.assetForImage(img)?.bytes;
+      if (!bytes) continue;
+      const vb = parseSvgViewBox(bytes);
+      if (!vb) continue;
+      if (img.linkURI) byLinkURI.set(img.linkURI, vb);
+      else byImageId.set(img.imageId, vb);
     }
     if (byLinkURI.size === 0 && byImageId.size === 0) return undefined;
     return ({ imageId, linkURI }) => (linkURI ? byLinkURI.get(linkURI) : undefined) ?? byImageId.get(imageId);

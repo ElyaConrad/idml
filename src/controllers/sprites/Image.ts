@@ -7,6 +7,7 @@ import { GeometricSprite, GeometricSpriteOpts } from './GeometricSprite.js';
 import { Sprite } from './Sprite.js';
 import {fileTypeFromBuffer} from 'file-type';
 import { arrayBufferToBase64, base64ToArrayBuffer } from '../../util/arrayBuffer.js';
+import { parseSvgViewBox, type SvgViewBox } from '../../util/svgViewBox.js';
 
 export type GraphicBounds = {
   left: number;
@@ -71,18 +72,11 @@ export class ImageSprite extends GeometricSprite {
    * pixels of the (externally converted) file.
    */
   getMetadataNaturalSize(): { width: number; height: number } | undefined {
-    if (!this.graphicBounds) return undefined;
-    const gw = this.graphicBounds.right - this.graphicBounds.left;
-    const gh = this.graphicBounds.bottom - this.graphicBounds.top;
-    if (!(gw > 0 && gh > 0)) return undefined;
-    // Raster with a ppi: GraphicBounds (points) × ppi → source pixels. Otherwise (vector
-    // graphic — SVG/PDF/EPS/WMF — or a raster missing ppi) GraphicBounds ARE the intrinsic
-    // coordinate size; only the aspect/ratio matters downstream (it cancels as a placement
-    // ratio), so return them as-is instead of undefined.
-    if (this.actualPpi) {
-      return { width: Math.round((gw / 72) * this.actualPpi.x), height: Math.round((gh / 72) * this.actualPpi.y) };
-    }
-    return { width: gw, height: gh };
+    if (!this.graphicBounds || !this.actualPpi) return undefined;
+    const width = ((this.graphicBounds.right - this.graphicBounds.left) / 72) * this.actualPpi.x;
+    const height = ((this.graphicBounds.bottom - this.graphicBounds.top) / 72) * this.actualPpi.y;
+    if (!(width > 0 && height > 0)) return undefined;
+    return { width: Math.round(width), height: Math.round(height) };
   }
   async getNaturalSize() {
     try {
@@ -132,6 +126,21 @@ export class ImageSprite extends GeometricSprite {
       width: right - x,
       height: bottom - y,
     };
+  }
+  /** The SVG's `viewBox` (its RENDERED coordinate extent) from EMBEDDED bytes, or undefined
+   * for a non-SVG / linked SVG (whose bytes reach the converter, which supplies the viewBox
+   * separately). The IDML GraphicBounds is the CONTENT bbox (InDesign auto-crops the artboard
+   * padding); a crop must be expressed against the viewBox — see {@link viewBoxToBBox}. */
+  getSvgViewBox(): SvgViewBox | undefined {
+    return this.graphicType === 'SVG' && this.contents ? parseSvgViewBox(this.contents) : undefined;
+  }
+  /** Map an SVG viewBox rect (in the SVG's user space, same space as GraphicBounds) into the
+   * page-normalized bbox space `getBBox` uses — so it can serve as the crop reference `ib`
+   * for the RENDERED extent (the whole artboard) instead of just the cropped content. */
+  viewBoxToBBox(vb: SvgViewBox) {
+    const [x, y] = this.parentSpread.normalizeCoords(vb.minX, vb.minY);
+    const [right, bottom] = this.parentSpread.normalizeCoords(vb.minX + vb.width, vb.minY + vb.height);
+    return { x, y, width: right - x, height: bottom - y };
   }
   setBBox(x: number, y: number, width: number, height: number) {
     const [left, top] = this.parentSpread.relativeCoords(x, y);

@@ -6,9 +6,10 @@ import { PolygonSprite } from '../controllers/sprites/Polygon';
 import { ImageSprite } from '../controllers/sprites/Image';
 import { bakeSpriteMatrix, decomposeMatrix, DecomposedTransform } from '../util/layout';
 import { arrayBufferToBase64 } from '../util/arrayBuffer';
+import { ensureSvgIntrinsicSize } from '../util/svgViewBox';
 import { isDisplayableImageMime } from '../util/imagePreview';
 import { makeImage, makeMask, SerialImageValue } from '../serial/builders';
-import { AssetCollector, ImageSrcResolver } from './assets';
+import { AssetCollector, ImageSrcResolver, ImageViewBoxResolver } from './assets';
 import { surfaceOf } from './paint';
 import { cornerRadii, cornersAreSimple, frameOutlineShape } from './shapes';
 
@@ -29,7 +30,9 @@ async function imageDataUrl(image: ImageSprite, resolveImageSrc?: ImageSrcResolv
   // undefined for vector graphics, so read the raw contents explicitly.
   if (image.getGraphicType() === 'SVG') {
     const svg = image.getContents();
-    if (svg) return `data:image/svg+xml;base64,${arrayBufferToBase64(svg)}`;
+    // Pin width/height to the viewBox so the browser's measured size matches the crop's
+    // viewBox reference (see ensureSvgIntrinsicSize); else a viewBox-only SVG mis-scales.
+    if (svg) return `data:image/svg+xml;base64,${arrayBufferToBase64(ensureSvgIntrinsicSize(svg).buffer as ArrayBuffer)}`;
   }
 
   // Embedded raster — only when the browser can render the format. TIFF/PSD (also
@@ -72,20 +75,23 @@ export async function fullImageElement(image: ImageSprite, transform: Decomposed
  * mask paths use this so they fit the FRAME box identically. A placeholder /
  * unknown-size image returns crop=null (cover the frame box).
  */
-async function frameImageValue(frame: RectangleSprite | OvalSprite | PolygonSprite, image: ImageSprite, pageMatrix: Matrix, resolveImageSrc?: ImageSrcResolver): Promise<SerialImageValue | null> {
+async function frameImageValue(frame: RectangleSprite | OvalSprite | PolygonSprite, image: ImageSprite, pageMatrix: Matrix, resolveImageSrc?: ImageSrcResolver, resolveImageViewBox?: ImageViewBoxResolver): Promise<SerialImageValue | null> {
   const src = await imageDataUrl(image, resolveImageSrc);
   if (!src) return null;
   const base = { src, cropMode: 'cover' as const, innerAlign: 'center', mirrorX: false, mirrorY: false, innerRotate: 0 };
 
-  // Natural size (only its ASPECT/ratio matters below — it cancels per axis in both the
-  // crop and the inset detection/padding). VECTOR graphics (SVG/PDF/EPS/WMF) use their IDML
-  // GraphicBounds: the embedded-bytes decode is unreliable (a browser reports a bogus or
-  // 0×0 size for a size-less SVG). Rasters decode the bytes, else fall back to metadata.
+  // Crop reference (`ib`) + `natural` (its RENDERED extent). For a RASTER, GraphicBounds ==
+  // the pixel bounds == what's drawn, so `getBBox` + the decoded pixel size are right. An SVG
+  // is different: InDesign records GraphicBounds as the CONTENT (ink) bbox — it auto-crops the
+  // artboard padding — but a browser renders the WHOLE viewBox. So for an SVG we crop against
+  // its viewBox (from embedded bytes, or the converter for linked assets); otherwise the ink
+  // lands at the wrong scale/offset. Without a usable size → cover the frame (crop=null).
+  const viewBox = image.getSvgViewBox() ?? resolveImageViewBox?.({ imageId: image.getId(), linkURI: image.getLinkURI() });
+  let ib: { x: number; y: number; width: number; height: number } | undefined;
   let natural: { width: number; height: number };
-  if (image.isVectorGraphic()) {
-    const metadata = image.getMetadataNaturalSize();
-    if (!metadata) return { ...base, crop: null };
-    natural = metadata;
+  if (viewBox) {
+    ib = image.viewBoxToBBox(viewBox);
+    natural = { width: viewBox.width, height: viewBox.height };
   } else {
     try {
       natural = await image.getNaturalSize();
@@ -94,12 +100,11 @@ async function frameImageValue(frame: RectangleSprite | OvalSprite | PolygonSpri
       if (!metadata) return { ...base, crop: null };
       natural = metadata;
     }
+    ib = image.getBBox();
   }
-
-  const fb = frame.getGeometricBounds();
-  const ib = image.getBBox();
   if (!ib || ib.width === 0 || ib.height === 0) return { ...base, crop: null };
 
+  const fb = frame.getGeometricBounds();
   const frameToImage = inverse(bakeSpriteMatrix(image, pageMatrix));
   const corners = [
     { x: fb.x, y: fb.y },
@@ -108,37 +113,19 @@ async function frameImageValue(frame: RectangleSprite | OvalSprite | PolygonSpri
     { x: fb.x, y: fb.y + fb.height },
   ].map((c) => {
     const local = applyToPoint(frameToImage, c);
-    return { x: ((local.x - ib.x) / ib.width) * natural.width, y: ((local.y - ib.y) / ib.height) * natural.height };
+    return { x: ((local.x - ib!.x) / ib!.width) * natural.width, y: ((local.y - ib!.y) / ib!.height) * natural.height };
   });
   const xs = corners.map((p) => p.x);
   const ys = corners.map((p) => p.y);
   const left = Math.min(...xs);
   const top = Math.min(...ys);
-  const cw = Math.max(...xs) - left;
-  const ch = Math.max(...ys) - top;
-
-  // Inset placement: when the frame window over-scans the source on ALL four sides, the
-  // graphic sits ENTIRELY inside its frame (an inset logo/icon, e.g. an SVG scaled ~20% and
-  // offset) — NOT a crop. Cover would blow it up to fill the frame. Keep the frame element's
-  // box + transform (correct on the page) and inset the image WITHIN it via `contain` + a
-  // per-side `padding` [top,right,bottom,left] in ELEMENT-box px. The over-scan on each side
-  // as a fraction of the crop window is the inset; each axis's `natural` cancels, so a
-  // size-less SVG's aspect is irrelevant. `crop:null` → core sizes the crop from the RENDERED
-  // image (imageInfo, Image.vue), so it fits whatever the SVG declares.
-  const overL = -left;
-  const overT = -top;
-  const overR = left + cw - natural.width;
-  const overB = top + ch - natural.height;
-  if (cw > 0 && ch > 0 && overL > 0 && overT > 0 && overR > 0 && overB > 0 && fb.width > 0 && fb.height > 0) {
-    const padding: [number, number, number, number] = [(overT / ch) * fb.height, (overR / cw) * fb.width, (overB / ch) * fb.height, (overL / cw) * fb.width];
-    return { ...base, cropMode: 'contain', crop: null, padding };
-  }
-
-  // The crop is in `natural`-pixel space. Emit that reference size so a consumer that
-  // downscales the asset (compress/rasterize) can rescale the crop by finalSize/natural —
-  // the crop is really a placement RATIO, so the exact `natural` cancels and only needs to
-  // be KNOWN. For a linked image at convert time this is the IDML metadata size.
-  return { ...base, crop: { left, top, width: cw, height: ch }, naturalWidth: natural.width, naturalHeight: natural.height };
+  // The crop is in `natural`-pixel space (== the RENDERED extent: the viewBox for an SVG, the
+  // pixels for a raster), so it aligns with what the renderer draws. Emit that reference size
+  // so a consumer that downscales the asset can rescale the crop by finalSize/natural — the
+  // crop is really a placement RATIO. For a placed graphic bigger than its frame this is a
+  // real sub-region crop; for an inset graphic it over-scans (transparent margin), reproducing
+  // InDesign's placement either way.
+  return { ...base, crop: { left, top, width: Math.max(...xs) - left, height: Math.max(...ys) - top }, naturalWidth: natural.width, naturalHeight: natural.height };
 }
 
 /**
@@ -152,7 +139,7 @@ export async function imageFrameAsImage(frame: RectangleSprite, image: ImageSpri
   if (Math.abs(imagePlacement.rotate) > 0.5 || Math.abs(imagePlacement.skewX) > 0.5) return null;
   if (!cornersAreSimple(frame.getCornerOptions())) return null;
 
-  const value = await frameImageValue(frame, image, pageMatrix, collector.resolveImageSrc);
+  const value = await frameImageValue(frame, image, pageMatrix, collector.resolveImageSrc, collector.resolveImageViewBox);
   if (!value) return null;
   await collector.addImage(frame.getId(), image); // the frame IS the image element here
   const fb = frame.getBBox();

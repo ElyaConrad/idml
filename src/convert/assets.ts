@@ -70,12 +70,20 @@ export type ConvertedSerial = { serial: Template.Serial; assets: SerialAssets };
  */
 export type ImageSrcResolver = (info: { imageId: string; linkURI?: string }) => string | undefined;
 
+/**
+ * Supplies an SVG's `viewBox` (rendered coordinate extent) for LINKED SVGs, whose bytes
+ * aren't embedded on the sprite — the converter parses the provided file and answers by
+ * imageId/linkURI. Embedded SVGs read it straight off the sprite. Needed so a placed SVG's
+ * crop is expressed against the artboard (what's drawn), not the auto-cropped content bbox.
+ */
+export type ImageViewBoxResolver = (info: { imageId: string; linkURI?: string }) => { minX: number; minY: number; width: number; height: number } | undefined;
+
 export class AssetCollector {
   private fonts = new Map<string, Map<string, FontVariant>>(); // family -> styleName|"w|i" -> variant
   readonly missingImages: MissingImage[] = [];
   readonly imagesToUpload: ImageToUpload[] = [];
 
-  constructor(readonly resolveImageSrc?: ImageSrcResolver) {}
+  constructor(readonly resolveImageSrc?: ImageSrcResolver, readonly resolveImageViewBox?: ImageViewBoxResolver) {}
 
   addFont(family: string, variant: FontVariant) {
     if (!family) return;

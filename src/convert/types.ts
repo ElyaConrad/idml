@@ -1,4 +1,4 @@
-import { ImageSrcResolver } from './assets';
+import { ImageSrcResolver, ImageViewBoxResolver } from './assets';
 import { TextBounding } from '../serial/builders';
 
 /** Options for {@link convertIDML2Serial}. */
@@ -37,6 +37,12 @@ export type ConvertIDML2SerialOptions = {
    * omitted for a bare kernel convert (embedded rasters/SVG still get data URLs).
    */
   resolveImageSrc?: ImageSrcResolver;
+  /**
+   * Optional per-image SVG viewBox provider (by id/linkURI). The asset-aware converter
+   * passes this for LINKED SVGs so their crop is placed against the rendered artboard, not
+   * the auto-cropped content bbox. Embedded SVGs read their viewBox off the sprite directly.
+   */
+  resolveImageViewBox?: ImageViewBoxResolver;
   /**
    * Which core line-box model reproduces InDesign's `VerticalJustification="JustifyAlign"`
    * (lines distributed to fill the frame height). All emit uniform baseline gaps by

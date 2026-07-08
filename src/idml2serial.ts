@@ -23,7 +23,7 @@ import { findImageChild, fullImageElement, imageFrameAsImage, imageFrameAsMask }
 import { textFrameElement } from './convert/text/layout';
 
 // Re-exports: names that moved out but must remain importable from this module.
-export type { FontVariant, RequiredFont, ImageGraphicType, MissingImage, ImageToUpload, SerialAssets, ConvertedSerial, ImageSrcResolver } from './convert/assets';
+export type { FontVariant, RequiredFont, ImageGraphicType, MissingImage, ImageToUpload, SerialAssets, ConvertedSerial, ImageSrcResolver, ImageViewBoxResolver } from './convert/assets';
 export type { ConvertIDML2SerialOptions, TextSplittingHeuristic, VerticalJustifyBounding, VerticalJustifyFit } from './convert/types';
 
 /**
@@ -212,7 +212,7 @@ function paperBackgroundElement(page: Spread['pages'][number], fill: Paint): Tem
  * bounds, so facing/stacked pages and all their sprites live together.
  */
 export async function convertIDML2Serial(idml: IDML, options: ConvertIDML2SerialOptions = {}): Promise<import('./convert/assets').ConvertedSerial[]> {
-  const { paperBackground = true, textSplittingHeuristic = 'format-and-paragraph-only', resolveImageSrc, verticalJustifyImplementationBounding = 'font', verticalJustifyImplementationFit = 'grow', lineBackgroundPaddingEm = 0.3 } = options;
+  const { paperBackground = true, textSplittingHeuristic = 'format-and-paragraph-only', resolveImageSrc, resolveImageViewBox, verticalJustifyImplementationBounding = 'font', verticalJustifyImplementationFit = 'grow', lineBackgroundPaddingEm = 0.3 } = options;
   const settings: ConvertSettings = { textSplittingHeuristic, verticalJustifyBounding: verticalJustifyImplementationBounding, verticalJustifyFit: verticalJustifyImplementationFit, lineBackgroundPaddingEm };
   const paper = paperBackground ? paperFill(idml) : null;
   const results: import('./convert/assets').ConvertedSerial[] = [];
@@ -220,7 +220,7 @@ export async function convertIDML2Serial(idml: IDML, options: ConvertIDML2Serial
     const spread = spreadPackage.getSpread();
     const viewBox = spreadViewBox(spread);
     const viewBoxShift = translate(-viewBox.x, -viewBox.y); // spread coords -> canvas-local
-    const collector = new AssetCollector(resolveImageSrc);
+    const collector = new AssetCollector(resolveImageSrc, resolveImageViewBox);
 
     // One Bluepic group per IDML page (mirrors idml2svg's per-page nesting), so
     // every sprite transform is simply its baked matrix relative to its parent.

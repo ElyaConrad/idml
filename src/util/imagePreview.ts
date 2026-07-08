@@ -5,6 +5,8 @@
 // fonts. This module turns bytes into a displayable preview URL; the converter
 // injects that URL, and a persisting wizard later swaps it for a durable one.
 
+import { ensureSvgIntrinsicSize } from './svgViewBox.js';
+
 /**
  * MIME types a browser renders directly, so their bytes can become a preview src.
  * Everything else an IDML may place — TIFF, PSD (both arrive as graphicType
@@ -37,14 +39,20 @@ const PREVIEW_QUALITY = 0.85;
 export async function makeImagePreviewSrc(bytes: ArrayBuffer, mime: string): Promise<string | undefined> {
   if (!isDisplayableImageMime(mime)) return undefined;
 
+  // SVG is text — never rasterize it. Pin its width/height to the viewBox first, so a browser
+  // measures its intrinsic size AS the viewBox — that's the coordinate space a placed SVG's
+  // crop is expressed in (see ensureSvgIntrinsicSize). Serve inline as-is in Node.
+  if (mime === 'image/svg+xml') {
+    const svg = ensureSvgIntrinsicSize(bytes);
+    if (isNode) return `data:${mime};base64,${Buffer.from(svg).toString('base64')}`;
+    return URL.createObjectURL(new Blob([svg as BlobPart], { type: mime }));
+  }
+
   if (isNode) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const base64 = Buffer.from(bytes).toString('base64');
     return `data:${mime};base64,${base64}`;
   }
-
-  // SVG is text — recompressing via canvas would rasterize it. Serve as-is.
-  if (mime === 'image/svg+xml') return URL.createObjectURL(new Blob([bytes], { type: mime }));
 
   try {
     // NOT @vite-ignore'd (unlike the node-only linkedom/sharp/skia imports):
