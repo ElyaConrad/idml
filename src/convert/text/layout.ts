@@ -120,7 +120,7 @@ export const BAUCHBINDE_MIN_WEIGHT_RATIO = 0.5;
  * measured ascent all track the shrunken text; the emitted rectangle centres on the
  * baseline+offset (baseline = line top + ascent) with height = the underline weight.
  */
-export function lineBackgroundBar(core: typeof import('@bluepic/core/text') | null, targetTextId: string, style: EffectiveTextStyle, scale: number): Template.Elements.Rectangle | null {
+export function lineBackgroundBar(core: typeof import('@bluepic/core/text') | null, targetTextId: string, style: EffectiveTextStyle, scale: number, paddingEm: number): Template.Elements.Rectangle | null {
   if (!style.underline) return null;
   const fontSize = style.fontSize * scale;
   const weight = (style.underlineWeight ?? 0) * scale;
@@ -131,7 +131,7 @@ export function lineBackgroundBar(core: typeof import('@bluepic/core/text') | nu
   const ascent = core ? fontAscent(core, style, fontSize) : null;
   // Underline color defaults to the text fill when the run gives none (InDesign).
   const fill = style.underlineColor ?? style.color;
-  return makeLineBackgroundRectangle(`${targetTextId}_linebg`, targetTextId, { fill, weight, offset, ascent, padX: 0 });
+  return makeLineBackgroundRectangle(`${targetTextId}_linebg`, targetTextId, { fill, weight, offset, ascent, padX: paddingEm * fontSize });
 }
 
 /** A layout probe over the merged frame: `(lineHeight%, bounding, blockTopY, maxHeight)`.
@@ -377,7 +377,7 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
   // run carries a thick offset underline (see lineBackgroundBar). Bars go BEFORE the
   // text in build order so the global z-reverse lands them behind it.
   const withBars = (pairs: Array<{ el: Template.Elements.Text; style: EffectiveTextStyle; scale: number }>): Template.Element[] => {
-    const bars = pairs.map((p) => lineBackgroundBar(core, p.el.id, p.style, p.scale)).filter((b): b is Template.Elements.Rectangle => b !== null);
+    const bars = pairs.map((p) => lineBackgroundBar(core, p.el.id, p.style, p.scale, settings.lineBackgroundPaddingEm)).filter((b): b is Template.Elements.Rectangle => b !== null);
     return [...bars, ...pairs.map((p) => p.el)];
   };
 

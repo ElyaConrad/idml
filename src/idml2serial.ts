@@ -212,8 +212,8 @@ function paperBackgroundElement(page: Spread['pages'][number], fill: Paint): Tem
  * bounds, so facing/stacked pages and all their sprites live together.
  */
 export async function convertIDML2Serial(idml: IDML, options: ConvertIDML2SerialOptions = {}): Promise<import('./convert/assets').ConvertedSerial[]> {
-  const { paperBackground = true, textSplittingHeuristic = 'format-and-paragraph-only', resolveImageSrc, verticalJustifyImplementationBounding = 'fontSize', verticalJustifyImplementationFit = 'grow' } = options;
-  const settings: ConvertSettings = { textSplittingHeuristic, verticalJustifyBounding: verticalJustifyImplementationBounding, verticalJustifyFit: verticalJustifyImplementationFit };
+  const { paperBackground = true, textSplittingHeuristic = 'format-and-paragraph-only', resolveImageSrc, verticalJustifyImplementationBounding = 'fontSize', verticalJustifyImplementationFit = 'grow', lineBackgroundPaddingEm = 0.3 } = options;
+  const settings: ConvertSettings = { textSplittingHeuristic, verticalJustifyBounding: verticalJustifyImplementationBounding, verticalJustifyFit: verticalJustifyImplementationFit, lineBackgroundPaddingEm };
   const paper = paperBackground ? paperFill(idml) : null;
   const results: import('./convert/assets').ConvertedSerial[] = [];
   for (const spreadPackage of idml.spreadPackages) {

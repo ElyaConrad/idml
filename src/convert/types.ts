@@ -65,6 +65,14 @@ export type ConvertIDML2SerialOptions = {
    *    descent is reserved instead of overflowing).
    */
   verticalJustifyImplementationFit?: VerticalJustifyFit;
+  /**
+   * Horizontal padding of the "Bauchbinde" line-background bar (reconstructed from a
+   * thick offset underline — see the text converter), as a fraction of the run's font
+   * size, applied to each side. InDesign's underline spans the run's leading/trailing
+   * spaces; core trims trailing whitespace from the line width, so a small inset restores
+   * that visible margin. Default `0.3`. `0` = hug the measured line box. Vertical extent
+   * stays the underline weight (already taller than the text). */
+  lineBackgroundPaddingEm?: number;
 };
 /** See {@link ConvertIDML2SerialOptions.textSplittingHeuristic}. */
 export type TextSplittingHeuristic = 'strict' | 'format-and-paragraph-only' | 'never';
@@ -73,4 +81,4 @@ export type VerticalJustifyBounding = 'fontSize' | 'actual-outer';
 /** See {@link ConvertIDML2SerialOptions.verticalJustifyImplementationFit}. */
 export type VerticalJustifyFit = 'grow' | 'contain';
 /** Resolved options, threaded through the sprite walk. */
-export type ConvertSettings = { textSplittingHeuristic: TextSplittingHeuristic; verticalJustifyBounding: VerticalJustifyBounding; verticalJustifyFit: VerticalJustifyFit };
+export type ConvertSettings = { textSplittingHeuristic: TextSplittingHeuristic; verticalJustifyBounding: VerticalJustifyBounding; verticalJustifyFit: VerticalJustifyFit; lineBackgroundPaddingEm: number };
