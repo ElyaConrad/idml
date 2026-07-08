@@ -36,6 +36,12 @@ export function applyDropShadow(element: Template.Element, shadow: DropShadowVal
   element.filter.dropShadow = obj(shadow);
 }
 
+/** An identity serial transform — used to neutralise a child before its parent group
+ * takes over the (frame) transform, so the transform is applied exactly once. */
+export function identityTransform(): Template.Transform {
+  return serialTransform({ translateX: 0, translateY: 0, rotate: 0, skewX: 0, skewY: 0, scaleX: 1, scaleY: 1 });
+}
+
 function serialTransform(t: DecomposedTransform): Template.Transform {
   return {
     translateX: num(t.translateX),
@@ -113,18 +119,26 @@ export function makeRectangle(id: string, box: Box, radius: [number, number, num
  * The bar's centre sits on `baseline + underlineOffset` (baseline = line top +
  * ascent) and its height = the underline weight. When the caller measured the font
  * ascent (`ascent` given), that's baked into a constant; without a canvas it falls
- * back to `0.8·lines[i].height` (the render-time font-bounding proportion). Horizontal
- * `padX` insets each edge (0 = hug the line box; the run's leading/trailing spaces
- * already give a small margin).
+ * back to `0.8·lines[i].height` (the render-time font-bounding proportion).
+ *
+ * Horizontal: `pad` insets each side. When `leftAnchorX` is given (left-aligned text),
+ * the bar's LEFT edge is pinned to that constant frame-left (minus pad) instead of the
+ * per-line text start — so every line's bar shares one clean left edge, matching InDesign,
+ * regardless of differing per-line font sizes/leading spaces. The right edge still tracks
+ * the line's text end (+pad). When null (centre/right), the bar hugs the line box ±pad.
  */
-export function makeLineBackgroundRectangle(id: string, targetTextId: string, opts: { fill: Paint; weight: number; offset: number; ascent: number | null; padX: number }): Template.Elements.Rectangle {
+export function makeLineBackgroundRectangle(id: string, targetTextId: string, opts: { fill: Paint; weight: number; offset: number; ascent: number | null; pad: number; leftAnchorX: number | null }): Template.Elements.Rectangle {
   const fmt = (n: number) => Number(n.toFixed(4)).toString();
   // ` + n` / ` - n`, so a negative constant reads `- 58.63` rather than `+ -58.63`.
   const signed = (n: number) => (n >= 0 ? ` + ${fmt(n)}` : ` - ${fmt(-n)}`);
   const L = `${targetTextId}.lines[i]`;
-  const { padX, weight, offset, ascent } = opts;
+  const { pad, weight, offset, ascent, leftAnchorX } = opts;
   const k = offset - weight / 2; // bar top relative to the baseline
   const yExpr = ascent !== null ? `${L}.y${signed(ascent + k)}` : `${L}.y + 0.8 * ${L}.height${signed(k)}`;
+  // Left-aligned: pin the left edge to the frame-left constant so all lines align;
+  // width spans from there to the line's text end + pad. Otherwise hug the line box.
+  const xExpr = leftAnchorX !== null ? fmt(leftAnchorX - pad) : `${L}.x${pad ? ` - ${fmt(pad)}` : ''}`;
+  const widthExpr = leftAnchorX !== null ? `${L}.x + ${L}.width${signed(2 * pad - leftAnchorX)}` : `${L}.width${pad ? ` + ${fmt(2 * pad)}` : ''}`;
   return {
     name: 'rectangle',
     id,
@@ -132,9 +146,9 @@ export function makeLineBackgroundRectangle(id: string, targetTextId: string, op
     properties: {
       'v-transform-origin': ORIGIN_0,
       visible: bool(true),
-      x: exprRaw(padX ? `${L}.x - ${fmt(padX)}` : `${L}.x`),
+      x: exprRaw(xExpr),
       y: exprRaw(yExpr),
-      width: exprRaw(padX ? `${L}.width + ${fmt(padX * 2)}` : `${L}.width`),
+      width: exprRaw(widthExpr),
       height: exprRaw(fmt(weight)),
       radius: numArray([0, 0, 0, 0]),
       pos: POS_TL,

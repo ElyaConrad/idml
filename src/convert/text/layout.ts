@@ -1,7 +1,7 @@
 import type * as Template from '../../serial/serial-types';
 import { TextFrame } from '../../controllers/sprites/TextFrame';
 import { DecomposedTransform } from '../../util/layout';
-import { makeRectangle, makeLineBackgroundRectangle, makeText, makeGroup, Box, RichTextRun, TextBounding } from '../../serial/builders';
+import { makeRectangle, makeLineBackgroundRectangle, identityTransform, makeText, makeGroup, Box, RichTextRun, TextBounding } from '../../serial/builders';
 import { IDENTITY_DECOMP } from '../constants';
 import { ConvertSettings } from '../types';
 import { AssetCollector } from '../assets';
@@ -120,7 +120,7 @@ export const BAUCHBINDE_MIN_WEIGHT_RATIO = 0.5;
  * measured ascent all track the shrunken text; the emitted rectangle centres on the
  * baseline+offset (baseline = line top + ascent) with height = the underline weight.
  */
-export function lineBackgroundBar(core: typeof import('@bluepic/core/text') | null, targetTextId: string, style: EffectiveTextStyle, scale: number, paddingEm: number): Template.Elements.Rectangle | null {
+export function lineBackgroundBar(core: typeof import('@bluepic/core/text') | null, targetTextId: string, style: EffectiveTextStyle, scale: number, pad: number, leftAnchorX: number | null): Template.Elements.Rectangle | null {
   if (!style.underline) return null;
   const fontSize = style.fontSize * scale;
   const weight = (style.underlineWeight ?? 0) * scale;
@@ -131,7 +131,7 @@ export function lineBackgroundBar(core: typeof import('@bluepic/core/text') | nu
   const ascent = core ? fontAscent(core, style, fontSize) : null;
   // Underline color defaults to the text fill when the run gives none (InDesign).
   const fill = style.underlineColor ?? style.color;
-  return makeLineBackgroundRectangle(`${targetTextId}_linebg`, targetTextId, { fill, weight, offset, ascent, padX: paddingEm * fontSize });
+  return makeLineBackgroundRectangle(`${targetTextId}_linebg`, targetTextId, { fill, weight, offset, ascent, pad, leftAnchorX });
 }
 
 /** A layout probe over the merged frame: `(lineHeight%, bounding, blockTopY, maxHeight)`.
@@ -375,9 +375,14 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
 
   // Prepend a line-background "Bauchbinde" bar for every emitted element whose base
   // run carries a thick offset underline (see lineBackgroundBar). Bars go BEFORE the
-  // text in build order so the global z-reverse lands them behind it.
-  const withBars = (pairs: Array<{ el: Template.Elements.Text; style: EffectiveTextStyle; scale: number }>): Template.Element[] => {
-    const bars = pairs.map((p) => lineBackgroundBar(core, p.el.id, p.style, p.scale, settings.lineBackgroundPaddingEm)).filter((b): b is Template.Elements.Rectangle => b !== null);
+  // text in build order so the global z-reverse lands them behind it. The horizontal
+  // pad is a FRAME-level constant (base font size, not each line's own), so a bigger
+  // first line doesn't get a wider inset than the lines below it; and left-aligned bars
+  // pin their left edge to the shared frame-left (boxX) for one clean edge like InDesign.
+  const withBars = (pairs: Array<{ el: Template.Elements.Text; style: EffectiveTextStyle; scale: number; boxX: number; align: number }>): Template.Element[] => {
+    const bars = pairs
+      .map((p) => lineBackgroundBar(core, p.el.id, p.style, p.scale, settings.lineBackgroundPaddingEm * base.fontSize * p.scale, p.align < 0.25 ? p.boxX : null))
+      .filter((b): b is Template.Elements.Rectangle => b !== null);
     return [...bars, ...pairs.map((p) => p.el)];
   };
 
@@ -407,7 +412,7 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
   // (fall through) for <2 lines, too-short frames, or if measurement fails.
   if (verticalJustify && core) {
     const justified = buildVerticalJustifyElement(id, normalizedRuns, box, firstAlign, firstJustify, singleElementTransform, core, base, settings, probeLayout);
-    if (justified) return withBars([{ el: justified, style: base, scale: 1 }]);
+    if (justified) return withBars([{ el: justified, style: base, scale: 1, boxX: box.x, align: firstAlign }]);
   }
 
   // Emit with 'font' bounding (the system default). Its first line's alphabetic baseline
@@ -425,7 +430,7 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
   // The unsplit fallback: everything in one element (+ its line-background bar, if any).
   const singleElement = (): Template.Element[] => {
     const el = textElementFromRuns(id, normalizedRuns, box, firstAlign, firstJustify, verticalAlign, lineHeightPercent, singleElementTransform, emitBounding);
-    return withBars([{ el, style: base, scale: 1 }]);
+    return withBars([{ el, style: base, scale: 1, boxX: box.x, align: firstAlign }]);
   };
 
   // Line-stacking layout for the split path: same bounding + lineHeight we emit.
@@ -580,8 +585,9 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
     elements.push(textElementFromRuns(`${id}_${i + 1}`, chunkRuns, chunkBox, chunk.align, chunk.justify, 0, lineHeightPercent, IDENTITY_DECOMP, emitBounding));
   }
   // Each split element's bar binds to that element (its own lines), and the fit
-  // scale is threaded so weight/offset/ascent track any merged-fit shrink.
-  return withBars(emitted.map((e, i) => ({ el: elements[i], style: firstContentStyle(e.chunk), scale: fitScale })));
+  // scale is threaded so weight/offset/ascent track any merged-fit shrink. All split
+  // elements share the frame's box.x, so left-aligned bars land on one clean left edge.
+  return withBars(emitted.map((e, i) => ({ el: elements[i], style: firstContentStyle(e.chunk), scale: fitScale, boxX: box.x, align: e.chunk.align })));
 }
 
 /**
@@ -603,9 +609,13 @@ export async function textFrameElement(frame: TextFrame, transform: DecomposedTr
   if (!hasBackground) {
     if (texts.length === 0) return null;
     if (texts.length === 1) return texts[0];
-    // >1 is either split text (children already id-suffixed) or a single text plus
-    // its line-background bar — in that case the lone text keeps the frame id, so the
-    // wrapping group needs a distinct id to stay globally unique.
+    // >1 is either split text (children already identity + id-suffixed) or a single text
+    // plus its line-background bar. In the latter case the single text was built carrying
+    // the frame transform (the standalone path) — but it's now inside a group that ALSO
+    // carries it, so neutralise the children to identity and let the group own the
+    // transform once (split children are already identity → no-op). The lone text also
+    // keeps the frame id, so the wrapping group needs a distinct id to stay unique.
+    for (const t of texts) t.transform = identityTransform();
     const collides = texts.some((t) => t.id === frame.getId());
     return makeGroup(collides ? `${frame.getId()}_g` : frame.getId(), texts, transform, surface.opacity ?? 1);
   }
