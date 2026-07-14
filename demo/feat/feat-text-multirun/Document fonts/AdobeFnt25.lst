@@ -1,0 +1,36 @@
+%!Adobe-FontList 1.25
+%Locale:0x409
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:Invalid
+OutlineFileName:/Users/mauriceconrad/Documents/Bluepic/Modules/idml/demo/feat/feat-text-multirun/Document fonts/AdobeFnt25.lst
+FileLength:566
+FileModTime:805759210
+%EndFont
+
+%BeginFont
+Handler:DirectoryHandler
+FontType:TrueType
+FontName:Inter-Regular
+FamilyName:Inter
+StyleName:Regular
+MenuName:Inter
+FamilyPrefix:Inter
+StyleBits:0
+WeightClass:400
+WidthClass:5
+AngleClass:0
+FullName:Inter Regular
+WritingScript:Roman
+OutlineFileName:/Users/mauriceconrad/Documents/Bluepic/Modules/idml/demo/feat/feat-text-multirun/Document fonts/Inter.ttf
+DataFormat:sfntData
+hasSVG:no
+hasSBIX:no
+hasCOLR:no
+VariableFontType:TrueTypeVariableFont
+FileLength:876576
+FileModTime:805758776
+NameArray:0,Win,1,Inter
+%EndFont
+
