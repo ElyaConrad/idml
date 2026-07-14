@@ -19,7 +19,13 @@ export function isDisplayableImageMime(mime: string | undefined): boolean {
   return !!mime && DISPLAYABLE_IMAGE_MIMES.has(mime);
 }
 
-const isNode = typeof window === 'undefined';
+// "Not a real browser" — emit a self-contained `data:` URL rather than a
+// session `blob:`. True under plain Node (no `window`) AND under happy-dom
+// (core's headless canvas), where `window` IS defined but there's no real
+// canvas/compressorjs and a `blob:` URL isn't portable into a render sandbox.
+// Mirrors fontLoading.ts's `RUNS_HEADLESS` so fonts and images stay consistent.
+const RUNS_HEADLESS = typeof (globalThis as { happyDOM?: unknown }).happyDOM !== 'undefined';
+const useDataUrl = RUNS_HEADLESS || typeof window === 'undefined';
 // A placed full-res photo is pointless in the editor; cap the preview and let the
 // real upload keep the original bytes. Matches the spirit of bx-studio's compress.
 const PREVIEW_MAX_DIMENSION = 2048;
@@ -44,11 +50,11 @@ export async function makeImagePreviewSrc(bytes: ArrayBuffer, mime: string): Pro
   // crop is expressed in (see ensureSvgIntrinsicSize). Serve inline as-is in Node.
   if (mime === 'image/svg+xml') {
     const svg = ensureSvgIntrinsicSize(bytes);
-    if (isNode) return `data:${mime};base64,${Buffer.from(svg).toString('base64')}`;
+    if (useDataUrl) return `data:${mime};base64,${Buffer.from(svg).toString('base64')}`;
     return URL.createObjectURL(new Blob([svg as BlobPart], { type: mime }));
   }
 
-  if (isNode) {
+  if (useDataUrl) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const base64 = Buffer.from(bytes).toString('base64');
     return `data:${mime};base64,${base64}`;
