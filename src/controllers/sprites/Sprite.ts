@@ -545,7 +545,12 @@ export abstract class Sprite {
     const size = ensureNumber(element.getAttribute('Size')) ?? 0;
     const effectColorId = element.getAttribute('EffectColor') ?? 'Color/Black';
     const spread = ensureNumber(element.getAttribute('Spread')) ?? 0;
-    const opacity = ensureNumber(element.getAttribute('Opacity')) ?? 100;
+    // An object's DropShadowSetting only carries the attributes it OVERRIDES; an omitted one
+    // inherits the document default (InDesign's is Opacity="75"). We must distinguish "absent"
+    // (inherit 75) from an explicit "0": `ensureNumber` runs `Number()`, and `Number(null)` is
+    // `0`, not NaN — so `ensureNumber(getAttribute('Opacity')) ?? 75` would collapse a missing
+    // attribute to a 0% (invisible) shadow. Gate on hasAttribute so only a real value is read.
+    const opacity = element.hasAttribute('Opacity') ? (ensureNumber(element.getAttribute('Opacity')) ?? 75) : 75;
 
     return {
       mode,
