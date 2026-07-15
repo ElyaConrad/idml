@@ -84,6 +84,10 @@ async function frameWithContentAsMask(frame: RectangleSprite | OvalSprite | Poly
 // ---- dispatch --------------------------------------------------------------
 
 async function spriteToElement(sprite: Sprite, pageMatrix: Matrix, collector: AssetCollector, settings: ConvertSettings): Promise<Template.Element | null> {
+  // Visibility gate: InDesign's export produces NOTHING for an item that is Visible="false"
+  // or Nonprinting="true". Skip such items entirely (this choke point covers top-level AND
+  // nested group children). (Hidden-layer gating is TODO — layers aren't modelled yet.)
+  if (!sprite.isRenderable()) return null;
   // A sprite's transform is its baked matrix RELATIVE TO ITS PARENT container
   // (a page group for top-level sprites, the parent sprite-group for nested
   // children). IDML group-child itemTransforms are already relative to the

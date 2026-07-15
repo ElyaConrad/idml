@@ -60,6 +60,8 @@ export type IDMLDocumentContext = {
 export class IDML extends EventTarget {
   static implementedElements = ['idPkg:Graphic', 'idPkg:Styles', 'idPkg:Fonts', 'idPkg:Preferences', 'idPkg:MasterSpread', 'idPkg:Spread', 'idPkg:BackingStory', 'idPkg:Story'];
   designmap?: HTMLElement;
+  /** Layer id → visible. A page item on a hidden layer must not render (InDesign export skips it). */
+  private layerVisibility: Map<string, boolean> = new Map();
   graphics: IDMLGraphicController[] = [];
   styles: IDMLStylesController[] = [];
   fonts: IDMLFontsController[] = [];
@@ -160,6 +162,11 @@ export class IDML extends EventTarget {
   }
   getFillById(id: string) {
     return this.getColorById(id) ?? this.getGradientById(id);
+  }
+  /** Is the layer an item belongs to visible? Unknown/absent layer id → visible (default). */
+  getLayerVisible(layerId?: string) {
+    if (!layerId) return true;
+    return this.layerVisibility.get(layerId) ?? true;
   }
   assumeColor(color: ColorInput | string) {
     if (typeof color === 'string') {
@@ -385,6 +392,12 @@ export class IDML extends EventTarget {
     }
 
     this.designmap = parseXML(await designmapEntry.text());
+
+    // Layers (designmap children): record visibility so items on a hidden layer are skipped.
+    for (const layerEl of Array.from(this.designmap.getElementsByTagName('Layer'))) {
+      const self = layerEl.getAttribute('Self');
+      if (self) this.layerVisibility.set(self, layerEl.getAttribute('Visible') !== 'false');
+    }
 
     // Document XMP metadata: font descriptors carry the original on-disk file
     // names, the reliable link to a package's `Document fonts/` binaries.

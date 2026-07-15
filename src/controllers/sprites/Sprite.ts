@@ -49,6 +49,8 @@ export type SpriteOpts = {
   storyTitle?: string;
   contentType?: string;
   visible?: boolean;
+  nonprinting?: boolean;
+  itemLayerId?: string;
   horizontalLayoutConstraints?: HorizontalLayoutConstraints;
   verticalLayoutConstraints?: VerticalLayoutConstraints;
   fillColorId?: string;
@@ -127,6 +129,8 @@ export abstract class Sprite {
   private storyTitle?: string;
   private contentType?: string;
   private visible?: boolean;
+  private nonprinting?: boolean;
+  private itemLayerId?: string;
   private horizontalLayoutConstraints?: HorizontalLayoutConstraints;
   private verticalLayoutConstraints?: VerticalLayoutConstraints;
   private fillColorId?: string;
@@ -158,6 +162,8 @@ export abstract class Sprite {
     this.storyTitle = opts.storyTitle;
     this.contentType = opts.contentType;
     this.visible = opts.visible;
+    this.nonprinting = opts.nonprinting;
+    this.itemLayerId = opts.itemLayerId;
     this.horizontalLayoutConstraints = opts.horizontalLayoutConstraints;
     this.verticalLayoutConstraints = opts.verticalLayoutConstraints;
     this.fillColorId = opts.fillColorId;
@@ -354,6 +360,15 @@ export abstract class Sprite {
   getVisible() {
     return this.visible;
   }
+  /** InDesign "Nonprinting" attribute (Attributes panel) — such items export blank. */
+  getNonprinting() {
+    return this.nonprinting ?? false;
+  }
+  /** Should this item paint at all? Gates on Visible + Nonprinting (layer visibility TODO — layers
+   * aren't modelled yet). Mirrors InDesign's export: invisible/nonprinting items produce nothing. */
+  isRenderable() {
+    return this.getVisible() !== false && !this.getNonprinting() && this.context.idml.getLayerVisible(this.itemLayerId);
+  }
   setVisible(visible: boolean) {
     this.visible = visible;
   }
@@ -449,6 +464,8 @@ export abstract class Sprite {
     const storyTitle = props.StoryTitle;
     const contentType = props.ContentType;
     const visible = ensureBoolean(props.Visible, true);
+    const nonprinting = ensureBoolean(props.Nonprinting, false);
+    const itemLayerId = props.ItemLayer;
     const horizontalLayoutConstraints = props.HorizontalLayoutConstraints ? (ensureEnumArray(props.HorizontalLayoutConstraints).map((v) => layoutDimensionMap.getInternal(v)) as HorizontalLayoutConstraints) : undefined;
     const verticalLayoutConstraints = props.VerticalLayoutConstraints ? (ensureEnumArray(props.VerticalLayoutConstraints).map((v) => layoutDimensionMap.getInternal(v)) as VerticalLayoutConstraints) : undefined;
     const fillColorId = props.FillColor;
@@ -511,6 +528,8 @@ export abstract class Sprite {
       storyTitle,
       contentType,
       visible,
+      nonprinting,
+      itemLayerId,
       horizontalLayoutConstraints,
       verticalLayoutConstraints,
       fillColorId,

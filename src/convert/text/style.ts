@@ -25,6 +25,12 @@ export type EffectiveTextStyle = {
   underlineOffset?: number;
   /** Underline stroke color as hex (own swatch — e.g. Paper -> white). */
   underlineColor?: string;
+  /** IDML character stroke (outlined text): stroke color as hex + weight in px. Core paints
+   * `<text stroke stroke-width>`; we don't emit it today, so outlined text is invisible. */
+  strokeColor?: string;
+  strokeWeight?: number;
+  /** IDML character `StrikeThru` — renders as `text-decoration: line-through`. */
+  strikeThrough?: boolean;
 };
 
 // Bluepic textAlign is a 0..1 fraction: offset = (maxLineWidth - lineWidth) * textAlign.
@@ -71,6 +77,9 @@ export function effectiveTextStyle(paragraph: ParagraphOutput, feature: Paragrap
   const underlineWeight = pick('underlineWeight') as number | undefined;
   const underlineOffset = pick('underlineOffset') as number | undefined;
   const underlineColor = pick('underlineColor') as ColorInput | undefined;
+  const strokeColor = pick('strokeColor') as ColorInput | undefined;
+  const strokeWeight = pick('strokeWeight') as number | undefined;
+  const strikeThrough = pick('strikeThrough') as boolean | undefined;
   return {
     // No explicit font in any style layer -> the document's root default
     // ([No paragraph style] AppliedFont), which is what unstyled IDML text
@@ -91,6 +100,9 @@ export function effectiveTextStyle(paragraph: ParagraphOutput, feature: Paragrap
     underlineWeight,
     underlineOffset,
     underlineColor: colorInputToHex(underlineColor) ?? undefined,
+    strokeColor: strokeWeight && strokeWeight > 0 ? (colorInputToHex(strokeColor) ?? undefined) : undefined,
+    strokeWeight: strokeWeight && strokeWeight > 0 ? strokeWeight : undefined,
+    strikeThrough: strikeThrough === true,
   };
 }
 
