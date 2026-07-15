@@ -66,7 +66,14 @@ export function determineFontType(fontBuffer: ArrayBufferLike): string {
  */
 export function typoAscentRatio(fontBuffer: ArrayBufferLike): number | null {
   try {
+    // Only TrueType-outline fonts: InDesign's "Ascent" first-baseline reads the OS/2
+    // sTypoAscender for TrueType fonts, but the win/full ascent (= the canvas
+    // fontBoundingBoxAscent core already uses) for CFF/OpenType (.otf) fonts. Applying the
+    // typo correction to CFF fonts shifts them too high (e.g. DINPro), so gate on outline
+    // format — `opentype.outlinesFormat` distinguishes them ('truetype' vs 'cff'); note
+    // fontkit reports type 'TTF' for both, so it is NOT a reliable discriminator here.
     const font = opentype.parse(fontBuffer as ArrayBuffer);
+    if (font.outlinesFormat !== 'truetype') return null;
     const os2 = font.tables.os2;
     const asc = os2?.sTypoAscender;
     const em = font.unitsPerEm;

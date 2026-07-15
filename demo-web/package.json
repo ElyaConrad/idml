@@ -9,7 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@bluepic/core": "^0.2.9",
     "@types/downloadjs": "^1.4.6",
     "@vicons/ionicons5": "^0.12.0",
     "bytes": "^3.1.2",
@@ -23,7 +22,8 @@
     "vue-router": "^4.4.5"
   },
   "devDependencies": {
-    "@bluepic/types": "^0.5.3",
+    "@bluepic/core": "^0.2.31",
+    "@bluepic/types": "^0.6.21",
     "@rollup/plugin-inject": "^5.0.5",
     "@types/bytes": "^3.1.4",
     "@types/mime-types": "^2.1.4",
