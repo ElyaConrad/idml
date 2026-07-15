@@ -1,6 +1,6 @@
 {
   "name": "idml",
-  "version": "0.1.47",
+  "version": "0.1.49",
   "type": "module",
   "main": "./dist/cjs/main.js",
   "module": "./dist/esm/main.js",
@@ -21,6 +21,7 @@
   "scripts": {
     "inject-idml-plain": "echo \"export const IDML_PLAIN = '$(base64 -i src/assets/IDML_PLAIN.idml)';\" > src/assets/IDML_PLAIN.ts",
     "build": "npm run build:esm && npm run build:cjs && node scripts/postbuild.mjs",
+    "prepack": "npm run build",
     "build:esm": "tsc --module ESNext --outDir dist/esm",
     "build:cjs": "tsc --module CommonJS --outDir dist/cjs",
     "watch": "npm-watch",
@@ -52,7 +53,7 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "@bluepic/core": "^0.2.34",
+    "@bluepic/core": "^0.2.36",
     "@bluepic/types": "^0.6.27",
     "@types/color": "^4.2.0",
     "@types/fontkit": "^2.0.7",
