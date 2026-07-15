@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import SVG2IDML from './views/SVG2IDML.vue';
 import FlatSVG from './views/FlatSVG.vue';
 import IDML from './views/IDML.vue';
 import IDMLBluepic from './views/IDMLBluepic.vue';
@@ -8,11 +7,6 @@ const routes = [
   {
     path: '/',
     redirect: '/flatsvg',
-  },
-  {
-    path: '/svg2idml',
-    name: 'SVG2IDML',
-    component: SVG2IDML,
   },
   {
     path: '/flatsvg',

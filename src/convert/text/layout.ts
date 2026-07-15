@@ -74,7 +74,7 @@ export function textElementFromRuns(id: string, runs: TextRun[], box: Box, align
       autoLinebreaks: true,
       uppercase,
       textDecoration,
-      hyphenate: false,
+      hyphenate: base.hyphenate,
       hyphenationLanguage: base.hyphenationLanguage,
       fill: base.color,
       // Outlined text: InDesign character stroke → core paints <text stroke stroke-width>.
