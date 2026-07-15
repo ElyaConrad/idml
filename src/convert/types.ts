@@ -44,6 +44,12 @@ export type ConvertIDML2SerialOptions = {
    */
   resolveImageViewBox?: ImageViewBoxResolver;
   /**
+   * Per-family typographic ascent ratio (`sTypoAscender/unitsPerEm`) so the first baseline lands at
+   * InDesign's "Ascent" offset instead of the canvas `fontBoundingBoxAscent`. Needed for fonts whose
+   * winAscent exceeds the typo ascender (e.g. DIN-Bold), which otherwise drop the text ~0.3em too low.
+   */
+  resolveFontAscentRatio?: (family: string) => number | undefined;
+  /**
    * Which core line-box model reproduces InDesign's `VerticalJustification="JustifyAlign"`
    * (lines distributed to fill the frame height). All emit uniform baseline gaps by
    * widening the line advance; they differ only in where the FIRST baseline is drawn
@@ -89,4 +95,4 @@ export type VerticalJustifyBounding = 'font' | 'fontSize' | 'actual-outer';
 /** See {@link ConvertIDML2SerialOptions.verticalJustifyImplementationFit}. */
 export type VerticalJustifyFit = 'grow' | 'contain';
 /** Resolved options, threaded through the sprite walk. */
-export type ConvertSettings = { textSplittingHeuristic: TextSplittingHeuristic; verticalJustifyBounding: VerticalJustifyBounding; verticalJustifyFit: VerticalJustifyFit; lineBackgroundPaddingEm: number };
+export type ConvertSettings = { textSplittingHeuristic: TextSplittingHeuristic; verticalJustifyBounding: VerticalJustifyBounding; verticalJustifyFit: VerticalJustifyFit; lineBackgroundPaddingEm: number; resolveFontAscentRatio?: (family: string) => number | undefined };

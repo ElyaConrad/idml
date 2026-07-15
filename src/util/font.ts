@@ -57,3 +57,21 @@ export function determineFontType(fontBuffer: ArrayBufferLike): string {
   const font = fontkit.create(new Uint8Array(fontBuffer) as any);
   return font.type;
 }
+
+/**
+ * The font's TYPOGRAPHIC ascender as a fraction of the em (`OS/2.sTypoAscender / unitsPerEm`).
+ * This is the metric InDesign uses for its "Ascent" first-baseline offset. It is NOT always equal
+ * to the canvas `fontBoundingBoxAscent` (which follows `winAscent`/`hhea` and can be inflated —
+ * e.g. DIN-Bold: typo 0.712em vs win 1.015em). Returns null if unreadable.
+ */
+export function typoAscentRatio(fontBuffer: ArrayBufferLike): number | null {
+  try {
+    const font = opentype.parse(fontBuffer as ArrayBuffer);
+    const os2 = font.tables.os2;
+    const asc = os2?.sTypoAscender;
+    const em = font.unitsPerEm;
+    return asc && em ? asc / em : null;
+  } catch {
+    return null;
+  }
+}

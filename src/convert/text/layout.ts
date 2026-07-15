@@ -448,6 +448,20 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
 
   const growToFit = !!core && emitBounding === 'font' && verticalAlign === 0;
 
+  // First-baseline correction: InDesign's "Ascent" first-baseline uses the TYPOGRAPHIC ascender
+  // (OS/2.sTypoAscender), but core's 'font' bounding draws the baseline at `fontBoundingBoxAscent`
+  // (winAscent). For most fonts these coincide; for some (e.g. DIN-Bold: win 1.015em vs typo 0.712em)
+  // winAscent is inflated, dropping the text ~(win−typo)·fontSize too low. Shift the box UP by that
+  // difference so the first baseline lands where InDesign puts it. Top-aligned 'font' bounding only
+  // (centre/bottom/justify anchor differently). No-op when the font ratio is unknown or equal.
+  if (core && emitBounding === 'font' && verticalAlign === 0) {
+    const ratio = settings.resolveFontAscentRatio?.(base.fontFamily);
+    if (ratio && ratio > 0) {
+      const delta = fontAscent(core, base) - ratio * base.fontSize; // winAscent − typoAscent, in px
+      if (Math.abs(delta) > 0.5) box = { ...box, y: box.y - delta };
+    }
+  }
+
   // The unsplit fallback: everything in one element (+ its line-background bar, if any).
   const singleElement = (): Template.Element[] => {
     let height = box.height;

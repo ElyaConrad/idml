@@ -3,6 +3,7 @@ import { IDML } from './idml.js';
 import { convertIDML2Serial, ConvertedSerial, ConvertIDML2SerialOptions, FontVariant, ImageGraphicType, ImageSrcResolver, ImageViewBoxResolver, RequiredFont } from './idml2serial.js';
 import { AssetFile, AggregatedAssets, AggregatedFont, AggregatedImage, collectAssets, matchFontFiles, matchImageFile } from './assets.js';
 import { loadFontsForMeasurement, LoadableFont } from './util/fontLoading.js';
+import { typoAscentRatio } from './util/font.js';
 import { isDisplayableImageMime, makeImagePreviewSrc } from './util/imagePreview.js';
 import { parseSvgViewBox, type SvgViewBox } from './util/svgViewBox.js';
 import type { Font as SerialFont } from './serial/serial-types.js';
@@ -125,7 +126,16 @@ export class IdmlSerialConverter {
     // Supply SVG viewBoxes for LINKED SVGs (bytes not on the sprite) so their crop is placed
     // against the rendered artboard, not the auto-cropped content bbox (embedded read directly).
     const resolveImageViewBox = this.buildImageViewBoxResolver();
-    const result = await convertIDML2Serial(this.idml, { ...options, resolveImageSrc, resolveImageViewBox });
+    // Per-family typographic ascent ratio (from the loaded font bytes) so the converter can place
+    // the first baseline at InDesign's Ascent (typo ascender) rather than the canvas
+    // fontBoundingBoxAscent, which over-drops fonts whose winAscent > typoAscender (e.g. DIN-Bold).
+    const fontAscentRatios = new Map<string, number>();
+    for (const font of loadable) {
+      const r = font.faces[0]?.bytes ? typoAscentRatio(font.faces[0].bytes) : null;
+      if (r && r > 0) fontAscentRatios.set(font.family, r);
+    }
+    const resolveFontAscentRatio = (family: string) => fontAscentRatios.get(family);
+    const result = await convertIDML2Serial(this.idml, { ...options, resolveImageSrc, resolveImageViewBox, resolveFontAscentRatio });
     for (const { serial } of result) serial.fonts = mergeFonts(serial.fonts, serialFonts);
     this.lastResult = result;
     return result;
