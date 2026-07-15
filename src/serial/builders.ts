@@ -21,7 +21,13 @@ function paint(p: Paint): V {
 /** All filters off — matches the `null` defaults in real serials. */
 function defaultFilter(): Template.Filter {
   const n = exprRaw('null');
-  return { blur: n, grayscale: n, sepia: n, exposure: n, contrast: n, saturate: n, brightness: n, invert: n, gradientMap: n, hueRotate: n, opacity: n, dropShadow: n };
+  return { blur: n, grayscale: n, sepia: n, exposure: n, contrast: n, saturate: n, brightness: n, invert: n, gradientMap: n, hueRotate: n, opacity: n, dropShadow: n, blendMode: n };
+}
+
+/** Set the element's CSS mix-blend-mode (null/'normal' = no-op). */
+export function applyBlendMode(element: Template.Element, mode: string | null): void {
+  if (!mode || mode === 'normal') return;
+  element.filter.blendMode = str(mode);
 }
 
 /** The object shape Bluepic's renderer expects for `filter.dropShadow` (see

@@ -11,7 +11,7 @@ import { ImageSprite } from './controllers/sprites/Image';
 import { TextFrame } from './controllers/sprites/TextFrame';
 import { Color } from './controllers/Color';
 import { bakeSpriteMatrix, decomposeMatrix, itemTransform2Matrix } from './util/layout';
-import { makeRectangle, makeCircle, makePath, makeGroup, makeMask, emptySerial, shiftElementTranslate, applyDropShadow, Paint, SurfaceInput } from './serial/builders';
+import { makeRectangle, makeCircle, makePath, makeGroup, makeMask, emptySerial, shiftElementTranslate, applyDropShadow, applyBlendMode, Paint, SurfaceInput } from './serial/builders';
 import { DecomposedTransform } from './util/layout';
 
 import { IDENTITY_DECOMP } from './convert/constants';
@@ -162,6 +162,7 @@ async function spriteToElement(sprite: Sprite, pageMatrix: Matrix, collector: As
   }
   })();
   if (element) applyDropShadow(element, dropShadowValue(sprite));
+  if (element) applyBlendMode(element, sprite.getBlendMode());
   return element;
 }
 

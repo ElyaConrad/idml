@@ -72,11 +72,21 @@ export class ImageSprite extends GeometricSprite {
    * pixels of the (externally converted) file.
    */
   getMetadataNaturalSize(): { width: number; height: number } | undefined {
-    if (!this.graphicBounds || !this.actualPpi) return undefined;
-    const width = ((this.graphicBounds.right - this.graphicBounds.left) / 72) * this.actualPpi.x;
-    const height = ((this.graphicBounds.bottom - this.graphicBounds.top) / 72) * this.actualPpi.y;
-    if (!(width > 0 && height > 0)) return undefined;
-    return { width: Math.round(width), height: Math.round(height) };
+    if (!this.graphicBounds) return undefined;
+    const gw = this.graphicBounds.right - this.graphicBounds.left;
+    const gh = this.graphicBounds.bottom - this.graphicBounds.top;
+    if (!(gw > 0 && gh > 0)) return undefined;
+    if (this.actualPpi) {
+      // Raster: GraphicBounds are points; convert to the source pixel size via the PPI.
+      const width = (gw / 72) * this.actualPpi.x;
+      const height = (gh / 72) * this.actualPpi.y;
+      if (width > 0 && height > 0) return { width: Math.round(width), height: Math.round(height) };
+    }
+    // Vector (EPS/PDF/WMF — no PPI): the GraphicBounds extent (in points) IS the natural
+    // reference, consistent with getBBox() which normalizes those same GraphicBounds. Without
+    // this, a placed EPS had no natural size → crop=null → it center-covered the frame instead
+    // of honoring its ItemTransform (e.g. two crops of one logo EPS both showed the same region).
+    return { width: Math.round(gw), height: Math.round(gh) };
   }
   async getNaturalSize() {
     try {

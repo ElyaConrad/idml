@@ -36,6 +36,7 @@ export type Filter = {
   gradientMap: Value;
   hueRotate: Value;
   opacity: Value;
+  blendMode: Value;
 };
 
 export type Font = { src: string; name: string };

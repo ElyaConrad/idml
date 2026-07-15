@@ -84,6 +84,14 @@ These are NOT converter bugs; they are traps that corrupt a test if you don't ac
 > choke point (`Sprite.ts`, `idml.ts`, `idml2serial.ts`). Each 6.3% → ~0.16% vs InDesign ground
 > truth. **Needs an idml publish** for downstream (bx-studio, bx-idml-renderer, bx-render).
 
+## Implementation progress (fixes applied)
+
+**SHIPPED & verified vs InDesign ground truth:**
+- **Visibility cluster** (object `Visible=false`, `Nonprinting=true`, hidden `<Layer>`): 6.3% → **0.16%**. `Sprite.isRenderable()` gate + `<Layer>` visibility map. (idml only.)
+- **Text stroke** (outlined text): was invisible (`OURS-BLANK`) → now **renders** (1.94%, font-AA residual). Converter emits char `strokeColor`/`strokeWeight` into the text style (`style.ts`, `layout.ts`); core `Text.vue` gains `paint-order: stroke` so the stroke sits under the fill (InDesign parity).
+
+**WIRED end-to-end, one residual — blend modes:** converter parses `BlendMode` + emits `filter.blendMode` (`Sprite.getBlendMode()`, `applyBlendMode`); `@bluepic/types` + idml serial-types gained a `blendMode` filter field; core threads it through `useElementFilter`/the filter getter-wrapper and applies `mix-blend-mode` on the element `<g>` (`ElementsSlot.vue`). Verified: the emitted SVG carries `mix-blend-mode:multiply`, and **resvg renders mix-blend-mode on a `<g>` (incl. with a transform)** in isolation. BUT the full-scene render doesn't blend → the multiply element's **backdrop in core's nesting doesn't include the sibling behind it** (a stacking/isolation issue in the element wrapper). Works in the puppeteer (real-browser) render path; the resvg path needs the isolation nesting sorted. *(Files touched are all committed; build is green.)*
+
 **Architectural notes on the remaining top gaps (why they're not converter-only fixes):**
 - **Blend modes (1):** the converter *reads* `BlendingSetting.blendMode`, but `@bluepic/core` has no
   `mix-blend-mode` support and the serial has no field for it → needs core + serial-type + converter-emit.

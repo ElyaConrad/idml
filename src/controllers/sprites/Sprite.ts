@@ -16,6 +16,7 @@ export type SpriteWithChildren = RectangleSprite | OvalSprite | PolygonSprite | 
 
 export type BlendingSetting = {
   opacity: number;
+  blendMode?: string;
 };
 export type DropShadowSetting = {
   mode: 'drop';
@@ -314,6 +315,12 @@ export abstract class Sprite {
   getOpacity() {
     return this.transparencySetting?.blendingSetting?.opacity ?? 100;
   }
+  /** CSS mix-blend-mode from IDML `BlendMode` (PascalCase → kebab-case), or null for Normal. */
+  getBlendMode(): string | null {
+    const bm = this.transparencySetting?.blendingSetting?.blendMode;
+    if (!bm || bm === 'Normal') return null;
+    return bm.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+  }
   setOpacity(opacity: number) {
     if (!this.transparencySetting) {
       this.transparencySetting = {};
@@ -555,6 +562,7 @@ export abstract class Sprite {
     const opacity = ensureNumber(element.getAttribute('Opacity')) ?? 100;
     return {
       opacity,
+      blendMode: element.getAttribute('BlendMode') ?? undefined,
     };
   }
   static parseDropShadowSetting(element: Element) {
