@@ -362,6 +362,8 @@ export type TextInput = {
   verticalAlign: number; // 0 top, 0.5 center, 1 bottom (vertical anchor within the frame)
   uppercase?: boolean; // render text force-uppercased (IDML AllCaps)
   textDecoration?: string; // 'underline' | 'line-through' | 'underline line-through' (IDML thin Underline / StrikeThru); thick offset underlines take the Bauchbinde path instead
+  hyphenate?: boolean; // IDML paragraph Hyphenation — emits hyphenation + knuth-plass (hyphenation only works under knuth-plass)
+  hyphenationLanguage?: string; // BCP-47 tag (mapped from IDML AppliedLanguage); '' when off
   // Line-box model core uses for advance + first-baseline. Default 'fontSize'
   // (advance = fontSize * lineHeight, matches InDesign leading). Vertical-justify
   // may emit 'actual-outer' (outer lines capped to their real ink, inner lines to
@@ -412,6 +414,12 @@ export function makeText(id: string, input: TextInput, transform: DecomposedTran
       lineHeight: num(input.lineHeight),
       letterSpacing: num(input.letterSpacing),
       textDecoration: str(input.textDecoration ?? 'none'),
+      // Hyphenation: knuth-plass is required for it to take effect (core gates hyphenation
+      // on the algorithm). Non-hyphenated text keeps the historical greedy-first-fit so its
+      // line breaks are unchanged.
+      linebreakingAlgorithm: str(input.hyphenate ? 'knuth-plass' : 'greedy-first-fit'),
+      hyphenation: bool(input.hyphenate ?? false),
+      hyphenationLanguage: str(input.hyphenationLanguage ?? ''),
       fontStretch: str('normal'),
       textAlign: num(input.textAlign),
       justifyText: bool(input.justifyText),

@@ -74,6 +74,8 @@ export function textElementFromRuns(id: string, runs: TextRun[], box: Box, align
       autoLinebreaks: true,
       uppercase,
       textDecoration,
+      hyphenate: base.hyphenate,
+      hyphenationLanguage: base.hyphenationLanguage,
       fill: base.color,
       // Outlined text: InDesign character stroke → core paints <text stroke stroke-width>.
       stroke: base.strokeColor,
@@ -319,7 +321,12 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
 
   // The document's root default font ([No paragraph style] AppliedFont), used
   // when a paragraph/character style defines none (it inherits via BasedOn).
-  const defaultFont = frame.context.idml.getParagraphStyleById('ParagraphStyle/$ID/[No paragraph style]')?.appliedFont ?? 'Arial';
+  const rootParagraphStyle = frame.context.idml.getParagraphStyleById('ParagraphStyle/$ID/[No paragraph style]');
+  const defaultFont = rootParagraphStyle?.appliedFont ?? 'Arial';
+  // InDesign carries Hyphenation/AppliedLanguage on the root [No paragraph style] and
+  // inherits them via BasedOn — used as the fallback when a paragraph's own cascade omits
+  // them (see effectiveTextStyle). Applies knuth-plass hyphenation to inheriting paragraphs.
+  const rootTextDefaults = { hyphenation: rootParagraphStyle?.hyphenation, language: rootParagraphStyle?.appliedLanguage };
 
   // Paragraph spacing (local override wins over the applied style). InDesign adds
   // SpaceAfter(prev) + SpaceBefore(this) between paragraphs, and ignores SpaceBefore
@@ -342,7 +349,7 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
     const incomingSpace = pIndex === 0 ? 0 : paraSpaceAfter(paragraphs[pIndex - 1]) + paraSpaceBefore(paragraph);
     let firstRunOfPara = true;
     for (const feature of paragraph.features) {
-      const style = effectiveTextStyle(paragraph, feature, defaultFont);
+      const style = effectiveTextStyle(paragraph, feature, defaultFont, rootTextDefaults);
       // Resolve the concrete binary: family + IDML style -> Fonts.xml font (for
       // its PostScript name) -> XMP metadata (for the original file name).
       const idml = frame.context.idml;
@@ -365,7 +372,7 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
     // content didn't supply it, otherwise we'd emit a double break.
     const lastFeatureText = paragraph.features.length > 0 ? (paragraph.features[paragraph.features.length - 1].content ?? '') : '';
     if (pIndex < paragraphs.length - 1 && !lastFeatureText.endsWith('\n')) {
-      runs.push({ text: '\n', style: runs[runs.length - 1]?.style ?? effectiveTextStyle(paragraph, paragraph.features[0], defaultFont), align, justify });
+      runs.push({ text: '\n', style: runs[runs.length - 1]?.style ?? effectiveTextStyle(paragraph, paragraph.features[0], defaultFont, rootTextDefaults), align, justify });
     }
   });
 
@@ -406,6 +413,16 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
   // keeps its natural leading and the render-font-independent 'fontSize' fallback.
   const core = await loadTextLayout();
 
+  // Hyphenation: when the frame's base paragraph enables it (and its language maps to a
+  // supported pattern pack), load the SAME hyphenator core will use so the converter's
+  // line-break measurement matches the render exactly. knuth-plass is required — core gates
+  // hyphenation on it. Null hyphenator (unknown language / load failure) => layout stays
+  // greedy & un-hyphenated, identical to before. Loaded once per frame (frames are
+  // single-language in practice).
+  const frameHyphenate = !!base?.hyphenate && !!base.hyphenationLanguage;
+  const hyphenator = frameHyphenate && core?.loadHyphenator ? await core.loadHyphenator(base.hyphenationLanguage!) : null;
+  const linebreakAlgo = frameHyphenate && hyphenator ? 'knuth-plass' : 'greedy-first-fit';
+
   // Prepend a line-background "Bauchbinde" bar for every emitted element whose base
   // run carries a thick offset underline (see lineBackgroundBar). Bars go BEFORE the
   // text in build order so the global z-reverse lands them behind it. The horizontal
@@ -442,6 +459,7 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
       fontSize: base.fontSize, x: box.x, y, maxWidth: box.width, maxHeight,
       anchor: [firstAlign, verticalAlign], lineHeight, bounding, textAlign: firstAlign, justifyText: firstJustify,
       autoLinebreaks: true, allowBreakChars: false, cachingEnabled: false,
+      paragraphLinebreakAlgorithm: linebreakAlgo, hyphenation: hyphenator, hyphenationLanguage: frameHyphenate ? base.hyphenationLanguage : '',
     });
 
   // Vertical justify short-circuits to ONE distributed element: it owns its box.y (first

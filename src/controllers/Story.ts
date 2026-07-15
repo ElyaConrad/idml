@@ -260,6 +260,7 @@ export class Story {
       tracking: ensureNumber(props.Tracking),
       leading: ensureNumber(props.Leading),
       capitalization: props.Capitalization !== undefined ? capitalizationMap.getInternal(props.Capitalization) : undefined,
+      appliedLanguage: props.AppliedLanguage,
     }).filter(([_, value]) => value !== undefined)) as CharacterStyleInput;
 
     const appliedCharacterStyle = props.AppliedCharacterStyle;
@@ -325,6 +326,8 @@ export class Story {
       // 'left'/first-value LOCAL override and clobber the applied style's value.
       align: props.Justification !== undefined ? alignMap.getInternal(props.Justification) : undefined,
       capitalization: props.Capitalization !== undefined ? capitalizationMap.getInternal(props.Capitalization) : undefined,
+      hyphenation: props.Hyphenation !== undefined ? ensureBoolean(props.Hyphenation) : undefined,
+      appliedLanguage: props.AppliedLanguage,
     }).filter(([_, value]) => value !== undefined)) as ParagraphStyleInput;
 
     const appliedParagraphStyle = props.AppliedParagraphStyle;

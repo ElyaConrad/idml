@@ -23,6 +23,9 @@ export type CharacterStyleInput = {
   leading?: number;
   /** InDesign `Capitalization` (AllCaps / SmallCaps) applied at character level. */
   capitalization?: Capitalization;
+  /** InDesign `AppliedLanguage` (raw name/locale, e.g. "$ID/English: USA", "$ID/de_DE_2006")
+   * — mapped to a BCP-47 hyphenation tag in effectiveTextStyle. */
+  appliedLanguage?: string;
 };
 
 export class CharacterStyle {
@@ -40,6 +43,7 @@ export class CharacterStyle {
   public strikeThrough?: boolean;
   public tracking?: number;
   public leading?: number;
+  public appliedLanguage?: string;
   public extendedKeyboardShortcut?: number[];
   public includeClass?: boolean;
   public styleUID?: string;
@@ -70,6 +74,7 @@ export class CharacterStyle {
       strikeThrough?: boolean;
       tracking?: number;
       leading?: number;
+      appliedLanguage?: string;
       rootCharacterStyleGroupId?: string;
     },
     private context: IDMLStylesContext
@@ -94,6 +99,7 @@ export class CharacterStyle {
     this.strikeThrough = opts.strikeThrough;
     this.tracking = opts.tracking;
     this.leading = opts.leading;
+    this.appliedLanguage = opts.appliedLanguage;
     this.rootCharacterStyleGroupId = opts.rootCharacterStyleGroupId;
   }
   toCharacterStyleInput() {
@@ -111,6 +117,7 @@ export class CharacterStyle {
       underlineOffset: this.underlineOffset,
       underlineColor: this.underlineColorId ? this.context.idml.getColorById(this.underlineColorId)?.toColorInput() : undefined,
       strikeThrough: this.strikeThrough,
+      appliedLanguage: this.appliedLanguage,
     }).filter(([_, value]) => value !== undefined)) as CharacterStyleInput;
   }
   serialize() {
@@ -203,6 +210,7 @@ export class CharacterStyle {
     const strikeThrough = ensureBoolean(props.StrikeThru);
     const tracking = ensureNumber(props.Tracking);
     const leading = ensureNumber(props.Leading);
+    const appliedLanguage = props.AppliedLanguage;
 
     return new CharacterStyle(
       id,
@@ -227,6 +235,7 @@ export class CharacterStyle {
         strikeThrough,
         tracking,
         leading,
+        appliedLanguage,
         rootCharacterStyleGroupId,
       },
       context

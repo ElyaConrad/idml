@@ -28,6 +28,8 @@ export type ParagraphStyleInput = {
   paragraphShadingBottomOffset?: number;
   paragraphShadingLeftOffset?: number;
   paragraphShadingRightOffset?: number;
+  hyphenation?: boolean;
+  appliedLanguage?: string;
 };
 
 export type Align = 'left' | 'right' | 'center' | 'justify' | 'justifyLeft' | 'justifyRight' | 'justifyCenter' | 'justifyAll';
@@ -93,6 +95,7 @@ export class ParagraphStyle {
   public firstLineIndent?: number;
 
   public hyphenation?: boolean;
+  public appliedLanguage?: string;
   public alignToBaseline?: boolean;
 
   public rootParagraphStyleGroupId?: string;
@@ -138,6 +141,7 @@ export class ParagraphStyle {
       firstLineIndent?: number;
 
       hyphenation?: boolean;
+      appliedLanguage?: string;
       alignToBaseline?: boolean;
 
       rootParagraphStyleGroupId?: string;
@@ -182,6 +186,7 @@ export class ParagraphStyle {
     this.firstLineIndent = opts.firstLineIndent;
 
     this.hyphenation = opts.hyphenation;
+    this.appliedLanguage = opts.appliedLanguage;
     this.alignToBaseline = opts.alignToBaseline;
 
     this.rootParagraphStyleGroupId = opts.rootParagraphStyleGroupId;
@@ -272,6 +277,8 @@ export class ParagraphStyle {
       paragraphShadingBottomOffset: this.paragraphShadingBottomOffset,
       paragraphShadingLeftOffset: this.paragraphShadingLeftOffset,
       paragraphShadingRightOffset: this.paragraphShadingRightOffset,
+      hyphenation: this.hyphenation,
+      appliedLanguage: this.appliedLanguage,
     }).filter(([_, value]) => value !== undefined)) as ParagraphStyleInput;
   }
   equals(input: ParagraphStyleInput) {
@@ -343,7 +350,11 @@ export class ParagraphStyle {
     const rightIndent = ensureNumber(props.RightIndent);
     const firstLineIndent = ensureNumber(props.FirstLineIndent);
 
-    const hyphenation = ensureBoolean(props.Hyphenation);
+    // Presence-guarded: ensureBoolean(undefined) is `false`, which would turn an
+    // INHERITED Hyphenation (absent on this style, set on its BasedOn parent / the root
+    // [No paragraph style]) into a concrete `false` that clobbers the inherited default.
+    const hyphenation = props.Hyphenation !== undefined ? ensureBoolean(props.Hyphenation) : undefined;
+    const appliedLanguage = props.AppliedLanguage;
     const alignToBaseline = ensureBoolean(props.AlignToBaselineGrid);
 
     return new ParagraphStyle(
@@ -385,6 +396,7 @@ export class ParagraphStyle {
         rightIndent,
         firstLineIndent,
         hyphenation,
+        appliedLanguage,
         alignToBaseline,
         rootParagraphStyleGroupId,
       },

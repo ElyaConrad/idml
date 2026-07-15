@@ -36,7 +36,44 @@ export type EffectiveTextStyle = {
    * carried on every run's style; emitted as a line-bound background block behind the
    * text element (see buildTextElements' paragraph-shading emit). Offsets in px (pt@72). */
   paragraphShading?: { color: string; topOffset: number; bottomOffset: number; leftOffset: number; rightOffset: number };
+  /** IDML paragraph `Hyphenation="true"` — enable automatic hyphenation. Emitted as the
+   * serial `hyphenation` flag + `linebreakingAlgorithm: 'knuth-plass'` (hyphenation only
+   * works under knuth-plass). Only set when a hyphenator for the language is available. */
+  hyphenate?: boolean;
+  /** BCP-47 tag for hyphenation, mapped from IDML `AppliedLanguage` (e.g. 'de', 'en-us'). */
+  hyphenationLanguage?: string;
 };
+
+// IDML `AppliedLanguage` comes in two shapes: readable InDesign names ("English: USA",
+// "German: 1996 Reform") and locale codes ("de_DE_2006", "en_US"). Map both to a BCP-47
+// tag core's hyphenation service accepts (trim+lowercase keyed). Unknown -> undefined
+// (hyphenation simply stays off, a safe no-op).
+const HYPHENATION_LANGS = new Set(['af', 'bg', 'ca', 'cs', 'cy', 'da', 'de', 'el', 'en', 'en-gb', 'en-us', 'es', 'et', 'eu', 'fi', 'fr', 'ga', 'gl', 'hr', 'hu', 'id', 'is', 'it', 'la', 'lt', 'lv', 'nb', 'nl', 'nn', 'no', 'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sr', 'sv', 'tr', 'uk']);
+const LANG_NAME_TO_BCP47: Record<string, string> = {
+  english: 'en', german: 'de', french: 'fr', spanish: 'es', italian: 'it', dutch: 'nl', portuguese: 'pt',
+  danish: 'da', swedish: 'sv', finnish: 'fi', polish: 'pl', russian: 'ru', czech: 'cs', hungarian: 'hu',
+  turkish: 'tr', ukrainian: 'uk', croatian: 'hr', romanian: 'ro', slovak: 'sk', slovenian: 'sl',
+  bulgarian: 'bg', catalan: 'ca', estonian: 'et', latvian: 'lv', lithuanian: 'lt', icelandic: 'is',
+  irish: 'ga', greek: 'el', serbian: 'sr', galician: 'gl', afrikaans: 'af', welsh: 'cy', latin: 'la',
+  basque: 'eu', indonesian: 'id', norwegian: 'nb',
+};
+export function mapIndesignLanguageToBCP47(applied: string | undefined): string | undefined {
+  if (!applied) return undefined;
+  const name = applied.replace(/^\$ID\//, '').trim();
+  if (!name) return undefined;
+  const lower = name.toLowerCase();
+  // Regional English / Norwegian refinements (both name and code forms).
+  if (lower.startsWith('english') || lower.startsWith('en_') || lower.startsWith('en-') || lower === 'en') {
+    return /\b(uk|gb|british)\b/.test(lower) ? 'en-gb' : /\b(usa|us)\b/.test(lower) ? 'en-us' : 'en';
+  }
+  if (lower.startsWith('norwegian') || lower.startsWith('nn')) return lower.includes('nynorsk') || lower.startsWith('nn') ? 'nn' : 'nb';
+  // Locale-code form (de_DE_2006, fr_FR): the language subtag is the first segment.
+  const sub = lower.split(/[_-]/)[0];
+  if (HYPHENATION_LANGS.has(sub)) return sub === 'no' ? 'nb' : sub;
+  // Readable-name form ("German: 1996 Reform"): word before the colon.
+  const base = lower.split(':')[0].trim();
+  return LANG_NAME_TO_BCP47[base];
+}
 
 // Bluepic textAlign is a 0..1 fraction: offset = (maxLineWidth - lineWidth) * textAlign.
 export const ALIGN_TO_FRACTION: Record<string, number> = { left: 0, justifyLeft: 0, justify: 0, justifyAll: 0, center: 0.5, justifyCenter: 0.5, right: 1, justifyRight: 1 };
@@ -59,7 +96,7 @@ export function italicFromFontStyle(fontStyle?: string): string {
   return (fontStyle ?? '').toLowerCase().includes('italic') ? 'italic' : 'normal';
 }
 
-export function effectiveTextStyle(paragraph: ParagraphOutput, feature: ParagraphOutput['features'][number], defaultFont: string): EffectiveTextStyle {
+export function effectiveTextStyle(paragraph: ParagraphOutput, feature: ParagraphOutput['features'][number], defaultFont: string, rootDefaults: { hyphenation?: boolean; language?: string } = {}): EffectiveTextStyle {
   // Precedence (later wins): applied para -> local para -> applied char -> local char.
   const layers: Array<Record<string, unknown> | undefined> = [paragraph.appliedParagraphStyle, paragraph.localParagraphStyle, feature.appliedCharacterStyle, feature.localCharacterStyleInput];
   const pick = (key: string): unknown => {
@@ -93,6 +130,14 @@ export function effectiveTextStyle(paragraph: ParagraphOutput, feature: Paragrap
   // local range override) is caught by `pick`; its absence means the inherited root
   // default, i.e. 20. (A document that re-defaults its root tint is an accepted edge case.)
   const paragraphShadingTint = (pick('paragraphShadingTint') as number | undefined) ?? 20;
+  // Hyphenation is paragraph-level; language usually rides the character range. Both are
+  // resolved through the applied/local cascade, then fall back to the document root
+  // [No paragraph style] defaults — InDesign inherits `Hyphenation`/`AppliedLanguage` via
+  // the BasedOn chain, which `pick` doesn't walk (so a paragraph applying a style that only
+  // inherits them would otherwise miss them). An unknown language maps to undefined ->
+  // hyphenation off (safe: identical to today's greedy layout).
+  const hyphenationLanguage = mapIndesignLanguageToBCP47((pick('appliedLanguage') as string | undefined) ?? rootDefaults.language);
+  const hyphenate = ((pick('hyphenation') as boolean | undefined) ?? rootDefaults.hyphenation) === true && !!hyphenationLanguage;
   const paragraphShading =
     paragraphShadingOn === true
       ? {
@@ -127,6 +172,8 @@ export function effectiveTextStyle(paragraph: ParagraphOutput, feature: Paragrap
     strokeWeight: strokeWeight && strokeWeight > 0 ? strokeWeight : undefined,
     strikeThrough: strikeThrough === true,
     paragraphShading,
+    hyphenate,
+    hyphenationLanguage,
   };
 }
 
