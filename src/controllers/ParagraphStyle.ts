@@ -21,6 +21,13 @@ export type ParagraphStyleInput = {
   fontStyle?: string;
   underline?: boolean;
   strikeThrough?: boolean;
+  paragraphShadingOn?: boolean;
+  paragraphShadingColor?: ColorInput;
+  paragraphShadingTint?: number;
+  paragraphShadingTopOffset?: number;
+  paragraphShadingBottomOffset?: number;
+  paragraphShadingLeftOffset?: number;
+  paragraphShadingRightOffset?: number;
 };
 
 export type Align = 'left' | 'right' | 'center' | 'justify' | 'justifyLeft' | 'justifyRight' | 'justifyCenter' | 'justifyAll';
@@ -72,6 +79,13 @@ export class ParagraphStyle {
   public baselineShift?: number;
   public underline?: boolean;
   public strikeThrough?: boolean;
+  public paragraphShadingOn?: boolean;
+  public paragraphShadingColorId?: string;
+  public paragraphShadingTint?: number;
+  public paragraphShadingTopOffset?: number;
+  public paragraphShadingBottomOffset?: number;
+  public paragraphShadingLeftOffset?: number;
+  public paragraphShadingRightOffset?: number;
   public spaceBefore?: number;
   public spaceAfter?: number;
   public leftIndent?: number;
@@ -110,6 +124,13 @@ export class ParagraphStyle {
       baselineShift?: number;
       underline?: boolean;
       strikeThrough?: boolean;
+      paragraphShadingOn?: boolean;
+      paragraphShadingColorId?: string;
+      paragraphShadingTint?: number;
+      paragraphShadingTopOffset?: number;
+      paragraphShadingBottomOffset?: number;
+      paragraphShadingLeftOffset?: number;
+      paragraphShadingRightOffset?: number;
       spaceBefore?: number;
       spaceAfter?: number;
       leftIndent?: number;
@@ -147,6 +168,13 @@ export class ParagraphStyle {
     this.baselineShift = opts.baselineShift;
     this.underline = opts.underline;
     this.strikeThrough = opts.strikeThrough;
+    this.paragraphShadingOn = opts.paragraphShadingOn;
+    this.paragraphShadingColorId = opts.paragraphShadingColorId;
+    this.paragraphShadingTint = opts.paragraphShadingTint;
+    this.paragraphShadingTopOffset = opts.paragraphShadingTopOffset;
+    this.paragraphShadingBottomOffset = opts.paragraphShadingBottomOffset;
+    this.paragraphShadingLeftOffset = opts.paragraphShadingLeftOffset;
+    this.paragraphShadingRightOffset = opts.paragraphShadingRightOffset;
     this.spaceBefore = opts.spaceBefore;
     this.spaceAfter = opts.spaceAfter;
     this.leftIndent = opts.leftIndent;
@@ -237,6 +265,13 @@ export class ParagraphStyle {
       fontStyle: this.fontStyle,
       underline: this.underline,
       strikeThrough: this.strikeThrough,
+      paragraphShadingOn: this.paragraphShadingOn,
+      paragraphShadingColor: this.paragraphShadingColorId ? this.context.idml.getColorById(this.paragraphShadingColorId)?.toColorInput() : undefined,
+      paragraphShadingTint: this.paragraphShadingTint,
+      paragraphShadingTopOffset: this.paragraphShadingTopOffset,
+      paragraphShadingBottomOffset: this.paragraphShadingBottomOffset,
+      paragraphShadingLeftOffset: this.paragraphShadingLeftOffset,
+      paragraphShadingRightOffset: this.paragraphShadingRightOffset,
     }).filter(([_, value]) => value !== undefined)) as ParagraphStyleInput;
   }
   equals(input: ParagraphStyleInput) {
@@ -295,6 +330,13 @@ export class ParagraphStyle {
     const baselineShift = ensureNumber(props.BaselineShift);
     const underline = ensureBoolean(props.Underline);
     const strikeThrough = ensureBoolean(props.StrikeThru);
+    const paragraphShadingOn = props.ParagraphShadingOn !== undefined ? ensureBoolean(props.ParagraphShadingOn) : undefined;
+    const paragraphShadingColorId = props.ParagraphShadingColor;
+    const paragraphShadingTint = ensureNumber(props.ParagraphShadingTint);
+    const paragraphShadingTopOffset = ensureNumber(props.ParagraphShadingTopOffset);
+    const paragraphShadingBottomOffset = ensureNumber(props.ParagraphShadingBottomOffset);
+    const paragraphShadingLeftOffset = ensureNumber(props.ParagraphShadingLeftOffset);
+    const paragraphShadingRightOffset = ensureNumber(props.ParagraphShadingRightOffset);
     const spaceBefore = ensureNumber(props.SpaceBefore);
     const spaceAfter = ensureNumber(props.SpaceAfter);
     const leftIndent = ensureNumber(props.LeftIndent);
@@ -330,6 +372,13 @@ export class ParagraphStyle {
         baselineShift,
         underline,
         strikeThrough,
+        paragraphShadingOn,
+        paragraphShadingColorId,
+        paragraphShadingTint,
+        paragraphShadingTopOffset,
+        paragraphShadingBottomOffset,
+        paragraphShadingLeftOffset,
+        paragraphShadingRightOffset,
         spaceBefore,
         spaceAfter,
         leftIndent,

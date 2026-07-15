@@ -31,6 +31,11 @@ export type EffectiveTextStyle = {
   strokeWeight?: number;
   /** IDML character `StrikeThru` — renders as `text-decoration: line-through`. */
   strikeThrough?: boolean;
+  /** IDML paragraph shading (`ParagraphShadingOn`) — a fill drawn behind the WHOLE
+   * paragraph. Paragraph-level, resolved from the applied/local paragraph style and
+   * carried on every run's style; emitted as a line-bound background block behind the
+   * text element (see buildTextElements' paragraph-shading emit). Offsets in px (pt@72). */
+  paragraphShading?: { color: string; topOffset: number; bottomOffset: number; leftOffset: number; rightOffset: number };
 };
 
 // Bluepic textAlign is a 0..1 fraction: offset = (maxLineWidth - lineWidth) * textAlign.
@@ -80,6 +85,24 @@ export function effectiveTextStyle(paragraph: ParagraphOutput, feature: Paragrap
   const strokeColor = pick('strokeColor') as ColorInput | undefined;
   const strokeWeight = pick('strokeWeight') as number | undefined;
   const strikeThrough = pick('strikeThrough') as boolean | undefined;
+  const paragraphShadingOn = pick('paragraphShadingOn') as boolean | undefined;
+  const paragraphShadingColor = pick('paragraphShadingColor') as ColorInput | undefined;
+  // Tint (0..100) mixes toward paper-white. InDesign's default paragraph-shading tint is
+  // 20, and it lives on the ROOT [No paragraph style] — inherited via the BasedOn chain,
+  // which `pick` (applied+local only) doesn't walk. So an explicit tint (named style or
+  // local range override) is caught by `pick`; its absence means the inherited root
+  // default, i.e. 20. (A document that re-defaults its root tint is an accepted edge case.)
+  const paragraphShadingTint = (pick('paragraphShadingTint') as number | undefined) ?? 20;
+  const paragraphShading =
+    paragraphShadingOn === true
+      ? {
+          color: colorInputToHex(paragraphShadingColor, paragraphShadingTint) ?? '#000000ff',
+          topOffset: (pick('paragraphShadingTopOffset') as number | undefined) ?? 0,
+          bottomOffset: (pick('paragraphShadingBottomOffset') as number | undefined) ?? 0,
+          leftOffset: (pick('paragraphShadingLeftOffset') as number | undefined) ?? 0,
+          rightOffset: (pick('paragraphShadingRightOffset') as number | undefined) ?? 0,
+        }
+      : undefined;
   return {
     // No explicit font in any style layer -> the document's root default
     // ([No paragraph style] AppliedFont), which is what unstyled IDML text
@@ -103,6 +126,7 @@ export function effectiveTextStyle(paragraph: ParagraphOutput, feature: Paragrap
     strokeColor: strokeWeight && strokeWeight > 0 ? (colorInputToHex(strokeColor) ?? undefined) : undefined,
     strokeWeight: strokeWeight && strokeWeight > 0 ? strokeWeight : undefined,
     strikeThrough: strikeThrough === true,
+    paragraphShading,
   };
 }
 

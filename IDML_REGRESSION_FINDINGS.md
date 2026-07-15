@@ -71,7 +71,7 @@ These are NOT converter bugs; they are traps that corrupt a test if you don't ac
 | # | Feature | Score | Flag | What's wrong |
 |---|---------|-------|------|--------------|
 | 1 | **Blend modes** | 13.8% | OURS-LIGHT | `blendMode` (Multiply/Screen/…) not applied — object renders Normal. `BlendingSetting.blendMode` is read but not honored in compositing. |
-| 2 | **Paragraph shading** | 12.9% | OURS-LIGHT | `paragraphShadingOn/Color` (fill behind a paragraph) not drawn. `ParagraphShadingColor` is MISS in the converter. |
+| 2 | **Paragraph shading** | ~~12.9%~~ → **2.07% FIXED** | — | `ParagraphShadingOn/Color/Tint` (fill behind a paragraph) now drawn as a line-bound iterated background block spanning the frame width (`makeParagraphShadingRectangle`, emitted behind the text in `withBars`). Plumbed paragraph-level through `ParagraphStyle`/`Story` local+named + `EffectiveTextStyle`. Tint applied via `colorInputToHex(color, tint)`; default 20 (InDesign root [No paragraph style] default, inherited via BasedOn which `pick` doesn't walk). Top/bottom/left/right offsets supported (per-line ternary on first/last tile). Residual 2% = text AA. |
 | 3 | **CMYK → sRGB** | 12.1% | — | Solid CMYK swatches convert to the wrong sRGB values vs InDesign's color engine. |
 | 4 | **Radial gradient** | 13.8% | — | Renders a gradient but center/spread/type geometry differs from InDesign (linear gradient is fine at 0.09%). |
 | 5 | **Object visibility** | ~~6.4%~~ → **0.17% FIXED** | — | `PageItem.visible=false` now skipped. |
@@ -103,10 +103,10 @@ These are NOT converter bugs; they are traps that corrupt a test if you don't ac
   (11,12):** the converter is MISS on the underlying elements AND the serial/core mostly lack a
   representation (only drop shadow exists as an SVG filter) → each needs converter + serial + core.
 | 8 | **Gradient feather** | 5.4% | — | `gradientFeatherSettings` not applied. |
-| 9 | **Stroke alignment** | 3.3% | — | inside/outside alignment changes the silhouette; we don't offset the stroke geometry. |
+| 9 | **Stroke alignment** | ~~3.3%~~ → **0.20% FIXED** | — | `makeRectangle`/`makeCircle`/`makePath`/`makeImage` hardcoded `strokeAlignment: 'center'`, ignoring the (correctly parsed & merged) `surface.strokeAlignment`. Now emit `surface.strokeAlignment ?? 'center'`. inside/outside silhouettes match. |
 | 10 | **Basic feather** | 2.3% | — | `featherSettings` (soft faded edge) not applied. |
-| 11 | **Text underline** | 1.7% | — | normal thin underline not painted (only the thick-offset "Bauchbinde" bar path works). `UnderlineType` is MISS. |
-| 12 | **Strikethrough / caps** | 1.8% | — | strikethrough line not painted (`StrikeThroughType` MISS); AllCaps/SmallCaps need verification. |
+| 11 | **Text underline** | ~~1.7%~~ → **0.79% FIXED** | — | Thin/normal underline now painted via element-level SVG `text-decoration` (new `textDecoration` prop on the Text element: types + core `compose/text.ts`+`Text.vue`, idml `builders.ts`+`layout.ts`). Thick offset underlines still take the Bauchbinde bar path (excluded from decoration by the `BAUCHBINDE_MIN_WEIGHT_RATIO` gate). Set element-level only when every run agrees. |
+| 12 | **Strikethrough / caps** | ~~1.8%~~ → **0.89% FIXED** | — | Strikethrough painted via `text-decoration: line-through` (same mechanism as underline). AllCaps confirmed rendering (`uppercase`); SmallCaps renders as normal text — no Bluepic equivalent (accepted limitation). |
 | 13 | **Tab leaders** | 1.4% | — | dot-leader tabs not rendered (`TabList`/`Leader` MISS). |
 | 14 | **Paragraph rules** | 1.4% | — | rule above/below not drawn (`RuleAbove/BelowType` MISS). |
 | 15 | **Text stroke** | 1.3% | OURS-BLANK | outlined text (fill+stroke) renders invisible — text stroke not painted. |

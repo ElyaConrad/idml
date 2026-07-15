@@ -107,7 +107,7 @@ export function makeRectangle(id: string, box: Box, radius: [number, number, num
       opacity: num(surface.opacity ?? 1),
       strokeDasharray: numArray([0, 0]),
       strokeDashoffset: num(0),
-      strokeAlignment: str('center'),
+      strokeAlignment: str(surface.strokeAlignment ?? 'center'),
     },
     transform: serialTransform(transform),
     filter: defaultFilter(),
@@ -174,6 +174,55 @@ export function makeLineBackgroundRectangle(id: string, targetTextId: string, op
   };
 }
 
+/**
+ * InDesign paragraph shading (`ParagraphShadingOn`) — a fill drawn behind the WHOLE
+ * paragraph, spanning the text frame's width from the first line's top to the last
+ * line's bottom. Reconstructed as an iterated rectangle bound to `<textId>.lines[i]`:
+ * one full-height tile per rendered line (contiguous line boxes tile into a solid
+ * block), so it tracks the text's live wrap/line-count exactly like the Bauchbinde bar.
+ *
+ * Horizontal: static frame span (`box.x + leftOffset` .. width - left - right offsets),
+ * matching InDesign's default column-width shading (not the per-line text width).
+ * Vertical: each tile is the line's own box (`lines[i].y`, height `lines[i].height`);
+ * `topOffset`/`bottomOffset` extend the FIRST/LAST tile beyond the line box (i===0 /
+ * i===last), reproducing the Ascent/Descent origins' outset.
+ */
+export function makeParagraphShadingRectangle(id: string, targetTextId: string, box: { x: number; width: number }, opts: { fill: Paint; topOffset: number; bottomOffset: number; leftOffset: number; rightOffset: number }): Template.Elements.Rectangle {
+  const fmt = (n: number) => Number(n.toFixed(4)).toString();
+  const L = `${targetTextId}.lines[i]`;
+  const last = `${targetTextId}.lines.length - 1`;
+  const { topOffset, bottomOffset, leftOffset, rightOffset } = opts;
+  // First tile starts topOffset higher; last tile ends bottomOffset lower. `i` is the
+  // iteration key, so gate the outset on i===0 / i===last via the expression engine.
+  const yExpr = topOffset ? `${L}.y - (i == 0 ? ${fmt(topOffset)} : 0)` : `${L}.y`;
+  const heightExpr = topOffset || bottomOffset ? `${L}.height + (i == 0 ? ${fmt(topOffset)} : 0) + (i == ${last} ? ${fmt(bottomOffset)} : 0)` : `${L}.height`;
+  return {
+    name: 'rectangle',
+    id,
+    locked: false,
+    properties: {
+      'v-transform-origin': ORIGIN_0,
+      visible: bool(true),
+      x: num(box.x + leftOffset),
+      y: exprRaw(yExpr),
+      width: num(Math.max(0, box.width - leftOffset - rightOffset)),
+      height: exprRaw(heightExpr),
+      radius: numArray([0, 0, 0, 0]),
+      pos: POS_TL,
+      fill: paint(opts.fill),
+      stroke: paint(null),
+      strokeWidth: num(0),
+      opacity: num(1),
+      strokeDasharray: numArray([0, 0]),
+      strokeDashoffset: num(0),
+      strokeAlignment: str('center'),
+    },
+    transform: serialTransform({ translateX: 0, translateY: 0, rotate: 0, skewX: 0, skewY: 0, scaleX: 1, scaleY: 1 }),
+    filter: defaultFilter(),
+    iteration: { expression: `${targetTextId}.lines.length`, key: 'i' },
+  };
+}
+
 /** Circle/ellipse — radius accepts [rx, ry]. x/y is the bbox top-left (pos [0,0]). */
 export function makeCircle(id: string, box: Box, transform: DecomposedTransform, surface: SurfaceInput): Template.Elements.Circle {
   return {
@@ -192,7 +241,7 @@ export function makeCircle(id: string, box: Box, transform: DecomposedTransform,
       strokeWidth: num(surface.strokeWidth ?? 0),
       opacity: num(surface.opacity ?? 1),
       strokeDasharray: numArray([0, 0]),
-      strokeAlignment: str('center'),
+      strokeAlignment: str(surface.strokeAlignment ?? 'center'),
       strokeDashoffset: num(0),
     },
     transform: serialTransform(transform),
@@ -219,7 +268,7 @@ export function makePath(id: string, features: PathFeature[], transform: Decompo
       fill: paint(surface.fill ?? null),
       stroke: paint(surface.stroke ?? null),
       strokeWidth: num(surface.strokeWidth ?? 0),
-      strokeAlignment: str('center'),
+      strokeAlignment: str(surface.strokeAlignment ?? 'center'),
       opacity: num(surface.opacity ?? 1),
       strokeDasharray: numArray([0, 0]),
       strokeDashoffset: num(0),
@@ -275,7 +324,7 @@ export function makeImage(id: string, box: Box, radius: [number, number, number,
       height: num(box.height),
       stroke: paint(surface.stroke ?? null),
       strokeWidth: num(surface.strokeWidth ?? 0),
-      strokeAlignment: str('center'),
+      strokeAlignment: str(surface.strokeAlignment ?? 'center'),
       strokeDasharray: numArray([0, 0]),
       strokeDashoffset: num(0),
       opacity: num(surface.opacity ?? 1),
@@ -312,6 +361,7 @@ export type TextInput = {
   justifyText: boolean; // stretch interior lines to fill the width
   verticalAlign: number; // 0 top, 0.5 center, 1 bottom (vertical anchor within the frame)
   uppercase?: boolean; // render text force-uppercased (IDML AllCaps)
+  textDecoration?: string; // 'underline' | 'line-through' | 'underline line-through' (IDML thin Underline / StrikeThru); thick offset underlines take the Bauchbinde path instead
   // Line-box model core uses for advance + first-baseline. Default 'fontSize'
   // (advance = fontSize * lineHeight, matches InDesign leading). Vertical-justify
   // may emit 'actual-outer' (outer lines capped to their real ink, inner lines to
@@ -361,6 +411,7 @@ export function makeText(id: string, input: TextInput, transform: DecomposedTran
       fontStyle: str(input.fontStyle),
       lineHeight: num(input.lineHeight),
       letterSpacing: num(input.letterSpacing),
+      textDecoration: str(input.textDecoration ?? 'none'),
       fontStretch: str('normal'),
       textAlign: num(input.textAlign),
       justifyText: bool(input.justifyText),

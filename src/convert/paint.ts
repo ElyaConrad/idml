@@ -26,13 +26,14 @@ export function colorToHex(color: Color, tint = 100): string {
   const { red, green, blue } = color.getRBG();
   return rgbToHex(applyTintChannel(red, tint), applyTintChannel(green, tint), applyTintChannel(blue, tint));
 }
-export function colorInputToHex(ci: ColorInput | undefined): string | undefined {
+export function colorInputToHex(ci: ColorInput | undefined, tint = 100): string | undefined {
   if (!ci) return undefined;
-  if (ci.type === 'rgb') return rgbToHex(ci.red, ci.green, ci.blue);
+  const t = (c: number) => applyTintChannel(c, tint); // tint mixes toward paper-white
+  if (ci.type === 'rgb') return rgbToHex(t(ci.red), t(ci.green), t(ci.blue));
   const r = 255 * (1 - ci.cyan / 100) * (1 - ci.black / 100);
   const g = 255 * (1 - ci.magenta / 100) * (1 - ci.black / 100);
   const b = 255 * (1 - ci.yellow / 100) * (1 - ci.black / 100);
-  return rgbToHex(r, g, b);
+  return rgbToHex(t(r), t(g), t(b));
 }
 export function gradientToSerial(gradient: Gradient, fillAngleDeg: number, tint = 100): Template.Elements.Gradient {
   // Bluepic ColorStop.position is a 0..100 percentage (core renders `${position}%`).

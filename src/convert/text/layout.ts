@@ -1,7 +1,7 @@
 import type * as Template from '../../serial/serial-types';
 import { TextFrame } from '../../controllers/sprites/TextFrame';
 import { DecomposedTransform } from '../../util/layout';
-import { makeRectangle, makeLineBackgroundRectangle, identityTransform, makeText, makeGroup, Box, RichTextRun, TextBounding } from '../../serial/builders';
+import { makeRectangle, makeLineBackgroundRectangle, makeParagraphShadingRectangle, identityTransform, makeText, makeGroup, Box, RichTextRun, TextBounding } from '../../serial/builders';
 import { IDENTITY_DECOMP } from '../constants';
 import { ConvertSettings } from '../types';
 import { AssetCollector } from '../assets';
@@ -35,6 +35,14 @@ export function textElementFromRuns(id: string, runs: TextRun[], box: Box, align
   // normal run — since `uppercase` is part of sameTextStyle, uniform elements are
   // consistently all-caps or all-not anyway; splitting keeps them apart.
   const uppercase = runs.length > 0 && runs.every((r) => r.style.uppercase);
+  // Element-level text-decoration, set only when EVERY run agrees (like uppercase —
+  // no per-run equivalent). A thick offset underline is InDesign's highlight-bar idiom
+  // and takes the Bauchbinde line-background path, NOT text-decoration, so exclude it.
+  const isBarUnderline = (s: EffectiveTextStyle) => !!s.underline && s.underlineWeight !== undefined && s.underlineWeight >= BAUCHBINDE_MIN_WEIGHT_RATIO * s.fontSize;
+  const decoParts: string[] = [];
+  if (runs.length > 0 && runs.every((r) => r.style.underline && !isBarUnderline(r.style))) decoParts.push('underline');
+  if (runs.length > 0 && runs.every((r) => r.style.strikeThrough)) decoParts.push('line-through');
+  const textDecoration = decoParts.length ? decoParts.join(' ') : 'none';
   const richText: RichTextRun[] = runs.map((r) => {
     const format: Record<string, unknown> = {};
     if (r.style.fontFamily !== base.fontFamily) format.fontFamily = r.style.fontFamily;
@@ -65,6 +73,7 @@ export function textElementFromRuns(id: string, runs: TextRun[], box: Box, align
       bounding,
       autoLinebreaks: true,
       uppercase,
+      textDecoration,
       fill: base.color,
       // Outlined text: InDesign character stroke → core paints <text stroke stroke-width>.
       stroke: base.strokeColor,
@@ -135,6 +144,18 @@ export function lineBackgroundBar(core: typeof import('@bluepic/core/text') | nu
   // Underline color defaults to the text fill when the run gives none (InDesign).
   const fill = style.underlineColor ?? style.color;
   return makeLineBackgroundRectangle(`${targetTextId}_linebg`, targetTextId, { fill, weight, offset, ascent, pad, leftAnchorX });
+}
+
+/**
+ * Build the paragraph-shading block for a text element whose paragraph carries
+ * `ParagraphShadingOn` — a line-bound background rectangle spanning the frame width
+ * behind the whole element (see makeParagraphShadingRectangle). Returns null when the
+ * paragraph has no shading. `box` is the frame box (the shading's horizontal span).
+ */
+export function paragraphShadingBlock(targetTextId: string, style: EffectiveTextStyle, box: Box): Template.Elements.Rectangle | null {
+  const ps = style.paragraphShading;
+  if (!ps) return null;
+  return makeParagraphShadingRectangle(`${targetTextId}_pshade`, targetTextId, { x: box.x, width: box.width }, { fill: ps.color, topOffset: ps.topOffset, bottomOffset: ps.bottomOffset, leftOffset: ps.leftOffset, rightOffset: ps.rightOffset });
 }
 
 /** A layout probe over the merged frame: `(lineHeight%, bounding, blockTopY, maxHeight)`.
@@ -392,10 +413,15 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
   // first line doesn't get a wider inset than the lines below it; and left-aligned bars
   // pin their left edge to the shared frame-left (boxX) for one clean edge like InDesign.
   const withBars = (pairs: Array<{ el: Template.Elements.Text; style: EffectiveTextStyle; scale: number; boxX: number; align: number }>): Template.Element[] => {
+    // Paragraph-shading blocks sit BEHIND everything (bars and text), so they lead the
+    // build order (earlier in the array renders further back after the global z-reverse).
+    const shading = pairs
+      .map((p) => paragraphShadingBlock(p.el.id, p.style, box))
+      .filter((s): s is Template.Elements.Rectangle => s !== null);
     const bars = pairs
       .map((p) => lineBackgroundBar(core, p.el.id, p.style, p.scale, settings.lineBackgroundPaddingEm * base.fontSize * p.scale, p.align < 0.25 ? p.boxX : null))
       .filter((b): b is Template.Elements.Rectangle => b !== null);
-    return [...bars, ...pairs.map((p) => p.el)];
+    return [...shading, ...bars, ...pairs.map((p) => p.el)];
   };
 
   // Forced breaks normalized: core only breaks lines on '\n', so a raw U+2028 would

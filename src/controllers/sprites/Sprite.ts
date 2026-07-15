@@ -489,10 +489,6 @@ export abstract class Sprite {
     const strokeAlignment = props.StrokeAlignment; // raw IDML enum, merged & mapped later
     const strokeWeight = ensureNumber(props.StrokeWeight);
 
-    if (element.getAttribute('Self') === 'u16e') {
-      console.log('strokeWeight', strokeWeight);
-    }
-
     // TODO: Make a real implementation
     const frameFittingOptionElement = Spread.getDirectChildren(element, 'FrameFittingOption')[0] as Element | undefined;
     const frameFittingOption = frameFittingOptionElement
@@ -559,7 +555,12 @@ export abstract class Sprite {
     };
   }
   static parseBlendingSetting(element: Element) {
-    const opacity = ensureNumber(element.getAttribute('Opacity')) ?? 100;
+    // Absent Opacity means the default (100), NOT 0. `ensureNumber` runs `Number()`, and
+    // `Number(null)` is `0` (not NaN), so `ensureNumber(getAttribute('Opacity')) ?? 100` would
+    // make an object with a BlendingSetting-but-no-Opacity fully transparent (e.g. an element that
+    // only sets a blend mode). Gate on hasAttribute so only a real value is read. (Same trap as the
+    // drop-shadow / graphic-bounds Opacity defaults.)
+    const opacity = element.hasAttribute('Opacity') ? (ensureNumber(element.getAttribute('Opacity')) ?? 100) : 100;
     return {
       opacity,
       blendMode: element.getAttribute('BlendMode') ?? undefined,

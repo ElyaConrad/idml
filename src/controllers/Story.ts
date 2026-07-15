@@ -306,6 +306,16 @@ export class Story {
       strokeWeight: ensureNumber(props.StrokeWeight),
       underline: props.Underline ? ensureBoolean(props.Underline) : undefined,
       strikeThrough: props.StrikeThru ? ensureBoolean(props.StrikeThru) : undefined,
+      // Paragraph shading (fill behind the whole paragraph). ParagraphShadingColor
+      // rides a <Properties> child (flattened into props). Only capture the color/offsets
+      // when shading is actually on, so an off paragraph carries no stray override.
+      paragraphShadingOn: props.ParagraphShadingOn !== undefined ? ensureBoolean(props.ParagraphShadingOn) : undefined,
+      paragraphShadingColor: props.ParagraphShadingColor ? context.idml.getColorById(props.ParagraphShadingColor)?.toColorInput() : undefined,
+      paragraphShadingTint: ensureNumber(props.ParagraphShadingTint),
+      paragraphShadingTopOffset: ensureNumber(props.ParagraphShadingTopOffset),
+      paragraphShadingBottomOffset: ensureNumber(props.ParagraphShadingBottomOffset),
+      paragraphShadingLeftOffset: ensureNumber(props.ParagraphShadingLeftOffset),
+      paragraphShadingRightOffset: ensureNumber(props.ParagraphShadingRightOffset),
       autoLeading: ensureNumber(props.AutoLeading),
       leading: ensureNumber(props.Leading),
       spaceBefore: ensureNumber(props.SpaceBefore),

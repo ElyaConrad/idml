@@ -34,9 +34,6 @@ export class Gradient {
     this.length = options.length;
     this.angle = options.angle;
     this.transform = options.transform;
-
-    console.log('Created gradient with transform', this);
-    
   }
   getType() {
     return this.type;
@@ -84,7 +81,10 @@ export class Gradient {
     if (!id) {
       throw new Error('Gradient element must have a Self attribute');
     }
-    const type = gradienTypeMap.getInternal(props.GradientType);
+    // IDML writes the gradient kind as `Type="Linear|Radial"` on the <Gradient> element — NOT
+    // `GradientType` (that's the per-item fill attr). Reading the wrong name made every radial
+    // gradient fall back to linear.
+    const type = gradienTypeMap.getInternal(props.Type);
     const length = ensureNumber(props.Length);
     const angle = ensureNumber(props.Angle);
     const transform = parseIDMLTransform(props.GradientTransform ?? '1 0 0 1 0 0');
