@@ -7,6 +7,7 @@ import { typoAscentRatio } from './util/font.js';
 import { isDisplayableImageMime, makeImagePreviewSrc } from './util/imagePreview.js';
 import { parseSvgViewBox, type SvgViewBox } from './util/svgViewBox.js';
 import type { Font as SerialFont } from './serial/serial-types.js';
+import { noteDocumentCmykProfile } from './convert/color/ColorManager.js';
 
 /** Extension -> MIME for provided files (reliable, and catches SVG which byte
  * sniffing misses). */
@@ -135,6 +136,10 @@ export class IdmlSerialConverter {
       if (r && r > 0) fontAscentRatios.set(font.family, r);
     }
     const resolveFontAscentRatio = (family: string) => fontAscentRatios.get(family);
+    // Informational only (see ColorManager) — CMYK always converts through the bundled
+    // SWOP LUT regardless of the declared profile; this just logs a heads-up when it's not
+    // a recognized SWOP alias, since the document's <Document> root carries CMYKProfile.
+    noteDocumentCmykProfile(this.idml.designmap?.getAttribute('CMYKProfile') ?? undefined);
     const result = await convertIDML2Serial(this.idml, { ...options, resolveImageSrc, resolveImageViewBox, resolveFontAscentRatio });
     for (const { serial } of result) serial.fonts = mergeFonts(serial.fonts, serialFonts);
     this.lastResult = result;

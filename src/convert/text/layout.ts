@@ -1,7 +1,7 @@
 import type * as Template from '../../serial/serial-types';
 import { TextFrame } from '../../controllers/sprites/TextFrame';
 import { DecomposedTransform } from '../../util/layout';
-import { makeRectangle, makeLineBackgroundRectangle, makeParagraphShadingRectangle, identityTransform, makeText, makeGroup, Box, RichTextRun, TextBounding } from '../../serial/builders';
+import { makeRectangle, makeLineBackgroundRectangle, makeParagraphShadingRectangle, makeParagraphRuleRectangle, identityTransform, makeText, makeGroup, Box, RichTextRun, TextBounding } from '../../serial/builders';
 import { IDENTITY_DECOMP } from '../constants';
 import { ConvertSettings } from '../types';
 import { AssetCollector } from '../assets';
@@ -158,6 +158,24 @@ export function paragraphShadingBlock(targetTextId: string, style: EffectiveText
   const ps = style.paragraphShading;
   if (!ps) return null;
   return makeParagraphShadingRectangle(`${targetTextId}_pshade`, targetTextId, { x: box.x, width: box.width }, { fill: ps.color, topOffset: ps.topOffset, bottomOffset: ps.bottomOffset, leftOffset: ps.leftOffset, rightOffset: ps.rightOffset });
+}
+
+/**
+ * Build the paragraph-rule line(s) (RuleAbove/RuleBelow) for a text element — column-width
+ * rectangles positioned relative to the first/last line's baseline. Needs the measured font
+ * ascent (baseline = line top + ascent), so no-op without a canvas. `scale` tracks the
+ * merged-fit shrink so weight/offset/ascent all follow the shrunken text.
+ */
+export function paragraphRuleBlocks(core: typeof import('@bluepic/core/text') | null, targetTextId: string, style: EffectiveTextStyle, scale: number, box: Box): Template.Elements.Rectangle[] {
+  if (!core || (!style.paragraphRuleAbove && !style.paragraphRuleBelow)) return [];
+  const ascent = fontAscent(core, style, style.fontSize * scale);
+  if (!(ascent > 0)) return [];
+  const out: Template.Elements.Rectangle[] = [];
+  const ra = style.paragraphRuleAbove;
+  const rb = style.paragraphRuleBelow;
+  if (ra) out.push(makeParagraphRuleRectangle(`${targetTextId}_ruleabove`, targetTextId, { x: box.x, width: box.width }, { fill: ra.color, weight: ra.weight * scale, offset: ra.offset * scale, ascent, position: 'above' }));
+  if (rb) out.push(makeParagraphRuleRectangle(`${targetTextId}_rulebelow`, targetTextId, { x: box.x, width: box.width }, { fill: rb.color, weight: rb.weight * scale, offset: rb.offset * scale, ascent, position: 'below' }));
+  return out;
 }
 
 /** A layout probe over the merged frame: `(lineHeight%, bounding, blockTopY, maxHeight)`.
@@ -435,10 +453,12 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
     const shading = pairs
       .map((p) => paragraphShadingBlock(p.el.id, p.style, box))
       .filter((s): s is Template.Elements.Rectangle => s !== null);
+    // Paragraph rules (above/below) sit behind the text alongside shading.
+    const rules = pairs.flatMap((p) => paragraphRuleBlocks(core, p.el.id, p.style, p.scale, box));
     const bars = pairs
       .map((p) => lineBackgroundBar(core, p.el.id, p.style, p.scale, settings.lineBackgroundPaddingEm * base.fontSize * p.scale, p.align < 0.25 ? p.boxX : null))
       .filter((b): b is Template.Elements.Rectangle => b !== null);
-    return [...shading, ...bars, ...pairs.map((p) => p.el)];
+    return [...shading, ...rules, ...bars, ...pairs.map((p) => p.el)];
   };
 
   // Forced breaks normalized: core only breaks lines on '\n', so a raw U+2028 would

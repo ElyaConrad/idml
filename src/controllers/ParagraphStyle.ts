@@ -30,6 +30,16 @@ export type ParagraphStyleInput = {
   paragraphShadingRightOffset?: number;
   hyphenation?: boolean;
   appliedLanguage?: string;
+  ruleAbove?: boolean;
+  ruleAboveWeight?: number;
+  ruleAboveColor?: ColorInput;
+  ruleAboveTint?: number;
+  ruleAboveOffset?: number;
+  ruleBelow?: boolean;
+  ruleBelowWeight?: number;
+  ruleBelowColor?: ColorInput;
+  ruleBelowTint?: number;
+  ruleBelowOffset?: number;
 };
 
 export type Align = 'left' | 'right' | 'center' | 'justify' | 'justifyLeft' | 'justifyRight' | 'justifyCenter' | 'justifyAll';
@@ -96,6 +106,16 @@ export class ParagraphStyle {
 
   public hyphenation?: boolean;
   public appliedLanguage?: string;
+  public ruleAbove?: boolean;
+  public ruleAboveWeight?: number;
+  public ruleAboveColorId?: string;
+  public ruleAboveTint?: number;
+  public ruleAboveOffset?: number;
+  public ruleBelow?: boolean;
+  public ruleBelowWeight?: number;
+  public ruleBelowColorId?: string;
+  public ruleBelowTint?: number;
+  public ruleBelowOffset?: number;
   public alignToBaseline?: boolean;
 
   public rootParagraphStyleGroupId?: string;
@@ -142,6 +162,16 @@ export class ParagraphStyle {
 
       hyphenation?: boolean;
       appliedLanguage?: string;
+      ruleAbove?: boolean;
+      ruleAboveWeight?: number;
+      ruleAboveColorId?: string;
+      ruleAboveTint?: number;
+      ruleAboveOffset?: number;
+      ruleBelow?: boolean;
+      ruleBelowWeight?: number;
+      ruleBelowColorId?: string;
+      ruleBelowTint?: number;
+      ruleBelowOffset?: number;
       alignToBaseline?: boolean;
 
       rootParagraphStyleGroupId?: string;
@@ -187,6 +217,16 @@ export class ParagraphStyle {
 
     this.hyphenation = opts.hyphenation;
     this.appliedLanguage = opts.appliedLanguage;
+    this.ruleAbove = opts.ruleAbove;
+    this.ruleAboveWeight = opts.ruleAboveWeight;
+    this.ruleAboveColorId = opts.ruleAboveColorId;
+    this.ruleAboveTint = opts.ruleAboveTint;
+    this.ruleAboveOffset = opts.ruleAboveOffset;
+    this.ruleBelow = opts.ruleBelow;
+    this.ruleBelowWeight = opts.ruleBelowWeight;
+    this.ruleBelowColorId = opts.ruleBelowColorId;
+    this.ruleBelowTint = opts.ruleBelowTint;
+    this.ruleBelowOffset = opts.ruleBelowOffset;
     this.alignToBaseline = opts.alignToBaseline;
 
     this.rootParagraphStyleGroupId = opts.rootParagraphStyleGroupId;
@@ -279,6 +319,16 @@ export class ParagraphStyle {
       paragraphShadingRightOffset: this.paragraphShadingRightOffset,
       hyphenation: this.hyphenation,
       appliedLanguage: this.appliedLanguage,
+      ruleAbove: this.ruleAbove,
+      ruleAboveWeight: this.ruleAboveWeight,
+      ruleAboveColor: this.ruleAboveColorId ? this.context.idml.getColorById(this.ruleAboveColorId)?.toColorInput() : undefined,
+      ruleAboveTint: this.ruleAboveTint,
+      ruleAboveOffset: this.ruleAboveOffset,
+      ruleBelow: this.ruleBelow,
+      ruleBelowWeight: this.ruleBelowWeight,
+      ruleBelowColor: this.ruleBelowColorId ? this.context.idml.getColorById(this.ruleBelowColorId)?.toColorInput() : undefined,
+      ruleBelowTint: this.ruleBelowTint,
+      ruleBelowOffset: this.ruleBelowOffset,
     }).filter(([_, value]) => value !== undefined)) as ParagraphStyleInput;
   }
   equals(input: ParagraphStyleInput) {
@@ -355,6 +405,18 @@ export class ParagraphStyle {
     // [No paragraph style]) into a concrete `false` that clobbers the inherited default.
     const hyphenation = props.Hyphenation !== undefined ? ensureBoolean(props.Hyphenation) : undefined;
     const appliedLanguage = props.AppliedLanguage;
+    // Paragraph rules. `RuleAbove`/`RuleBelow` are the on flags; the colour rides a
+    // <Properties> child (flattened into props). Presence-guarded like Hyphenation.
+    const ruleAbove = props.RuleAbove !== undefined ? ensureBoolean(props.RuleAbove) : undefined;
+    const ruleAboveWeight = ensureNumber(props.RuleAboveLineWeight);
+    const ruleAboveColorId = props.RuleAboveColor;
+    const ruleAboveTint = ensureNumber(props.RuleAboveTint);
+    const ruleAboveOffset = ensureNumber(props.RuleAboveOffset);
+    const ruleBelow = props.RuleBelow !== undefined ? ensureBoolean(props.RuleBelow) : undefined;
+    const ruleBelowWeight = ensureNumber(props.RuleBelowLineWeight);
+    const ruleBelowColorId = props.RuleBelowColor;
+    const ruleBelowTint = ensureNumber(props.RuleBelowTint);
+    const ruleBelowOffset = ensureNumber(props.RuleBelowOffset);
     const alignToBaseline = ensureBoolean(props.AlignToBaselineGrid);
 
     return new ParagraphStyle(
@@ -397,6 +459,16 @@ export class ParagraphStyle {
         firstLineIndent,
         hyphenation,
         appliedLanguage,
+        ruleAbove,
+        ruleAboveWeight,
+        ruleAboveColorId,
+        ruleAboveTint,
+        ruleAboveOffset,
+        ruleBelow,
+        ruleBelowWeight,
+        ruleBelowColorId,
+        ruleBelowTint,
+        ruleBelowOffset,
         alignToBaseline,
         rootParagraphStyleGroupId,
       },

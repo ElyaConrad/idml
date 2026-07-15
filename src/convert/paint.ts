@@ -4,6 +4,7 @@ import { Gradient } from '../controllers/Gradient';
 import { ColorInput } from '../types/index';
 import { Sprite } from '../controllers/sprites/Sprite';
 import { Paint, SurfaceInput, DropShadowValue } from '../serial/builders';
+import { cmykToSrgb } from './color/ColorManager.js';
 
 // ---- color -----------------------------------------------------------------
 
@@ -23,16 +24,18 @@ export function applyTintChannel(channel: number, tint: number): number {
   return 255 - (255 - channel) * (tint / 100);
 }
 export function colorToHex(color: Color, tint = 100): string {
-  const { red, green, blue } = color.getRBG();
-  return rgbToHex(applyTintChannel(red, tint), applyTintChannel(green, tint), applyTintChannel(blue, tint));
+  // Delegates to colorInputToHex so BOTH rgb and cmyk swatches go through the one
+  // colour-managed path below (color.getRBG()'s cmyk branch uses the old uncalibrated
+  // formula and is left as-is for idml2svg, the only other caller).
+  return colorInputToHex(color.toColorInput(), tint) ?? '#000000ff';
 }
 export function colorInputToHex(ci: ColorInput | undefined, tint = 100): string | undefined {
   if (!ci) return undefined;
   const t = (c: number) => applyTintChannel(c, tint); // tint mixes toward paper-white
   if (ci.type === 'rgb') return rgbToHex(t(ci.red), t(ci.green), t(ci.blue));
-  const r = 255 * (1 - ci.cyan / 100) * (1 - ci.black / 100);
-  const g = 255 * (1 - ci.magenta / 100) * (1 - ci.black / 100);
-  const b = 255 * (1 - ci.yellow / 100) * (1 - ci.black / 100);
+  // CMYK -> sRGB via the SWOP-profile LUT (see ColorManager) — colour-managed, matches
+  // InDesign's actual on-screen/export conversion (not the old device-formula approximation).
+  const [r, g, b] = cmykToSrgb(ci.cyan, ci.magenta, ci.yellow, ci.black);
   return rgbToHex(t(r), t(g), t(b));
 }
 export function gradientToSerial(gradient: Gradient, fillAngleDeg: number, tint = 100): Template.Elements.Gradient {

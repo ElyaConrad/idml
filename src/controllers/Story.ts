@@ -328,6 +328,16 @@ export class Story {
       capitalization: props.Capitalization !== undefined ? capitalizationMap.getInternal(props.Capitalization) : undefined,
       hyphenation: props.Hyphenation !== undefined ? ensureBoolean(props.Hyphenation) : undefined,
       appliedLanguage: props.AppliedLanguage,
+      ruleAbove: props.RuleAbove !== undefined ? ensureBoolean(props.RuleAbove) : undefined,
+      ruleAboveWeight: ensureNumber(props.RuleAboveLineWeight),
+      ruleAboveColor: props.RuleAboveColor ? context.idml.getColorById(props.RuleAboveColor)?.toColorInput() : undefined,
+      ruleAboveTint: ensureNumber(props.RuleAboveTint),
+      ruleAboveOffset: ensureNumber(props.RuleAboveOffset),
+      ruleBelow: props.RuleBelow !== undefined ? ensureBoolean(props.RuleBelow) : undefined,
+      ruleBelowWeight: ensureNumber(props.RuleBelowLineWeight),
+      ruleBelowColor: props.RuleBelowColor ? context.idml.getColorById(props.RuleBelowColor)?.toColorInput() : undefined,
+      ruleBelowTint: ensureNumber(props.RuleBelowTint),
+      ruleBelowOffset: ensureNumber(props.RuleBelowOffset),
     }).filter(([_, value]) => value !== undefined)) as ParagraphStyleInput;
 
     const appliedParagraphStyle = props.AppliedParagraphStyle;

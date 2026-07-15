@@ -42,6 +42,11 @@ export type EffectiveTextStyle = {
   hyphenate?: boolean;
   /** BCP-47 tag for hyphenation, mapped from IDML `AppliedLanguage` (e.g. 'de', 'en-us'). */
   hyphenationLanguage?: string;
+  /** IDML paragraph `RuleAbove`/`RuleBelow` — a colored rule line above the first line /
+   * below the last line of the paragraph, spanning the column width. Emitted as a
+   * line-bound rectangle (see buildTextElements' paragraph-rule emit). Weight/offset in px. */
+  paragraphRuleAbove?: { color: string; weight: number; offset: number };
+  paragraphRuleBelow?: { color: string; weight: number; offset: number };
 };
 
 // IDML `AppliedLanguage` comes in two shapes: readable InDesign names ("English: USA",
@@ -138,6 +143,14 @@ export function effectiveTextStyle(paragraph: ParagraphOutput, feature: Paragrap
   // hyphenation off (safe: identical to today's greedy layout).
   const hyphenationLanguage = mapIndesignLanguageToBCP47((pick('appliedLanguage') as string | undefined) ?? rootDefaults.language);
   const hyphenate = ((pick('hyphenation') as boolean | undefined) ?? rootDefaults.hyphenation) === true && !!hyphenationLanguage;
+  // Paragraph rules (RuleAbove/RuleBelow): a colored line above the first / below the last
+  // line. Weight/offset are points (px @72). Colour tints toward paper-white like shading.
+  const ruleColor = (on: unknown, color: unknown, tint: unknown): string | undefined =>
+    on === true ? colorInputToHex(color as ColorInput | undefined, (tint as number | undefined) ?? 100) ?? '#000000ff' : undefined;
+  const ruleAboveHex = ruleColor(pick('ruleAbove'), pick('ruleAboveColor'), pick('ruleAboveTint'));
+  const ruleBelowHex = ruleColor(pick('ruleBelow'), pick('ruleBelowColor'), pick('ruleBelowTint'));
+  const paragraphRuleAbove = ruleAboveHex ? { color: ruleAboveHex, weight: (pick('ruleAboveWeight') as number | undefined) ?? 1, offset: (pick('ruleAboveOffset') as number | undefined) ?? 0 } : undefined;
+  const paragraphRuleBelow = ruleBelowHex ? { color: ruleBelowHex, weight: (pick('ruleBelowWeight') as number | undefined) ?? 1, offset: (pick('ruleBelowOffset') as number | undefined) ?? 0 } : undefined;
   const paragraphShading =
     paragraphShadingOn === true
       ? {
@@ -174,6 +187,8 @@ export function effectiveTextStyle(paragraph: ParagraphOutput, feature: Paragrap
     paragraphShading,
     hyphenate,
     hyphenationLanguage,
+    paragraphRuleAbove,
+    paragraphRuleBelow,
   };
 }
 

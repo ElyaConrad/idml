@@ -72,7 +72,7 @@ These are NOT converter bugs; they are traps that corrupt a test if you don't ac
 |---|---------|-------|------|--------------|
 | 1 | **Blend modes** | 13.8% | OURS-LIGHT | `blendMode` (Multiply/Screen/…) not applied — object renders Normal. `BlendingSetting.blendMode` is read but not honored in compositing. |
 | 2 | **Paragraph shading** | ~~12.9%~~ → **2.07% FIXED** | — | `ParagraphShadingOn/Color/Tint` (fill behind a paragraph) now drawn as a line-bound iterated background block spanning the frame width (`makeParagraphShadingRectangle`, emitted behind the text in `withBars`). Plumbed paragraph-level through `ParagraphStyle`/`Story` local+named + `EffectiveTextStyle`. Tint applied via `colorInputToHex(color, tint)`; default 20 (InDesign root [No paragraph style] default, inherited via BasedOn which `pick` doesn't walk). Top/bottom/left/right offsets supported (per-line ternary on first/last tile). Residual 2% = text AA. |
-| 3 | **CMYK → sRGB** | 12.1% | — | Solid CMYK swatches convert to the wrong sRGB values vs InDesign's color engine. |
+| 3 | **CMYK → sRGB** | ~~12.1%~~ → **0.05% FIXED** | — | The naive device formula is replaced by a real ICC-managed conversion: a build-time-generated LUT (17⁴ grid) derived from the bundled `U.S. Web Coated (SWOP) v2` profile via LittleCMS (Relative Colorimetric + BPC), interpolated at runtime in pure JS (no WASM/ICC file ships). Verified BYTE-EXACT against InDesign's rendered primaries (cyan/magenta/yellow) plus InDesign's "rich black" on-screen override for pure K=100. See `ColorManager.ts` + `scripts/generate-cmyk-lut.mjs`. |
 | 4 | **Radial gradient** | 13.8% | — | Renders a gradient but center/spread/type geometry differs from InDesign (linear gradient is fine at 0.09%). |
 | 5 | **Object visibility** | ~~6.4%~~ → **0.17% FIXED** | — | `PageItem.visible=false` now skipped. |
 | 6 | **Layer visibility** | ~~6.3%~~ → **0.16% FIXED** | — | items on a hidden `<Layer Visible="false">` now skipped. |
@@ -108,7 +108,7 @@ These are NOT converter bugs; they are traps that corrupt a test if you don't ac
 | 11 | **Text underline** | ~~1.7%~~ → **0.79% FIXED** | — | Thin/normal underline now painted via element-level SVG `text-decoration` (new `textDecoration` prop on the Text element: types + core `compose/text.ts`+`Text.vue`, idml `builders.ts`+`layout.ts`). Thick offset underlines still take the Bauchbinde bar path (excluded from decoration by the `BAUCHBINDE_MIN_WEIGHT_RATIO` gate). Set element-level only when every run agrees. |
 | 12 | **Strikethrough / caps** | ~~1.8%~~ → **0.89% FIXED** | — | Strikethrough painted via `text-decoration: line-through` (same mechanism as underline). AllCaps confirmed rendering (`uppercase`); SmallCaps renders as normal text — no Bluepic equivalent (accepted limitation). |
 | 13 | **Tab leaders** | 1.4% | — | dot-leader tabs not rendered (`TabList`/`Leader` MISS). |
-| 14 | **Paragraph rules** | 1.4% | — | rule above/below not drawn (`RuleAbove/BelowType` MISS). |
+| 14 | **Paragraph rules** | ~~1.4%~~ → **0.26% FIXED** | — | `RuleAbove`/`RuleBelow` now drawn as column-width line-bound rectangles (`makeParagraphRuleRectangle`, bound to first/last line's baseline, emitted behind text in `withBars`). Plumbed weight/color/tint/offset through ParagraphStyle+Story (named+local) → `EffectiveTextStyle.paragraphRuleAbove/Below`. |
 | 15 | **Text stroke** | 1.3% | OURS-BLANK | outlined text (fill+stroke) renders invisible — text stroke not painted. |
 | 16 | **Inner shadow** | 0.9% | OURS-BLANK | `innerShadowSettings` not applied. |
 

@@ -223,6 +223,49 @@ export function makeParagraphShadingRectangle(id: string, targetTextId: string, 
   };
 }
 
+/**
+ * InDesign paragraph rule (`RuleAbove`/`RuleBelow`) — a colored line above the FIRST line
+ * or below the LAST line of a paragraph, spanning the column width. A single (non-iterated)
+ * rectangle bound to the relevant line so it tracks the text's live position/line count.
+ *
+ * Vertical: relative to that line's baseline (`line.y + ascent`). Above sits with its bottom
+ * at the baseline (top = baseline − offset − weight); below sits with its top at the baseline
+ * (top = baseline + offset) — matching InDesign's default (offset 0) rule placement.
+ */
+export function makeParagraphRuleRectangle(id: string, targetTextId: string, box: { x: number; width: number }, opts: { fill: Paint; weight: number; offset: number; ascent: number; position: 'above' | 'below' }): Template.Elements.Rectangle {
+  const fmt = (n: number) => Number(n.toFixed(4)).toString();
+  // Above binds to the first line; below to the last (dynamic index survives re-wrap).
+  const L = opts.position === 'above' ? `${targetTextId}.lines[0]` : `${targetTextId}.lines[${targetTextId}.lines.length - 1]`;
+  const baseline = `${L}.y + ${fmt(opts.ascent)}`;
+  const k = opts.position === 'above' ? -(opts.offset + opts.weight) : opts.offset;
+  const yExpr = `${baseline}${k >= 0 ? ` + ${fmt(k)}` : ` - ${fmt(-k)}`}`;
+  return {
+    name: 'rectangle',
+    id,
+    locked: false,
+    properties: {
+      'v-transform-origin': ORIGIN_0,
+      visible: bool(true),
+      x: num(box.x),
+      y: exprRaw(yExpr),
+      width: num(box.width),
+      height: num(opts.weight),
+      radius: numArray([0, 0, 0, 0]),
+      pos: POS_TL,
+      fill: paint(opts.fill),
+      stroke: paint(null),
+      strokeWidth: num(0),
+      opacity: num(1),
+      strokeDasharray: numArray([0, 0]),
+      strokeDashoffset: num(0),
+      strokeAlignment: str('center'),
+    },
+    transform: serialTransform({ translateX: 0, translateY: 0, rotate: 0, skewX: 0, skewY: 0, scaleX: 1, scaleY: 1 }),
+    filter: defaultFilter(),
+    iteration: null,
+  };
+}
+
 /** Circle/ellipse — radius accepts [rx, ry]. x/y is the bbox top-left (pos [0,0]). */
 export function makeCircle(id: string, box: Box, transform: DecomposedTransform, surface: SurfaceInput): Template.Elements.Circle {
   return {
