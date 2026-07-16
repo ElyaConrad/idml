@@ -47,6 +47,11 @@ export type EffectiveTextStyle = {
    * line-bound rectangle (see buildTextElements' paragraph-rule emit). Weight/offset in px. */
   paragraphRuleAbove?: { color: string; weight: number; offset: number };
   paragraphRuleBelow?: { color: string; weight: number; offset: number };
+  /** IDML `HorizontalScale` as a ratio (99% → 0.99). Scales glyph advances/ink
+   * horizontally — designers use ±1–2% to fit a line exactly, so it decides WRAP, not just
+   * looks. Carried into measurement (probe features `scale`) and the serial (element
+   * `fontStretch` / richtext `format.scale`); core scales measurement + rendered glyphs. */
+  horizontalScale: number;
 };
 
 // IDML `AppliedLanguage` comes in two shapes: readable InDesign names ("English: USA",
@@ -147,6 +152,9 @@ export function effectiveTextStyle(paragraph: ParagraphOutput, feature: Paragrap
   // line. Weight/offset are points (px @72). Colour tints toward paper-white like shading.
   const ruleColor = (on: unknown, color: unknown, tint: unknown): string | undefined =>
     on === true ? colorInputToHex(color as ColorInput | undefined, (tint as number | undefined) ?? 100) ?? '#000000ff' : undefined;
+  // IDML stores HorizontalScale as a percentage (100 = normal); absent = 100.
+  const horizontalScaleRaw = pick('horizontalScale') as number | undefined;
+  const horizontalScale = horizontalScaleRaw && horizontalScaleRaw > 0 ? horizontalScaleRaw / 100 : 1;
   const ruleAboveHex = ruleColor(pick('ruleAbove'), pick('ruleAboveColor'), pick('ruleAboveTint'));
   const ruleBelowHex = ruleColor(pick('ruleBelow'), pick('ruleBelowColor'), pick('ruleBelowTint'));
   const paragraphRuleAbove = ruleAboveHex ? { color: ruleAboveHex, weight: (pick('ruleAboveWeight') as number | undefined) ?? 1, offset: (pick('ruleAboveOffset') as number | undefined) ?? 0 } : undefined;
@@ -189,6 +197,7 @@ export function effectiveTextStyle(paragraph: ParagraphOutput, feature: Paragrap
     hyphenationLanguage,
     paragraphRuleAbove,
     paragraphRuleBelow,
+    horizontalScale,
   };
 }
 
@@ -204,8 +213,13 @@ export const sameLetterSpacing = (a: number, b: number) => Math.abs(a - b) <= LE
 // runs would only churn plaintext->richtext without actually rendering mixed
 // caps correctly. Element uppercase is instead derived from ALL runs (every), so
 // a uniform AllCaps frame gets it; a mixed frame renders as-is (as before).
+// HorizontalScale differences are fit-relevant even at 1–2% (designers use them to squeeze
+// a line into its frame), so unlike letterSpacing they get only a float-noise epsilon —
+// runs scaled 101% vs 99% MUST count as different styles (forcing a per-run richtext
+// scale / a hard split at a paragraph boundary) or the wrap math loses the squeeze.
+export const sameHorizontalScale = (a: number, b: number) => Math.abs(a - b) < 0.005;
 export const sameTextStyle = (a: EffectiveTextStyle, b: EffectiveTextStyle) =>
-  a.fontFamily === b.fontFamily && a.fontSize === b.fontSize && a.fontWeight === b.fontWeight && a.fontStyle === b.fontStyle && a.color === b.color && sameLetterSpacing(a.letterSpacing, b.letterSpacing);
+  a.fontFamily === b.fontFamily && a.fontSize === b.fontSize && a.fontWeight === b.fontWeight && a.fontStyle === b.fontStyle && a.color === b.color && sameLetterSpacing(a.letterSpacing, b.letterSpacing) && sameHorizontalScale(a.horizontalScale, b.horizontalScale);
 
 // Baseline-to-baseline distances (leading = lineHeight * fontSize) within this many
 // points count as equal. Core has no per-LINE leading, so two lines that differ only

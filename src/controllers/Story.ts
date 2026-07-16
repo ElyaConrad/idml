@@ -261,6 +261,7 @@ export class Story {
       leading: ensureNumber(props.Leading),
       capitalization: props.Capitalization !== undefined ? capitalizationMap.getInternal(props.Capitalization) : undefined,
       appliedLanguage: props.AppliedLanguage,
+      horizontalScale: ensureNumber(props.HorizontalScale),
     }).filter(([_, value]) => value !== undefined)) as CharacterStyleInput;
 
     const appliedCharacterStyle = props.AppliedCharacterStyle;
@@ -338,6 +339,7 @@ export class Story {
       ruleBelowColor: props.RuleBelowColor ? context.idml.getColorById(props.RuleBelowColor)?.toColorInput() : undefined,
       ruleBelowTint: ensureNumber(props.RuleBelowTint),
       ruleBelowOffset: ensureNumber(props.RuleBelowOffset),
+      horizontalScale: ensureNumber(props.HorizontalScale),
     }).filter(([_, value]) => value !== undefined)) as ParagraphStyleInput;
 
     const appliedParagraphStyle = props.AppliedParagraphStyle;

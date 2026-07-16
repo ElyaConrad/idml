@@ -1,6 +1,6 @@
 {
   "name": "idml",
-  "version": "0.1.55",
+  "version": "0.1.56",
   "type": "module",
   "main": "./dist/cjs/main.js",
   "module": "./dist/esm/main.js",
@@ -54,7 +54,7 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "@bluepic/core": "^0.2.41",
+    "@bluepic/core": "^0.2.43",
     "@bluepic/types": "^0.6.27",
     "@types/color": "^4.2.0",
     "@types/fontkit": "^2.0.7",

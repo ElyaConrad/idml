@@ -30,6 +30,7 @@ export type ParagraphStyleInput = {
   paragraphShadingRightOffset?: number;
   hyphenation?: boolean;
   appliedLanguage?: string;
+  horizontalScale?: number;
   ruleAbove?: boolean;
   ruleAboveWeight?: number;
   ruleAboveColor?: ColorInput;
@@ -106,6 +107,7 @@ export class ParagraphStyle {
 
   public hyphenation?: boolean;
   public appliedLanguage?: string;
+  public horizontalScale?: number;
   public ruleAbove?: boolean;
   public ruleAboveWeight?: number;
   public ruleAboveColorId?: string;
@@ -162,6 +164,7 @@ export class ParagraphStyle {
 
       hyphenation?: boolean;
       appliedLanguage?: string;
+      horizontalScale?: number;
       ruleAbove?: boolean;
       ruleAboveWeight?: number;
       ruleAboveColorId?: string;
@@ -217,6 +220,7 @@ export class ParagraphStyle {
 
     this.hyphenation = opts.hyphenation;
     this.appliedLanguage = opts.appliedLanguage;
+    this.horizontalScale = opts.horizontalScale;
     this.ruleAbove = opts.ruleAbove;
     this.ruleAboveWeight = opts.ruleAboveWeight;
     this.ruleAboveColorId = opts.ruleAboveColorId;
@@ -319,6 +323,7 @@ export class ParagraphStyle {
       paragraphShadingRightOffset: this.paragraphShadingRightOffset,
       hyphenation: this.hyphenation,
       appliedLanguage: this.appliedLanguage,
+      horizontalScale: this.horizontalScale,
       ruleAbove: this.ruleAbove,
       ruleAboveWeight: this.ruleAboveWeight,
       ruleAboveColor: this.ruleAboveColorId ? this.context.idml.getColorById(this.ruleAboveColorId)?.toColorInput() : undefined,
@@ -405,6 +410,7 @@ export class ParagraphStyle {
     // [No paragraph style]) into a concrete `false` that clobbers the inherited default.
     const hyphenation = props.Hyphenation !== undefined ? ensureBoolean(props.Hyphenation) : undefined;
     const appliedLanguage = props.AppliedLanguage;
+    const horizontalScale = ensureNumber(props.HorizontalScale);
     // Paragraph rules. `RuleAbove`/`RuleBelow` are the on flags; the colour rides a
     // <Properties> child (flattened into props). Presence-guarded like Hyphenation.
     const ruleAbove = props.RuleAbove !== undefined ? ensureBoolean(props.RuleAbove) : undefined;
@@ -459,6 +465,7 @@ export class ParagraphStyle {
         firstLineIndent,
         hyphenation,
         appliedLanguage,
+        horizontalScale,
         ruleAbove,
         ruleAboveWeight,
         ruleAboveColorId,

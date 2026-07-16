@@ -49,7 +49,12 @@ export function textElementFromRuns(id: string, runs: TextRun[], box: Box, align
     if (r.style.fontSize !== base.fontSize) format.fontSize = r.style.fontSize;
     if (r.style.fontWeight !== base.fontWeight) format.fontWeight = r.style.fontWeight;
     if (r.style.fontStyle !== base.fontStyle) format.fontStyle = r.style.fontStyle;
-    if (!sameLetterSpacing(r.style.letterSpacing, base.letterSpacing)) format.letterSpacing = r.style.letterSpacing;
+    // EXACT compare, not the sameLetterSpacing tolerance: the tolerance only decides
+    // plaintext-vs-richtext (via sameTextStyle in `uniform`); once the element IS richtext,
+    // the per-run values must be faithful — InDesign's ±1–2% optical tracking/scale is
+    // exactly what makes a designed line fit its frame, so rounding it away breaks the wrap.
+    if (r.style.letterSpacing !== base.letterSpacing) format.letterSpacing = r.style.letterSpacing;
+    if (r.style.horizontalScale !== base.horizontalScale) format.scale = r.style.horizontalScale;
     if (r.style.color !== base.color) format.color = r.style.color;
     return { text: r.text, format };
   });
@@ -76,6 +81,7 @@ export function textElementFromRuns(id: string, runs: TextRun[], box: Box, align
       textDecoration,
       hyphenate: base.hyphenate,
       hyphenationLanguage: base.hyphenationLanguage,
+      horizontalScale: base.horizontalScale,
       fill: base.color,
       // Outlined text: InDesign character stroke → core paints <text stroke stroke-width>.
       stroke: base.strokeColor,
@@ -474,7 +480,10 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
       // Measure AllCaps runs as uppercase — capitals are wider, so wrapping matches.
       features: normalizedRuns.map((r) => ({
         text: r.style.uppercase ? r.text.toUpperCase() : r.text,
-        style: { fontFamily: r.style.fontFamily, fontSize: r.style.fontSize, fontWeight: r.style.fontWeight, fontStyle: r.style.fontStyle === 'italic' ? 'italic' : 'normal', letterSpacing: r.style.letterSpacing, color: r.style.color, rotate: 0, scale: 1 },
+        // `scale` = the run's HorizontalScale ratio — core's textInfo multiplies advances by
+        // it, so the probe wraps exactly where the renderer will (a 99%-condensed line that
+        // fits in InDesign also fits here).
+        style: { fontFamily: r.style.fontFamily, fontSize: r.style.fontSize, fontWeight: r.style.fontWeight, fontStyle: r.style.fontStyle === 'italic' ? 'italic' : 'normal', letterSpacing: r.style.letterSpacing, color: r.style.color, rotate: 0, scale: r.style.horizontalScale },
       })),
       fontSize: base.fontSize, x: box.x, y, maxWidth: box.width, maxHeight,
       anchor: [firstAlign, verticalAlign], lineHeight, bounding, textAlign: firstAlign, justifyText: firstJustify,

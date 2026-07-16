@@ -407,6 +407,7 @@ export type TextInput = {
   textDecoration?: string; // 'underline' | 'line-through' | 'underline line-through' (IDML thin Underline / StrikeThru); thick offset underlines take the Bauchbinde path instead
   hyphenate?: boolean; // IDML paragraph Hyphenation — emits hyphenation + knuth-plass (hyphenation only works under knuth-plass)
   hyphenationLanguage?: string; // BCP-47 tag (mapped from IDML AppliedLanguage); '' when off
+  horizontalScale?: number; // IDML HorizontalScale as a ratio (0.99 = 99%); rides the fontStretch prop, core scales measurement + glyphs
   // Line-box model core uses for advance + first-baseline. Default 'fontSize'
   // (advance = fontSize * lineHeight, matches InDesign leading). Vertical-justify
   // may emit 'actual-outer' (outer lines capped to their real ink, inner lines to
@@ -463,7 +464,10 @@ export function makeText(id: string, input: TextInput, transform: DecomposedTran
       linebreakingAlgorithm: str(input.hyphenate ? 'knuth-plass' : 'greedy-first-fit'),
       hyphenation: bool(input.hyphenate ?? false),
       hyphenationLanguage: str(input.hyphenationLanguage ?? ''),
-      fontStretch: str('normal'),
+      // Element-level HorizontalScale ratio (core reads a NUMBER here as the horizontal
+      // glyph scale; the historical string 'normal' means 1). Per-run overrides ride the
+      // richText `format.scale`.
+      fontStretch: input.horizontalScale && input.horizontalScale !== 1 ? num(input.horizontalScale) : str('normal'),
       textAlign: num(input.textAlign),
       justifyText: bool(input.justifyText),
       rotateLine: num(0),
