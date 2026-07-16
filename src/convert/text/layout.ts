@@ -512,13 +512,6 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
     lineHeightPercent = base.lineHeight * 100 - (fontDescent(core, base) / base.fontSize) * 100;
   }
 
-  // The last line's font-box descent, added to a box height so 'font' bounding's fit
-  // doesn't shrink text that InDesign would just let overflow (see the split loop).
-  // Only meaningful with a canvas + 'font' bounding, and only for TOP-aligned frames
-  // (centre/bottom anchoring would shift if we grew the box). 0 otherwise.
-  const lastRunStyle = runs[runs.length - 1]?.style ?? base;
-  const overflowPad = core && emitBounding === 'font' && verticalAlign === 0 ? fontDescent(core, lastRunStyle, lastRunStyle.fontSize) : 0;
-
   const growToFit = !!core && emitBounding === 'font' && verticalAlign === 0;
 
   // First-baseline correction: InDesign's "Ascent" first-baseline uses the TYPOGRAPHIC ascender
@@ -566,8 +559,8 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
   // InDesign-metric frame the designer sized, and the fitter would "fix" that phantom
   // overflow by shrinking every chunk (DIN-Bold: ×0.877 → 38px text rendered at 33.3px).
   // Width-driven wrap/fit is untouched. Non-top anchors keep the frame height (growing
-  // it would shift centre/bottom anchoring), exactly like growToFit/overflowPad.
-  const runLayout = (lineHeight: number) => probeLayout(lineHeight, emitBounding, box.y, verticalAlign === 0 ? 1e6 : box.height + overflowPad);
+  // it would shift centre/bottom anchoring), exactly like growToFit.
+  const runLayout = (lineHeight: number) => probeLayout(lineHeight, emitBounding, box.y, verticalAlign === 0 ? 1e6 : box.height);
 
   // 'never' keeps the whole frame as one element (richText carries real diffs).
   if (settings.textSplittingHeuristic === 'never') return singleElement();
