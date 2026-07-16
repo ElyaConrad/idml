@@ -527,11 +527,20 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
   // winAscent is inflated, dropping the text ~(win−typo)·fontSize too low. Shift the box UP by that
   // difference so the first baseline lands where InDesign puts it. Top-aligned 'font' bounding only
   // (centre/bottom/justify anchor differently). No-op when the font ratio is unknown or equal.
+  //
+  // The same excess is kept as `ascentExcess` for the SPLIT path's fit probe: the designer sized
+  // the frame for InDesign's typo metrics, so in font-bounding space the same block is
+  // (win−typo)·fontSize taller than the frame. Without that allowance the merged-fit probe
+  // "fixes" the phantom overflow by shrinking every chunk (DIN-Bold: ×0.877 — text rendered at
+  // 33.3px instead of 38px). The single-element path is immune (growToFit grows to the natural
+  // block); the probe needs the equivalent.
+  let ascentExcess = 0;
   if (core && emitBounding === 'font' && verticalAlign === 0) {
     const ratio = settings.resolveFontAscentRatio?.(base.fontFamily);
     if (ratio && ratio > 0) {
       const delta = fontAscent(core, base) - ratio * base.fontSize; // winAscent − typoAscent, in px
       if (Math.abs(delta) > 0.5) box = { ...box, y: box.y - delta };
+      if (delta > 0) ascentExcess = delta;
     }
   }
 
@@ -557,9 +566,12 @@ export async function buildTextElements(frame: TextFrame, box: Box, singleElemen
   };
 
   // Line-stacking layout for the split path: same bounding + lineHeight we emit. The
-  // merged fit gets the same descent overflow allowance so the whole frame isn't
-  // shrunk just because its last line's descent grazes past the frame bottom.
-  const runLayout = (lineHeight: number) => probeLayout(lineHeight, emitBounding, box.y, box.height + overflowPad);
+  // merged fit gets the same overflow allowances as the frame's metric model implies:
+  // the last line's descent (overflowPad) AND the first line's winAscent−typoAscent
+  // excess (ascentExcess) — the frame was sized for InDesign's typo metrics, so in
+  // font-bounding space the block is that much taller WITHOUT being overset. Only a
+  // GENUINE overflow beyond both allowances still shrinks (fitScale < 1).
+  const runLayout = (lineHeight: number) => probeLayout(lineHeight, emitBounding, box.y, box.height + ascentExcess + overflowPad);
 
   // 'never' keeps the whole frame as one element (richText carries real diffs).
   if (settings.textSplittingHeuristic === 'never') return singleElement();
