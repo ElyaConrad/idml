@@ -4,7 +4,6 @@ import { CharacterStyle, CharacterStyleInput } from './CharacterStyle.js';
 import { ParagraphStyle, ParagraphStyleInput } from './ParagraphStyle.js';
 import { ObjectStyle } from './ObjectStyle.js';
 import { SuperController } from './SuperController.js';
-import _ from 'lodash';
 import { v4 as uuidv4 } from 'uuid';
 
 export type IDMLStylesContext = IDMLDocumentContext & {
@@ -71,7 +70,7 @@ export class IDMLStylesController extends SuperController {
     const baseParagraphStyle = this.paragraphStyles.find((paragraphStyle) => paragraphStyle.id === 'ParagraphStyle/$ID/[No paragraph style]');
     const opts = {
       name: `Paragraph Style ${this.paragraphStyles.length + 1}`,
-      extendedKeyboardShortcut: _.cloneDeep(baseParagraphStyle?.extendedKeyboardShortcut),
+      extendedKeyboardShortcut: structuredClone(baseParagraphStyle?.extendedKeyboardShortcut),
       includeClass: baseParagraphStyle?.includeClass,
       styleUID: uuidv4(),
       imported: false,
@@ -121,7 +120,7 @@ export class IDMLStylesController extends SuperController {
       emitCss: baseCharacterStyle?.emitCss,
       styleUID: uuidv4(),
       includeClass: baseCharacterStyle?.includeClass,
-      extendedKeyboardShortcut: _.cloneDeep(baseCharacterStyle?.extendedKeyboardShortcut),
+      extendedKeyboardShortcut: structuredClone(baseCharacterStyle?.extendedKeyboardShortcut),
       name: `Character Style ${this.characterStyles.length + 1}`,
       appliedFont: characterStyle.appliedFont ?? baseCharacterStyle?.appliedFont,
       fontStyle: characterStyle.fontStyle ?? baseCharacterStyle?.fontStyle,

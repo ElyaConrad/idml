@@ -1,5 +1,4 @@
 import { createIDMLTransform, cssifyIDMLTransform, ensureBoolean, flattenIDMLProperties, getIDMLElementProperties, IdentityTransformMatrix, normalizeTransformForGivenOrigin, parseIDMLTransform, serializeElement, TransformMatrix } from '../helpers.js';
-import _ from 'lodash';
 import { Page } from './Page.js';
 import { IDMLSpreadPackageContext } from './SpreadPackage.js';
 import { DropShadowInput, DropShadowSetting, Sprite, SpriteWithChildren, TransparencySetting } from './sprites/Sprite.js';
@@ -171,10 +170,10 @@ export class Spread {
           optionalPage: masterSpreadPage.optionalPage,
           gridStartingPoint: masterSpreadPage.gridStartingPoint,
           // Clone master spread page properties
-          geometricBounds: _.cloneDeep(masterSpreadPage.geometricBounds),
-          itemTransform: _.cloneDeep(masterSpreadPage.itemTransform),
-          masterPageTransform: _.cloneDeep(masterSpreadPage.masterPageTransform),
-          marginPreference: _.cloneDeep(masterSpreadPage.marginPreference),
+          geometricBounds: structuredClone(masterSpreadPage.geometricBounds),
+          itemTransform: structuredClone(masterSpreadPage.itemTransform),
+          masterPageTransform: structuredClone(masterSpreadPage.masterPageTransform),
+          marginPreference: structuredClone(masterSpreadPage.marginPreference),
           gridDataInformation: new GridDataInformation(
             {
               fontSize: masterSpreadPage.gridDataInformation.fontSize,
@@ -204,7 +203,7 @@ export class Spread {
         flattenerPreference: {
           sourceElement: parseXML(`<FlattenerPreference LineArtAndTextResolution="300" GradientAndMeshResolution="150" ClipComplexRegions="false" ConvertAllStrokesToOutlines="false" ConvertAllTextToOutlines="false"><Properties><RasterVectorBalance type="double">50</RasterVectorBalance></Properties></FlattenerPreference>`),
         },
-        itemTransform: _.cloneDeep(masterSpread.itemTransform),
+        itemTransform: structuredClone(masterSpread.itemTransform),
       },
       context
     );

@@ -4,7 +4,6 @@ import { GeometricBounds, Transform } from '../types/index.js';
 import { GridDataInformation } from './GridDataInformation.js';
 import { IDMLMasterSpreadPackageContext } from './MasterSpreadPackage.js';
 import { Page } from './Page.js';
-import _ from 'lodash';
 
 export type CreateMasterSpreadOptions = {
   name?: string;
@@ -127,7 +126,7 @@ export class MasterSpread {
     const newPages = inheritMasterSpread.pages.map((masterSpreadPage, masterPageIndex) => {
       // Get an ID for the page
       const id = context.idml.getUniqueID('Page');
-      const geometricBounds = _.cloneDeep(opts.pageGeometricBounds ?? masterSpreadPage.geometricBounds);
+      const geometricBounds = structuredClone(opts.pageGeometricBounds ?? masterSpreadPage.geometricBounds);
       const itemTransform: TransformMatrix = [1, 0, 0, 1, -geometricBounds.width / 2, -geometricBounds.height / 2];
       return new Page(
         id,
@@ -141,8 +140,8 @@ export class MasterSpread {
           // Clone master spread page properties
           geometricBounds,
           itemTransform,
-          masterPageTransform: _.cloneDeep(masterSpreadPage.masterPageTransform),
-          marginPreference: _.cloneDeep(masterSpreadPage.marginPreference),
+          masterPageTransform: structuredClone(masterSpreadPage.masterPageTransform),
+          marginPreference: structuredClone(masterSpreadPage.marginPreference),
           gridDataInformation: new GridDataInformation(
             {
               fontSize: masterSpreadPage.gridDataInformation.fontSize,
@@ -170,8 +169,8 @@ export class MasterSpread {
         name: opts.name ?? inheritMasterSpread.name,
         namePrefix: inheritMasterSpread.namePrefix,
         baseName: inheritMasterSpread.baseName,
-        itemTransform: _.cloneDeep(inheritMasterSpread.itemTransform),
-        overridenPageItemProps: _.cloneDeep(inheritMasterSpread.overridenPageItemProps),
+        itemTransform: structuredClone(inheritMasterSpread.itemTransform),
+        overridenPageItemProps: structuredClone(inheritMasterSpread.overridenPageItemProps),
         pageColor: opts.pageColor ?? inheritMasterSpread.pageColor,
         primaryTextFrame: inheritMasterSpread.primaryTextFrame,
         showMasterItems: inheritMasterSpread.showMasterItems,

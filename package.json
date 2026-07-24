@@ -1,6 +1,6 @@
 {
   "name": "idml",
-  "version": "0.1.59",
+  "version": "0.1.60",
   "type": "module",
   "main": "./dist/cjs/main.js",
   "module": "./dist/esm/main.js",
@@ -59,22 +59,26 @@
     "@types/color": "^4.2.0",
     "@types/fontkit": "^2.0.7",
     "@types/fs-extra": "^11.0.4",
-    "@types/lodash": "^4.17.24",
     "@types/node": "^22.7.9",
     "@types/opentype.js": "^1.3.8",
     "@types/sharp": "^0.31.1",
     "@types/svg-arc-to-cubic-bezier": "^3.2.3",
     "lcms-wasm": "^1.0.5",
     "npm-watch": "^0.13.0",
+    "sharp": "^0.33.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.3"
   },
   "peerDependencies": {
     "@bluepic/core": "^0.2.9",
+    "sharp": "^0.33.5",
     "skia-canvas": "^3.0.8"
   },
   "peerDependenciesMeta": {
     "@bluepic/core": {
+      "optional": true
+    },
+    "sharp": {
       "optional": true
     },
     "skia-canvas": {
@@ -91,9 +95,7 @@
     "image-type": "^6.0.0",
     "inline-style-parser": "^0.2.4",
     "linkedom": "^0.18.12",
-    "lodash": "^4.17.21",
     "opentype.js": "^1.3.4",
-    "sharp": "^0.33.5",
     "svg-arc-to-cubic-bezier": "^3.2.0",
     "svg-path-commander": "^2.1.5",
     "transformation-matrix": "^3.1.0",

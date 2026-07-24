@@ -96,7 +96,7 @@ export class ImageSprite extends GeometricSprite {
       }
       const isNode = typeof window === 'undefined';
       if (isNode) {
-        const sharp = await import('sharp');
+        const sharp = await import(/* @vite-ignore */ 'sharp');
         const image = sharp.default(this.contents);
         const metadata = await image.metadata();
         return {
