@@ -27,7 +27,11 @@ export function colorToHex(color: Color, tint = 100): string {
   // Delegates to colorInputToHex so BOTH rgb and cmyk swatches go through the one
   // colour-managed path below (color.getRBG()'s cmyk branch uses the old uncalibrated
   // formula and is left as-is for idml2svg, the only other caller).
-  return colorInputToHex(color.toColorInput(), tint) ?? '#000000ff';
+  //
+  // A `<Tint>` swatch carries its own percentage, which multiplies with the
+  // object-level tint: a 50 % object tint on a 20 % tint swatch is 10 % of the
+  // base colour. Folding it in here means every caller gets it right.
+  return colorInputToHex(color.toColorInput(), (tint * color.getSwatchTint()) / 100) ?? '#000000ff';
 }
 export function colorInputToHex(ci: ColorInput | undefined, tint = 100): string | undefined {
   if (!ci) return undefined;
@@ -41,10 +45,29 @@ export function colorInputToHex(ci: ColorInput | undefined, tint = 100): string 
 export function gradientToSerial(gradient: Gradient, fillAngleDeg: number, tint = 100): Template.Elements.Gradient {
   // Bluepic ColorStop.position is a 0..100 percentage (core renders `${position}%`).
   // IDML stop Location is already 0..100 — do NOT divide.
-  const stops = gradient
+  //
+  // The midpoint passes straight through: IDML puts it on the later stop of a
+  // pair and so does Template.ColorStop, and core resolves the resulting power
+  // ramp at render time. Nothing is sampled or baked here, so the imported
+  // gradient stays as editable as the one InDesign had. The key is omitted
+  // rather than set to undefined so the serial keeps the shape it had before.
+  // Annotated on purpose: `stops` is a variable, so without this the compiler
+  // never checks the stop shape against Template.ColorStop and a typo (or a
+  // types version too old to know `midpoint`) would pass silently.
+  const stops: Template.Elements.Gradient['stops'] = gradient
     .getColorStops()
     .filter((s) => s.color)
-    .map((s) => ({ color: colorToHex(s.color!, tint), position: s.position }));
+    .map((s) => {
+      // Built as a checked literal + conditional assignment rather than a
+      // conditional spread: spreads skip excess-property checking, so a typo in
+      // `midpoint` would compile and silently emit a stop nobody reads.
+      const stop: Template.Elements.ColorStop = { color: colorToHex(s.color!, tint), position: s.position };
+      // 50 IS linear, and InDesign writes it on nearly every stop — emitting it
+      // would put a no-op key in every gradient serial we have ever converted.
+      // Omitting it keeps the key meaningful: present = this ramp is warped.
+      if (s.midpoint !== undefined && Math.abs(s.midpoint - 50) > 1e-6) stop.midpoint = s.midpoint;
+      return stop;
+    });
   if (gradient.getType() === 'radial') {
     return { type: 'radial', x1: 0.5, y1: 0.5, radius1: 0, x2: 0.5, y2: 0.5, radius2: 0.5, stops };
   }

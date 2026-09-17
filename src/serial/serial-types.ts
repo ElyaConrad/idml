@@ -43,7 +43,15 @@ export type Font = { src: string; name: string };
 export type Iteration = { expression: string; key: string };
 
 export namespace Elements {
-  export type ColorStop = { color: string; position: number };
+  /**
+   * `midpoint` mirrors @bluepic/types: a 0..100 percentage across the segment
+   * that ENDS at this stop, marking where the ramp hits the 50/50 blend of the
+   * two stop colours — InDesign's gradient midpoint, which IDML also stores on
+   * the later stop of the pair. Absent means the plain linear ramp. Core turns
+   * it into the power ramp `c(t) = c0 + t^N * (c1 - c0)` at render time, so the
+   * converter passes the IDML value through untouched.
+   */
+  export type ColorStop = { color: string; position: number; midpoint?: number };
   export type LinearGradient = { type: 'linear'; angle: number; stops: ColorStop[] };
   export type RadialGradient = { type: 'radial'; x1: number; y1: number; radius1: number; x2: number; y2: number; radius2: number; stops: ColorStop[] };
   export type ConicGradient = { type: 'conic'; x: number; y: number; angle: number; stops: ColorStop[] };

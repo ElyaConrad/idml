@@ -13,7 +13,7 @@ export type IDMLGraphicContext = IDMLDocumentContext & {
 };
 
 export class IDMLGraphicController extends SuperController {
-  static elementsImplemented = ['Color', 'StrokeStyle', 'Gradient', 'Ink', 'PastedSmoothShade'];
+  static elementsImplemented = ['Color', 'Tint', 'StrokeStyle', 'Gradient', 'Ink', 'PastedSmoothShade'];
   colors: Color[];
   strokeStyles: StrokeStyle[];
   gradients: Gradient[];
@@ -30,7 +30,15 @@ export class IDMLGraphicController extends SuperController {
     };
 
     const colorElements = Array.from(doc.getElementsByTagName('Color'));
-    this.colors = colorElements.map((element) => Color.parseElement(element, this.context));
+    // `<Tint>` swatches live in the same registry: they resolve like any other
+    // colour (through their base swatch) and additionally report a percentage,
+    // so every existing lookup — gradient stops, fills, strokes, text — starts
+    // finding them without a second code path.
+    const tintElements = Array.from(doc.getElementsByTagName('Tint'));
+    this.colors = [
+      ...colorElements.map((element) => Color.parseElement(element, this.context)),
+      ...tintElements.map((element) => Color.parseTintElement(element, this.context)),
+    ];
 
     const strokeStyleElements = Array.from(doc.getElementsByTagName('StrokeStyle'));
     this.strokeStyles = strokeStyleElements.map((element) => StrokeStyle.parseElement(element, this.context));

@@ -67,7 +67,7 @@ export class Gradient {
         makeElementNode('GradientStop', {
           StopColor: colorStop.colorId,
           Location: colorStop.position.toString(),
-          MidPoint: colorStop.midpoint,
+          Midpoint: colorStop.midpoint,
         })
       )
     );
@@ -96,7 +96,17 @@ export class Gradient {
       if (!colorId) throw new Error('GradientStop element must have a StopColor attribute');
       const location = ensureNumber(colorStopElement.getAttribute('Location'));
       if (location === undefined) throw new Error('GradientStop element must have a Location attribute');
-      const midpoint = ensureNumber(colorStopElement.getAttribute('MidPoint'));
+      // IDML spells it `Midpoint`. We read `MidPoint` for years, and XML
+      // getAttribute is case-SENSITIVE (unlike HTML), so every midpoint in every
+      // document silently parsed as undefined. The old spelling stays as a
+      // fallback for anything we wrote ourselves with the broken serializer.
+      //
+      // The presence check is load-bearing: ensureNumber(null) is Number(null),
+      // i.e. 0, so an ABSENT midpoint would arrive as a midpoint of 0 % — which
+      // is not "linear", it is a near-vertical ramp. The first stop of every
+      // IDML gradient has no Midpoint attribute, so this fires constantly.
+      const midpointAttr = colorStopElement.getAttribute('Midpoint') ?? colorStopElement.getAttribute('MidPoint');
+      const midpoint = midpointAttr === null || midpointAttr === '' ? undefined : ensureNumber(midpointAttr);
       return {
         colorId,
         position: location,

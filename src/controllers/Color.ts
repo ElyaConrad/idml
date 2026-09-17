@@ -27,6 +27,13 @@ export class Color {
   private visible: boolean;
   private swatchCreatorId?: string;
   private swatchGroupReference?: string;
+  /**
+   * Set when this swatch is an IDML `<Tint>` rather than a `<Color>`: a named
+   * percentage OF another swatch ("R=0 G=131 B=172 20%"). Its colour is the
+   * base swatch's, and the percentage is reported by `getSwatchTint()` for
+   * consumers to fold into whatever object-level tint they already apply.
+   */
+  private tintBase?: { colorId: string; tintValue: number };
   constructor(
     public id: string,
     private model: ColorModel,
@@ -39,10 +46,12 @@ export class Color {
       visible?: boolean;
       swatchCreatorId?: string;
       swatchGroupReference?: string;
+      tintBase?: { colorId: string; tintValue: number };
     },
     private context: IDMLGraphicContext
   ) {
     this.name = options.name;
+    this.tintBase = options.tintBase;
     this.editable = options.editable ?? true;
     this.removable = options.removable ?? true;
     this.visible = options.visible ?? true;
@@ -78,7 +87,59 @@ export class Color {
     const swatchGroupReference = props.SwatchColorGroupReference;
     return new Color(id, model, space, value, { editable, removable, visible, swatchCreatorId, swatchGroupReference }, context);
   }
+  /**
+   * Parse an IDML `<Tint>` swatch — a named percentage of another swatch, e.g.
+   * `<Tint Self="Tint/R=0 G=131 B=172 20%" TintValue="20" BaseColor="Color/..."/>`.
+   *
+   * These were never registered, so ANY reference to a tint swatch resolved to
+   * undefined: a gradient stop on a tint got filtered out (collapsing the whole
+   * gradient to a single colour) and a frame filled with one came out unfilled.
+   *
+   * The base colour is resolved lazily rather than here, because a tint may be
+   * declared before its base or in a different graphic resource file.
+   */
+  static parseTintElement(element: Element, context: IDMLGraphicContext) {
+    const props = flattenIDMLProperties(getIDMLElementProperties(element, ['Properties'], [])) as {
+      [k: string]: string | undefined;
+    };
+    const id = props.Self;
+    if (!id) {
+      throw new Error('Tint element must have a Self attribute');
+    }
+    const colorId = props.BaseColor;
+    if (!colorId) {
+      throw new Error('Tint element must have a BaseColor attribute');
+    }
+    const tintValue = Number(props.TintValue);
+    return new Color(
+      id,
+      'process',
+      'rgb',
+      [0, 0, 0], // placeholder: toColorInput() resolves through the base swatch
+      {
+        name: props.Name,
+        editable: ensureBoolean(props.ColorEditable),
+        removable: ensureBoolean(props.ColorRemovable),
+        visible: ensureBoolean(props.Visible),
+        swatchCreatorId: props.SwatchCreatorID,
+        swatchGroupReference: props.SwatchColorGroupReference,
+        tintBase: { colorId, tintValue: Number.isFinite(tintValue) ? tintValue : 100 },
+      },
+      context
+    );
+  }
+  /**
+   * The swatch's own tint as a 0..100 percentage — 100 for a plain colour, the
+   * declared percentage for a `<Tint>`. Multiply it with any object-level tint.
+   */
+  getSwatchTint() {
+    return this.tintBase?.tintValue ?? 100;
+  }
   equals(color: ColorInput) {
+    // A tint swatch is a percentage of another swatch, never an exact match for
+    // a concrete colour input — saying otherwise would let authoring dedupe a
+    // new colour onto a tint.
+    if (this.tintBase) return false;
     if (color.type === 'rgb') {
       return this.model === 'process' && this.space === 'rgb' && this.value[0] === color.red && this.value[1] === color.green && this.value[2] === color.blue;
     } else if (color.type === 'cmyk') {
@@ -104,6 +165,24 @@ export class Color {
      
   }
   serialize() {
+    if (this.tintBase) {
+      return serializeElement(
+        'Tint',
+        {
+          Name: this.name,
+          TintValue: this.tintBase.tintValue,
+          BaseColor: this.tintBase.colorId,
+          ColorEditable: this.editable,
+          ColorRemovable: this.removable,
+          Visible: this.visible,
+          SwatchCreatorID: this.swatchCreatorId,
+          SwatchColorGroupReference: this.swatchGroupReference,
+        },
+        this.id,
+        this.context.graphicRoot,
+        ['Properties']
+      );
+    }
     return serializeElement(
       'Color',
       {
@@ -123,6 +202,12 @@ export class Color {
     );
   }
   toColorInput(): ColorInput {
+    if (this.tintBase) {
+      // The tint PERCENTAGE is deliberately not applied here — it travels via
+      // getSwatchTint() so it composes with the object's own tint in one place.
+      const base = this.context.idml.getColorById(this.tintBase.colorId);
+      if (base && base !== this) return base.toColorInput();
+    }
     if (this.space === 'rgb') {
       return { type: 'rgb', red: this.value[0], green: this.value[1], blue: this.value[2] };
     } else if (this.space === 'cmyk') {
