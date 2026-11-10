@@ -1,6 +1,6 @@
 {
   "name": "idml",
-  "version": "0.1.72",
+  "version": "0.1.73",
   "type": "module",
   "main": "./dist/cjs/main.js",
   "module": "./dist/esm/main.js",
@@ -70,7 +70,7 @@
     "typescript": "^5.6.3"
   },
   "peerDependencies": {
-    "@bluepic/core": "^0.2.50 || ^0.3.0 || ^0.4.0 || ^0.5.0 || ^0.6.0 || ^0.7.0",
+    "@bluepic/core": "^0.2.50 || ^0.3.0 || ^0.4.0 || ^0.5.0 || ^0.6.0 || ^0.7.0 || ^0.8.0",
     "sharp": "^0.33.5",
     "skia-canvas": "^3.0.8"
   },
